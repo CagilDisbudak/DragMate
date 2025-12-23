@@ -1,4 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import {
+    collection,
+    doc,
+    getDoc,
+    onSnapshot,
+    runTransaction,
+    setDoc,
+    updateDoc
+} from 'firebase/firestore';
+import { getAuth, signInAnonymously } from 'firebase/auth';
+import { db, firebaseEnabled } from '../lib/firebase';
 
 export interface GameRoom {
     fen: string;
@@ -8,108 +19,113 @@ export interface GameRoom {
     lastMove?: any;
 }
 
-// Mock user ID for demo purposes
-const DEMO_USER_ID = 'demo-user-' + Math.random().toString(36).substring(7);
-
-// Helper to read/write rooms from localStorage
-const getRooms = (): Record<string, GameRoom> => {
-    const data = localStorage.getItem('dragmate-rooms');
-    return data ? JSON.parse(data) : {};
-};
-
-const saveRooms = (rooms: Record<string, GameRoom>) => {
-    localStorage.setItem('dragmate-rooms', JSON.stringify(rooms));
-};
-
-const generateRoomId = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-};
+const generateRoomId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
+const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 export const useGameRoom = (roomId: string | null) => {
     const [room, setRoom] = useState<GameRoom | null>(null);
-    const [userId] = useState<string>(DEMO_USER_ID);
+    const [userId, setUserId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-    const [isAuthLoading] = useState(false); // No auth needed for mock
+    const [isAuthLoading, setIsAuthLoading] = useState(true);
 
+    // Firebase auth: anonymous sign-in
     useEffect(() => {
-        console.log('🎮 Using DEMO MODE with localStorage');
-        setLoading(false);
+        const auth = getAuth();
+        signInAnonymously(auth)
+            .then((cred) => {
+                setUserId(cred.user.uid);
+            })
+            .catch((err) => {
+                console.error('Auth failed', err);
+            })
+            .finally(() => setIsAuthLoading(false));
     }, []);
 
+    // Subscribe to room changes
     useEffect(() => {
-        if (!roomId) {
+        if (!firebaseEnabled || !db) {
+            console.warn('Firebase not configured; room sync disabled.');
             setLoading(false);
             return;
         }
 
-        const rooms = getRooms();
-        const currentRoom = rooms[roomId];
-
-        if (currentRoom) {
-            setRoom(currentRoom);
-        } else {
+        if (!roomId) {
             setRoom(null);
+            setLoading(false);
+            return;
         }
-        setLoading(false);
 
-        // Poll for changes (simulating real-time updates)
-        const interval = setInterval(() => {
-            const updatedRooms = getRooms();
-            const updatedRoom = updatedRooms[roomId];
-            if (updatedRoom) {
-                setRoom(updatedRoom);
+        setLoading(true);
+        const roomRef = doc(collection(db, 'rooms'), roomId);
+        const unsubscribe = onSnapshot(
+            roomRef,
+            (snapshot) => {
+                if (snapshot.exists()) {
+                    setRoom(snapshot.data() as GameRoom);
+                } else {
+                    setRoom(null);
+                }
+                setLoading(false);
+            },
+            (error) => {
+                console.error('Room subscription error', error);
+                setRoom(null);
+                setLoading(false);
             }
-        }, 500);
+        );
 
-        return () => clearInterval(interval);
+        return () => unsubscribe();
     }, [roomId]);
 
     const createRoom = async () => {
+        if (!firebaseEnabled || !db) throw new Error('Firebase not configured');
+        if (!userId) throw new Error('User not ready yet');
+
         const id = generateRoomId();
-        const newRoom: GameRoom = {
-            fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        const roomRef = doc(collection(db, 'rooms'), id);
+
+        await setDoc(roomRef, {
+            fen: START_FEN,
             whitePlayer: userId,
             blackPlayer: '',
             turn: 'w',
-        };
+        });
 
-        const rooms = getRooms();
-        rooms[id] = newRoom;
-        saveRooms(rooms);
-
-        console.log('✅ Demo room created with ID:', id);
         return id;
     };
 
     const joinRoom = async (id: string) => {
-        const rooms = getRooms();
-        const targetRoom = rooms[id];
+        if (!firebaseEnabled || !db) throw new Error('Firebase not configured');
+        if (!userId) throw new Error('User not ready yet');
 
-        if (targetRoom) {
-            if (!targetRoom.whitePlayer) {
-                targetRoom.whitePlayer = userId;
-            } else if (!targetRoom.blackPlayer && targetRoom.whitePlayer !== userId) {
-                targetRoom.blackPlayer = userId;
+        const roomRef = doc(collection(db, 'rooms'), id);
+
+        await runTransaction(db, async (transaction) => {
+            const snap = await transaction.get(roomRef);
+            if (!snap.exists()) {
+                throw new Error('Room not found');
             }
-            saveRooms(rooms);
-            console.log('✅ Joined demo room:', id);
-        } else {
-            console.error('❌ Room not found:', id);
-            alert('Room not found.');
-        }
+
+            const data = snap.data() as GameRoom;
+            const nextData = { ...data };
+
+            if (!nextData.whitePlayer) {
+                nextData.whitePlayer = userId;
+            } else if (!nextData.blackPlayer && nextData.whitePlayer !== userId) {
+                nextData.blackPlayer = userId;
+            }
+
+            transaction.update(roomRef, nextData);
+        });
     };
 
     const updateMove = async (fen: string) => {
+        if (!firebaseEnabled || !db) return;
         if (!roomId) return;
 
-        const rooms = getRooms();
-        const targetRoom = rooms[roomId];
-
-        if (targetRoom) {
-            targetRoom.fen = fen;
-            targetRoom.turn = fen.split(' ')[1] as 'w' | 'b';
-            saveRooms(rooms);
-        }
+        const turn = fen.split(' ')[1] as 'w' | 'b';
+        const roomRef = doc(collection(db, 'rooms'), roomId);
+        await updateDoc(roomRef, { fen, turn });
     };
 
     return { room, userId, loading, isAuthLoading, createRoom, joinRoom, updateMove };
