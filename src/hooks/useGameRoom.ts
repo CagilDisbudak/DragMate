@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
     collection,
     doc,
-    getDoc,
     onSnapshot,
     runTransaction,
     setDoc,
