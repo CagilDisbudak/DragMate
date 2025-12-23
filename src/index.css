@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --color-glass: rgba(255, 255, 255, 0.05);
+  --color-glass-border: rgba(255, 255, 255, 0.1);
+  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
+  --color-primary: #6366f1;
+  --color-secondary: #ec4899;
+  --color-accent: #8b5cf6;
+
+  --animate-blob-float: blob-float 20s infinite alternate;
+}
+
+@keyframes blob-float {
+  from {
+    transform: translate(-10%, -10%) scale(1);
+  }
+
+  to {
+    transform: translate(10%, 10%) scale(1.1);
+  }
+}
+
+:root {
+  background-color: #0f172a;
+  color: #f8fafc;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.liquid-glass {
+  @apply bg-glass backdrop-blur-xl border border-glass-border shadow-glass rounded-3xl;
+}
+
+.bg-blob {
+  @apply absolute rounded-full blur-[100px] -z-10 animate-blob-float;
+}
+
+.btn-premium {
+  @apply px-6 py-3 bg-linear-to-br from-indigo-500 to-pink-500 text-white font-semibold rounded-xl hover:scale-105 active:scale-95 transition-all duration-300 shadow-lg hover:shadow-indigo-500/25;
+}
+
+.chess-square {
+  @apply aspect-square flex items-center justify-center text-5xl cursor-pointer transition-colors duration-200;
+}
+
+.chess-piece {
+  @apply select-none cursor-grab active:cursor-grabbing transition-transform duration-100;
+}
