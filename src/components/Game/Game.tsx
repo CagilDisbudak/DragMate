@@ -2,7 +2,7 @@ import React from 'react';
 import { Chess } from 'chess.js';
 import { ChessBoard } from '../ChessBoard/ChessBoard';
 import { useGameRoom } from '../../hooks/useGameRoom';
-import { Copy, Share2, ArrowLeft, Loader2, Users, Trophy, Zap, Flag, RotateCcw } from 'lucide-react';
+import { Copy, Share2, ArrowLeft, Loader2, Users, Zap, Flag, RotateCcw } from 'lucide-react';
 
 interface GameProps {
     roomId: string;
@@ -247,11 +247,6 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
                         </div>
                     </div>
 
-                    <div className="p-8 rounded-3xl bg-linear-to-br from-indigo-500/10 to-transparent border border-indigo-500/20 text-center">
-                        <Trophy size={32} className="mx-auto text-indigo-400 mb-4" />
-                        <h4 className="text-lg font-black text-white italic mb-2">Rule System v2.4</h4>
-                        <p className="text-sm text-slate-400 font-medium px-4">Moves are secured and validated by the distributed chess core.</p>
-                    </div>
                 </div>
             </div>
 
