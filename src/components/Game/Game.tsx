@@ -101,8 +101,8 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
     };
 
     return (
-        <div className="flex flex-col items-center gap-12 py-10 w-full animate-in fade-in duration-700">
-            <header className="w-full max-w-6xl flex items-center justify-between px-6">
+        <div className="flex flex-col items-center gap-8 lg:gap-12 py-6 lg:py-10 w-full animate-in fade-in duration-700">
+            <header className="w-full max-w-6xl flex items-center justify-between px-4 lg:px-6">
                 <button
                     onClick={onExit}
                     className="group flex items-center gap-3 text-slate-500 hover:text-white transition-all font-bold uppercase tracking-widest text-xs"
@@ -132,8 +132,8 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
                 </div>
             </header>
 
-            <div className="flex flex-col lg:flex-row items-center justify-center gap-16 w-full max-w-7xl px-6">
-                <div className="relative group">
+            <div className="flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-16 w-full max-w-7xl px-4 lg:px-6">
+                <div className="relative group w-full flex justify-center">
                     <div className="absolute -inset-4 bg-linear-to-r from-indigo-500 to-pink-500 rounded-[2.5rem] blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
                     <ChessBoard
                         initialFen={room.fen}
@@ -143,8 +143,8 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
                     />
                 </div>
 
-                <div className="w-full lg:w-96 flex flex-col gap-8">
-                    <div className="liquid-glass p-8 space-y-8 border-l-4 border-l-indigo-500">
+                <div className="w-full lg:w-96 flex flex-col gap-6 lg:gap-8 mt-6 lg:mt-0">
+                    <div className="liquid-glass p-5 lg:p-8 space-y-6 lg:space-y-8 border-l-4 border-l-indigo-500">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-black text-slate-500 uppercase tracking-[0.3em]">
                                 {isDemoMode ? 'Current Turn' : 'Player Status'}
@@ -164,19 +164,19 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
                         </div>
 
                         {status === 'active' && gameState.isCheck && (
-                            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-black uppercase tracking-widest">
+                            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[10px] lg:text-xs font-black uppercase tracking-widest">
                                 ŞAH! {gameState.turn === 'w' ? 'Beyaz' : 'Siyah'} hamlede.
                             </div>
                         )}
 
                         {isGameOver && (
-                            <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-100 text-sm font-bold">
+                            <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-100 text-sm lg:text-base font-bold">
                                 {statusLabel}
                             </div>
                         )}
 
                         <div className="space-y-4">
-                            <div className="grid grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-xs font-bold uppercase tracking-widest">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-[10px] lg:text-xs font-bold uppercase tracking-widest">
                                 <div className="space-y-1">
                                     <div className="text-slate-500">Toplam Süre</div>
                                     <div className="text-white text-base">{formatTime(totalSeconds)}</div>
@@ -191,7 +191,7 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
+                            <div className="flex items-center gap-3 lg:gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
                                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${isWhite ? 'bg-white text-slate-950' : 'bg-slate-800 text-slate-400'}`}>W</div>
                                 <div className="flex-1">
                                     <div className="text-sm font-bold text-white uppercase tracking-wide">White Player</div>
@@ -201,7 +201,7 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
+                            <div className="flex items-center gap-3 lg:gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
                                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${isBlack ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>B</div>
                                 <div className="flex-1">
                                     <div className="text-sm font-bold text-white uppercase tracking-wide">Black Player</div>
@@ -212,7 +212,7 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
                             </div>
                         </div>
 
-                        <div className="flex gap-3">
+                        <div className="flex flex-col sm:flex-row gap-3">
                             <button
                                 disabled={isGameOver || !(isWhite || isBlack)}
                                 onClick={() => resignGame(playerColor as 'w' | 'b')}
