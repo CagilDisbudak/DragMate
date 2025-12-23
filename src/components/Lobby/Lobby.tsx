@@ -47,7 +47,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
     );
 
     const renderDifficultySelect = () => (
-        <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+        <div className="space-y-10 animate-in fade-in slide-in-from-right-8 duration-500">
             <div className="flex items-center gap-4 mb-2">
                 <button
                     onClick={() => setStep('mode-select')}
@@ -108,7 +108,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
     );
 
     const renderModeSelect = () => (
-        <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+        <div className="space-y-10 animate-in fade-in slide-in-from-right-8 duration-500">
             <div className="flex items-center gap-4 mb-2">
                 <button
                     onClick={() => setStep('game-select')}
@@ -212,7 +212,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
                 </h1>
             </div>
 
-            <div className="liquid-glass p-6 sm:p-8 w-full max-w-xl min-h-[400px]">
+            <div className="liquid-glass p-6 sm:p-8 w-full max-w-xl min-h-[400px] flex flex-col justify-center">
                 {step === 'game-select' && renderGameSelect()}
                 {step === 'mode-select' && renderModeSelect()}
                 {step === 'difficulty-select' && renderDifficultySelect()}
