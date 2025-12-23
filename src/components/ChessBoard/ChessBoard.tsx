@@ -24,6 +24,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     playerColor = 'w'
 }) => {
     const [game, setGame] = useState(() => createGame(initialFen));
+    const [highlightedSquares, setHighlightedSquares] = useState<string[]>([]);
 
     // Sync local game state with server FEN
     React.useEffect(() => {
@@ -41,6 +42,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     const handleDragEnd = useCallback((event: DragEndEvent) => {
         const { active, over } = event;
 
+        setHighlightedSquares([]);
+
         if (!over) return;
 
         const from = active.id as string;
@@ -55,6 +58,26 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             if (onMove) onMove(nextGame.fen());
         }
     }, [game, onMove]);
+
+    const handleDragStart = useCallback(
+        (activeId: string) => {
+            const from = activeId as string;
+            const piece = game.get(from as any);
+
+            // Sadece kendi taşınsa ve sıran ise legal kareleri göster
+            if (!piece || piece.color !== playerColor || game.turn() !== playerColor) {
+                setHighlightedSquares([]);
+                return;
+            }
+
+            const legalTargets = game
+                .moves({ square: from, verbose: true } as any)
+                .map((m: any) => m.to as string);
+
+            setHighlightedSquares(legalTargets);
+        },
+        [game, playerColor]
+    );
 
     const renderSquares = () => {
         const squares = [];
@@ -76,8 +99,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                     piece.color === playerColor &&
                     game.turn() === playerColor;
 
+                const isHighlighted = highlightedSquares.includes(squareName);
+
                 squares.push(
-                    <Square key={squareName} id={squareName} isLight={isLight}>
+                    <Square key={squareName} id={squareName} isLight={isLight} isHighlighted={isHighlighted}>
                         {piece && (
                             <Piece
                                 id={squareName}
@@ -94,7 +119,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     };
 
     return (
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <DndContext
+            sensors={sensors}
+            onDragEnd={handleDragEnd}
+            onDragStart={(event) => handleDragStart(event.active.id as string)}
+        >
             <div className="p-3 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 ring-1 ring-white/5">
                 <div
                     className="grid grid-cols-8 gap-0 rounded-3xl overflow-hidden border border-slate-900/50"

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, LogIn } from 'lucide-react';
+import { useGlobalActivePlayers } from '../../hooks/useGlobalActivePlayers';
 
 interface LobbyProps {
     onCreateRoom: () => void;
@@ -10,6 +11,7 @@ interface LobbyProps {
 export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, isAuthLoading }) => {
     const [roomIdInput, setRoomIdInput] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+    const { count: activeCount, loading: activeLoading, isSupported } = useGlobalActivePlayers();
 
     const handleCreate = async () => {
         setIsCreating(true);
@@ -79,13 +81,17 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, isAuthLo
                 <div className="grid grid-cols-2 gap-6 pt-6 border-t border-slate-800/40">
                     <div className="space-y-1">
                         <div className="text-sm font-bold text-slate-500 uppercase tracking-widest">Active Players</div>
-                        <div className="text-3xl font-bold text-white tracking-tight">1,204</div>
+                        <div className="text-3xl font-bold text-white tracking-tight">
+                            {isSupported
+                                ? (activeLoading ? '—' : (activeCount ?? 0).toLocaleString())
+                                : 'Demo'}
+                        </div>
                     </div>
                     <div className="space-y-1 text-right">
                         <div className="text-sm font-bold text-slate-500 uppercase tracking-widest">Global Sync</div>
                         <div className="text-3xl font-bold text-green-400 tracking-tight flex items-center justify-end gap-2">
-                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                            Stable
+                            <span className={`w-2 h-2 rounded-full animate-pulse ${isSupported ? 'bg-green-500' : 'bg-slate-600'}`} />
+                            {isSupported ? 'Live' : 'Demo'}
                         </div>
                     </div>
                 </div>
