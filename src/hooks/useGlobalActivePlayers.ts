@@ -54,8 +54,8 @@ export function useGlobalActivePlayers(): PresenceState {
   });
 
   useEffect(() => {
+    // Firebase yapılandırılmamışsa demo modda kal
     if (!firebaseEnabled || !db || !auth) {
-      // Firebase not configured – stay in demo mode
       setState((prev) => ({
         ...prev,
         loading: false,
@@ -64,17 +64,21 @@ export function useGlobalActivePlayers(): PresenceState {
       return;
     }
 
+    // Bu noktadan sonra TypeScript için db ve auth kesinlikle null değil
+    const dbInstance: Firestore = db;
+    const authInstance: Auth = auth;
+
     let cancelled = false;
     let presenceInterval: number | null = null;
     let unsubscribeSnapshot: (() => void) | null = null;
 
     const initPresence = async () => {
       try {
-        const user = await ensureAnonymousUser(auth);
+        const user = await ensureAnonymousUser(authInstance);
         if (!user || cancelled) return;
 
         // Initial presence write
-        await touchPresence(db, user);
+        await touchPresence(dbInstance, user);
 
         setState((prev) => ({
           ...prev,
@@ -84,7 +88,7 @@ export function useGlobalActivePlayers(): PresenceState {
 
         // Refresh presence periodically to mark this user as active
         presenceInterval = window.setInterval(() => {
-          touchPresence(db, user).catch((err) => {
+          touchPresence(dbInstance, user).catch((err) => {
             console.error('Failed to update presence', err);
           });
         }, ACTIVE_WINDOW_MS / 2);
@@ -92,7 +96,7 @@ export function useGlobalActivePlayers(): PresenceState {
         // Listen for all users active in the last ACTIVE_WINDOW_MS
         const cutoff = new Date(Date.now() - ACTIVE_WINDOW_MS);
         const presenceQuery = query(
-          collection(db, 'presence'),
+          collection(dbInstance, 'presence'),
           where('lastSeen', '>=', cutoff)
         );
 
