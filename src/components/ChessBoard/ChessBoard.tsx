@@ -27,6 +27,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 }) => {
     const [game, setGame] = useState(() => createGame(initialFen));
     const [highlightedSquares, setHighlightedSquares] = useState<string[]>([]);
+    const [activeSquare, setActiveSquare] = useState<string | null>(null);
 
     // Sync local game state with server FEN
     React.useEffect(() => {
@@ -46,6 +47,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const { active, over } = event;
 
         setHighlightedSquares([]);
+        setActiveSquare(null);
 
         if (!over) return;
 
@@ -64,6 +66,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
     const handleDragStart = useCallback(
         (activeId: string) => {
+            setActiveSquare(activeId);
             const from = activeId as string;
             const piece = game.get(from as any);
 
@@ -104,9 +107,16 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                     !isGameOver;
 
                 const isHighlighted = highlightedSquares.includes(squareName);
+                const isActive = squareName === activeSquare;
 
                 squares.push(
-                    <Square key={squareName} id={squareName} isLight={isLight} isHighlighted={isHighlighted}>
+                    <Square
+                        key={squareName}
+                        id={squareName}
+                        isLight={isLight}
+                        isHighlighted={isHighlighted}
+                        isActive={isActive}
+                    >
                         {piece && (
                             <Piece
                                 id={squareName}
@@ -129,11 +139,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             onDragStart={(event) => handleDragStart(event.active.id as string)}
         >
             <div
-                className="p-3 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 ring-1 ring-white/5 overflow-visible"
+                className="p-3 lg:p-4 bg-slate-800 rounded-[2rem] lg:rounded-[2.5rem] shadow-[0_0_50px_-12px_rgba(99,102,241,0.25)] border-4 border-slate-700/50 ring-4 ring-slate-900/50"
                 style={{ touchAction: 'none' }}
             >
                 <div
-                    className="grid grid-cols-8 gap-0 rounded-3xl overflow-visible border border-slate-900/50 relative"
+                    className="grid grid-cols-8 gap-0 rounded-2xl lg:rounded-3xl overflow-hidden border border-slate-700/30 shadow-inner"
                     style={{
                         // Mobilde ekrana göre, masaüstünde daha büyük tahta
                         width: 'min(92vw, 720px)',
