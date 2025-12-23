@@ -8,6 +8,7 @@ import {
     updateDoc
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
+import { Chess } from 'chess.js';
 import { db, firebaseEnabled } from '../lib/firebase';
 
 export interface GameRoom {
@@ -16,6 +17,9 @@ export interface GameRoom {
     blackPlayer: string;
     turn: 'w' | 'b';
     lastMove?: any;
+    status?: 'active' | 'checkmate' | 'stalemate' | 'draw' | 'resigned';
+    winner?: 'w' | 'b' | '';
+    resultReason?: string;
 }
 
 const generateRoomId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -98,6 +102,9 @@ export const useGameRoom = (roomId: string | null) => {
             whitePlayer: uid,
             blackPlayer: '',
             turn: 'w',
+            status: 'active',
+            winner: '',
+            resultReason: '',
         });
 
         return id;
@@ -132,10 +139,69 @@ export const useGameRoom = (roomId: string | null) => {
         if (!firebaseEnabled || !db) return;
         if (!roomId) return;
 
-        const turn = fen.split(' ')[1] as 'w' | 'b';
         const roomRef = doc(collection(db, 'rooms'), roomId);
-        await updateDoc(roomRef, { fen, turn });
+
+        await runTransaction(db, async (transaction) => {
+            const snap = await transaction.get(roomRef);
+            if (!snap.exists()) return;
+
+            const data = snap.data() as GameRoom;
+            if (data.status && data.status !== 'active') {
+                // Oyun bitmişse yeni hamle yazma
+                return;
+            }
+
+            const game = new Chess(fen);
+            const turn = game.turn() as 'w' | 'b';
+
+            let status: GameRoom['status'] = 'active';
+            let winner: GameRoom['winner'] = '';
+            let resultReason = '';
+
+            if (game.isCheckmate()) {
+                status = 'checkmate';
+                winner = turn === 'w' ? 'b' : 'w'; // Sırası gelen mat ise kazanan diğer renk
+                resultReason = 'checkmate';
+            } else if ((game as any).isStalemate && (game as any).isStalemate()) {
+                status = 'stalemate';
+                winner = '';
+                resultReason = 'stalemate';
+            } else if (game.isDraw()) {
+                status = 'draw';
+                winner = '';
+                resultReason = 'draw';
+            }
+
+            transaction.update(roomRef, { fen, turn, status, winner, resultReason });
+        });
     };
 
-    return { room, userId, loading, isAuthLoading, createRoom, joinRoom, updateMove };
+    const resignGame = async (color: 'w' | 'b') => {
+        if (!firebaseEnabled || !db) return;
+        if (!roomId) return;
+
+        const roomRef = doc(collection(db, 'rooms'), roomId);
+        const winner = color === 'w' ? 'b' : 'w';
+        await updateDoc(roomRef, {
+            status: 'resigned',
+            winner,
+            resultReason: 'resigned',
+        });
+    };
+
+    const resetGame = async () => {
+        if (!firebaseEnabled || !db) return;
+        if (!roomId) return;
+
+        const roomRef = doc(collection(db, 'rooms'), roomId);
+        await updateDoc(roomRef, {
+            fen: START_FEN,
+            turn: 'w',
+            status: 'active',
+            winner: '',
+            resultReason: '',
+        });
+    };
+
+    return { room, userId, loading, isAuthLoading, createRoom, joinRoom, updateMove, resignGame, resetGame };
 };

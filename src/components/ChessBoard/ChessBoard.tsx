@@ -16,12 +16,14 @@ interface ChessBoardProps {
     onMove?: (fen: string) => void;
     initialFen?: string;
     playerColor?: 'w' | 'b';
+    isGameOver?: boolean;
 }
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
     onMove,
     initialFen,
-    playerColor = 'w'
+    playerColor = 'w',
+    isGameOver = false
 }) => {
     const [game, setGame] = useState(() => createGame(initialFen));
     const [highlightedSquares, setHighlightedSquares] = useState<string[]>([]);
@@ -65,7 +67,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const piece = game.get(from as any);
 
             // Sadece kendi taşınsa ve sıran ise legal kareleri göster
-            if (!piece || piece.color !== playerColor || game.turn() !== playerColor) {
+            if (isGameOver || !piece || piece.color !== playerColor || game.turn() !== playerColor) {
                 setHighlightedSquares([]);
                 return;
             }
@@ -97,7 +99,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 const isDraggablePiece =
                     !!piece &&
                     piece.color === playerColor &&
-                    game.turn() === playerColor;
+                    game.turn() === playerColor &&
+                    !isGameOver;
 
                 const isHighlighted = highlightedSquares.includes(squareName);
 
