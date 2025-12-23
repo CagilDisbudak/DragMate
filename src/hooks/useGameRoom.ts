@@ -40,6 +40,15 @@ export const useGameRoom = (roomId: string | null) => {
             .finally(() => setIsAuthLoading(false));
     }, []);
 
+    // Ensure we have a userId before performing room ops
+    const ensureUserReady = async () => {
+        if (userId) return userId;
+        const auth = getAuth();
+        const cred = await signInAnonymously(auth);
+        setUserId(cred.user.uid);
+        return cred.user.uid;
+    };
+
     // Subscribe to room changes
     useEffect(() => {
         if (!firebaseEnabled || !db) {
@@ -78,14 +87,15 @@ export const useGameRoom = (roomId: string | null) => {
 
     const createRoom = async () => {
         if (!firebaseEnabled || !db) throw new Error('Firebase not configured');
-        if (!userId) throw new Error('User not ready yet');
+
+        const uid = await ensureUserReady();
 
         const id = generateRoomId();
         const roomRef = doc(collection(db, 'rooms'), id);
 
         await setDoc(roomRef, {
             fen: START_FEN,
-            whitePlayer: userId,
+            whitePlayer: uid,
             blackPlayer: '',
             turn: 'w',
         });
@@ -95,7 +105,7 @@ export const useGameRoom = (roomId: string | null) => {
 
     const joinRoom = async (id: string) => {
         if (!firebaseEnabled || !db) throw new Error('Firebase not configured');
-        if (!userId) throw new Error('User not ready yet');
+        const uid = await ensureUserReady();
 
         const roomRef = doc(collection(db, 'rooms'), id);
 
@@ -109,9 +119,9 @@ export const useGameRoom = (roomId: string | null) => {
             const nextData = { ...data };
 
             if (!nextData.whitePlayer) {
-                nextData.whitePlayer = userId;
-            } else if (!nextData.blackPlayer && nextData.whitePlayer !== userId) {
-                nextData.blackPlayer = userId;
+                nextData.whitePlayer = uid;
+            } else if (!nextData.blackPlayer && nextData.whitePlayer !== uid) {
+                nextData.blackPlayer = uid;
             }
 
             transaction.update(roomRef, nextData);
