@@ -22,7 +22,8 @@ export const Piece: React.FC<PieceProps> = ({ id, type, color, isDraggable = tru
 
     const style = {
         transform: CSS.Translate.toString(transform),
-        transition: 'transform 120ms ease-out',
+        transition: isDragging ? 'none' : 'transform 120ms ease-out',
+        zIndex: isDragging ? 9999 : 20,
     };
 
     return (
@@ -31,8 +32,8 @@ export const Piece: React.FC<PieceProps> = ({ id, type, color, isDraggable = tru
             style={style}
             {...listeners}
             {...attributes}
-            className={`chess-piece relative z-20 transition-transform duration-120 ease-out ${
-                isDragging ? 'scale-112 z-50 drop-shadow-2xl' : 'hover:scale-103'
+            className={`chess-piece transition-transform duration-120 ease-out ${
+                isDragging ? 'scale-112 drop-shadow-2xl z-[9999]' : 'hover:scale-103 z-20'
             } ${isDraggable ? 'cursor-grab active:cursor-grabbing' : 'grayscale-[0.2] opacity-90 cursor-default'
             } ${color === 'w' ? 'text-slate-950 drop-shadow-sm' : 'text-slate-950 drop-shadow-sm'
             }`}

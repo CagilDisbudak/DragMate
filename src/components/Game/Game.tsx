@@ -132,8 +132,8 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
                 </div>
             </header>
 
-            <div className="flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-16 w-full max-w-7xl px-4 lg:px-6">
-                <div className="relative group w-full flex justify-center">
+            <div className="flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-16 w-full max-w-7xl px-4 lg:px-6">
+                <div className="relative group w-full flex justify-center max-w-full overflow-visible">
                     <div className="absolute -inset-4 bg-linear-to-r from-indigo-500 to-pink-500 rounded-[2.5rem] blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
                     <ChessBoard
                         initialFen={room.fen}
@@ -143,7 +143,7 @@ export const Game: React.FC<GameProps> = ({ roomId, onExit }) => {
                     />
                 </div>
 
-                <div className="w-full lg:w-96 flex flex-col gap-6 lg:gap-8 mt-6 lg:mt-0">
+                <div className="w-full lg:w-96 flex flex-col gap-6 lg:gap-8 mt-0 lg:mt-0">
                     <div className="liquid-glass p-5 lg:p-8 space-y-6 lg:space-y-8 border-l-4 border-l-indigo-500">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-black text-slate-500 uppercase tracking-[0.3em]">

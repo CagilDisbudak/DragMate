@@ -16,7 +16,7 @@ export const Square: React.FC<SquareProps> = ({ id, isLight, isHighlighted = fal
     return (
         <div
             ref={setNodeRef}
-            className={`chess-square relative transition-all duration-200 touch-none ${
+            className={`chess-square relative transition-all duration-200 touch-none overflow-visible ${
                 isOver
                     ? 'bg-indigo-500/30 scale-98 z-10 rounded-xl shadow-[0_0_30px_rgba(99,102,241,0.35)]'
                     : isHighlighted
@@ -29,7 +29,9 @@ export const Square: React.FC<SquareProps> = ({ id, isLight, isHighlighted = fal
             <div className={`absolute top-1 left-1 text-[10px] font-black uppercase tracking-tighter opacity-20 pointer-events-none ${isLight ? 'text-slate-900' : 'text-slate-100'}`}>
                 {id}
             </div>
-            {children}
+            <div className="relative w-full h-full overflow-visible z-10">
+                {children}
+            </div>
         </div>
     );
 };

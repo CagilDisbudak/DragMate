@@ -22,10 +22,10 @@ function App() {
   };
 
   return (
-    <main className="relative min-h-screen w-full flex flex-col items-center">
+    <main className="relative min-h-screen w-full flex flex-col items-center overflow-x-hidden">
       <Background />
 
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="container mx-auto px-4 py-8 max-w-7xl w-full overflow-visible">
         {currentRoomId ? (
           <Game roomId={currentRoomId} onExit={handleExitGame} />
         ) : (

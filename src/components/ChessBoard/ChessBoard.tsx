@@ -129,11 +129,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             onDragStart={(event) => handleDragStart(event.active.id as string)}
         >
             <div
-                className="p-3 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 ring-1 ring-white/5"
+                className="p-3 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 ring-1 ring-white/5 overflow-visible"
                 style={{ touchAction: 'none' }}
             >
                 <div
-                    className="grid grid-cols-8 gap-0 rounded-3xl overflow-hidden border border-slate-900/50"
+                    className="grid grid-cols-8 gap-0 rounded-3xl overflow-visible border border-slate-900/50 relative"
                     style={{
                         // Mobilde ekrana göre, masaüstünde daha büyük tahta
                         width: 'min(92vw, 720px)',
