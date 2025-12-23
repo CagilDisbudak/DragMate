@@ -36,9 +36,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     }, [initialFen]);
 
     const sensors = useSensors(
+        // TouchSensor öne alınarak mobilde daha tutarlı sürükleme
+        useSensor(TouchSensor, { activationConstraint: { delay: 80, tolerance: 8 } }),
         useSensor(PointerSensor),
-        useSensor(MouseSensor),
-        useSensor(TouchSensor)
+        useSensor(MouseSensor)
     );
 
     const handleDragEnd = useCallback((event: DragEndEvent) => {
@@ -127,12 +128,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             onDragEnd={handleDragEnd}
             onDragStart={(event) => handleDragStart(event.active.id as string)}
         >
-            <div className="p-3 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 ring-1 ring-white/5">
+            <div
+                className="p-3 bg-slate-900 rounded-[2.5rem] shadow-2xl border border-slate-800 ring-1 ring-white/5"
+                style={{ touchAction: 'none' }}
+            >
                 <div
                     className="grid grid-cols-8 gap-0 rounded-3xl overflow-hidden border border-slate-900/50"
                     style={{
-                        width: 'min(95vw, 720px)',
-                        height: 'min(95vw, 720px)',
+                        width: 'min(92vw, 520px)',
+                        height: 'min(92vw, 520px)',
                         gridTemplateColumns: 'repeat(8, 1fr)'
                     }}
                 >
