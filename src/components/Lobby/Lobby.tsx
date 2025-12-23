@@ -23,26 +23,26 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, isAuthLo
     };
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-[85vh] gap-12 relative overflow-hidden">
-            <div className="text-center space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-sm font-semibold tracking-wide">
+        <div className="flex flex-col items-center justify-center min-h-[85vh] gap-8 lg:gap-12 relative overflow-hidden px-4">
+            <div className="text-center space-y-4 lg:space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                <div className="inline-flex items-center px-3 sm:px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs sm:text-sm font-semibold tracking-wide">
                     PREMIUM MULTIPLAYER CHESS
                 </div>
-                <h1 className="text-8xl font-black tracking-tight bg-clip-text text-transparent bg-linear-to-b from-white via-indigo-100 to-indigo-400">
+                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-8xl font-black tracking-tight bg-clip-text text-transparent bg-linear-to-b from-white via-indigo-100 to-indigo-400">
                     DragMate
                 </h1>
-                <p className="text-xl text-slate-400 max-w-xl mx-auto leading-relaxed font-medium">
+                <p className="text-base sm:text-lg text-slate-400 max-w-md sm:max-w-xl mx-auto leading-relaxed font-medium">
                     Master the board with friends in a fluid, minimalist arena.
                     Zero friction. Pure strategy.
                 </p>
             </div>
 
-            <div className="liquid-glass p-12 w-full max-w-xl space-y-10 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-200">
-                <div className="space-y-6">
+            <div className="liquid-glass p-6 sm:p-8 lg:p-12 w-full max-w-xl space-y-8 lg:space-y-10 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-200">
+                <div className="space-y-5 sm:space-y-6">
                     <button
                         onClick={handleCreate}
                         disabled={isCreating || isAuthLoading}
-                        className="w-full btn-premium flex items-center justify-center gap-4 text-2xl py-5 group disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full btn-premium flex items-center justify-center gap-3 sm:gap-4 text-lg sm:text-2xl py-4 sm:py-5 group disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isCreating || isAuthLoading ? (
                             <div className="w-7 h-7 border-3 border-white/20 border-t-white rounded-full animate-spin" />
@@ -58,20 +58,20 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, isAuthLo
                         <div className="flex-1 h-px bg-slate-800"></div>
                     </div>
 
-                    <div className="flex gap-4">
+                    <div className="flex gap-3 sm:gap-4">
                         <div className="relative flex-1 group">
                             <input
                                 type="text"
                                 placeholder="Enter Room ID"
                                 value={roomIdInput}
                                 onChange={(e) => setRoomIdInput(e.target.value)}
-                                className="w-full bg-slate-900/40 border border-slate-800/50 rounded-2xl px-8 py-5 text-xl placeholder:text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all group-hover:border-slate-700"
+                                className="w-full bg-slate-900/40 border border-slate-800/50 rounded-2xl px-5 sm:px-8 py-4 sm:py-5 text-lg sm:text-xl placeholder:text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all group-hover:border-slate-700"
                             />
                         </div>
                         <button
                             onClick={() => onJoinRoom(roomIdInput)}
                             disabled={!roomIdInput.trim() || isAuthLoading}
-                            className="bg-white text-slate-950 hover:bg-slate-100 disabled:opacity-20 disabled:grayscale px-8 py-5 rounded-2xl transition-all duration-300 font-black active:scale-95 shadow-2xl hover:shadow-white/10"
+                            className="bg-white text-slate-950 hover:bg-slate-100 disabled:opacity-20 disabled:grayscale px-5 sm:px-8 py-4 sm:py-5 rounded-2xl transition-all duration-300 font-black active:scale-95 shadow-2xl hover:shadow-white/10"
                         >
                             <LogIn size={28} />
                         </button>
