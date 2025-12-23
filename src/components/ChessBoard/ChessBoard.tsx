@@ -135,8 +135,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 <div
                     className="grid grid-cols-8 gap-0 rounded-3xl overflow-hidden border border-slate-900/50"
                     style={{
-                        width: 'min(92vw, 520px)',
-                        height: 'min(92vw, 520px)',
+                        // Mobilde ekrana göre, masaüstünde daha büyük tahta
+                        width: 'min(92vw, 720px)',
+                        height: 'min(92vw, 720px)',
                         gridTemplateColumns: 'repeat(8, 1fr)'
                     }}
                 >
