@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, LogIn, Users, User, Trophy, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Plus, LogIn, Users, User, Trophy, ArrowLeft } from 'lucide-react';
 import { useGlobalActivePlayers } from '../../hooks/useGlobalActivePlayers';
 
 interface LobbyProps {
@@ -7,11 +7,12 @@ interface LobbyProps {
     onJoinRoom: (id: string) => void;
     onStartLocal: (difficulty: 'Easy' | 'Normal' | 'Hard') => void;
     isAuthLoading: boolean;
+    onSelectGame: (game: 'chess' | 'backgammon') => void;
 }
 
 type LobbyStep = 'game-select' | 'mode-select' | 'difficulty-select' | 'connection';
 
-export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartLocal, isAuthLoading }) => {
+export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartLocal, isAuthLoading, onSelectGame }) => {
     const [step, setStep] = useState<LobbyStep>('game-select');
     const [roomIdInput, setRoomIdInput] = useState('');
     const [isCreating, setIsCreating] = useState(false);
@@ -29,20 +30,33 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
     const renderGameSelect = () => (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
             <h2 className="text-2xl font-bold text-white text-center">Choose Your Game</h2>
-            <button
-                onClick={() => setStep('mode-select')}
-                className="group relative w-full aspect-video bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-indigo-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/20 overflow-hidden text-left p-8"
-            >
-                <div className="absolute top-0 right-0 p-3 bg-indigo-500/10 text-indigo-300 rounded-bl-2xl text-xs font-black uppercase tracking-widest border-b border-l border-indigo-500/20">
-                    Featured
-                </div>
-                <Trophy className="w-12 h-12 text-indigo-400 mb-4 group-hover:scale-110 transition-transform" />
-                <h3 className="text-3xl font-black text-white mb-2">CHESS</h3>
-                <p className="text-slate-400 font-medium max-w-[200px]">The classic game of strategy. Multiplayer & Local.</p>
-                <div className="absolute bottom-6 right-6 p-3 rounded-full bg-indigo-500 text-white opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-                    <ArrowRight size={20} />
-                </div>
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                    onClick={() => { onSelectGame('chess'); setStep('mode-select'); }}
+                    className="group relative w-full aspect-[4/3] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-indigo-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/20 overflow-hidden text-left p-6 flex flex-col justify-between"
+                >
+                    <div>
+                        <Trophy className="w-10 h-10 text-indigo-400 mb-3 group-hover:scale-110 transition-transform" />
+                        <h3 className="text-2xl font-black text-white">CHESS</h3>
+                        <p className="text-slate-400 text-sm font-medium mt-1">The classic strategy game.</p>
+                    </div>
+                </button>
+
+                <button
+                    onClick={() => { onSelectGame('backgammon'); setStep('mode-select'); }}
+                    className="group relative w-full aspect-[4/3] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-emerald-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-500/20 overflow-hidden text-left p-6 flex flex-col justify-between"
+                >
+                    <div className="absolute top-0 right-0 p-2 bg-emerald-500/10 text-emerald-300 rounded-bl-2xl text-[10px] font-black uppercase tracking-widest border-b border-l border-emerald-500/20">
+                        New
+                    </div>
+                    <div>
+                        <div className="w-10 h-10 rounded-full bg-slate-700 border-2 border-slate-600 mb-3 group-hover:border-emerald-500 transition-colors" />
+                        {/* Simple visual proxy for Backgammon piece */}
+                        <h3 className="text-2xl font-black text-white">TAVLA</h3>
+                        <p className="text-slate-400 text-sm font-medium mt-1">Classic Turkish Backgammon.</p>
+                    </div>
+                </button>
+            </div>
         </div>
     );
 
