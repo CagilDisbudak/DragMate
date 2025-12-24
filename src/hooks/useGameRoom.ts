@@ -203,5 +203,33 @@ export const useGameRoom = (roomId: string | null) => {
         });
     };
 
-    return { room, userId, loading, isAuthLoading, createRoom, joinRoom, updateMove, resignGame, resetGame };
+    const leaveRoom = async () => {
+        if (!firebaseEnabled || !db) return;
+        if (!roomId) return;
+
+        try {
+            const uid = await ensureUserReady();
+            const roomRef = doc(collection(db, 'rooms'), roomId);
+
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(roomRef);
+                if (!snap.exists()) return;
+
+                const data = snap.data() as GameRoom;
+                const nextData = { ...data };
+
+                if (nextData.whitePlayer === uid) {
+                    nextData.whitePlayer = '';
+                } else if (nextData.blackPlayer === uid) {
+                    nextData.blackPlayer = '';
+                }
+
+                transaction.update(roomRef, nextData);
+            });
+        } catch (error) {
+            console.error("Error leaving room:", error);
+        }
+    };
+
+    return { room, userId, loading, isAuthLoading, createRoom, joinRoom, updateMove, resignGame, resetGame, leaveRoom };
 };

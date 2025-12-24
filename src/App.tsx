@@ -3,6 +3,7 @@ import { Background } from './components/Background';
 import { Lobby } from './components/Lobby/Lobby';
 import { Game } from './components/Game/Game';
 import { useGameRoom } from './hooks/useGameRoom';
+import { useBackgammonGame } from './hooks/useBackgammonGame';
 
 import { BackgammonGame } from './components/Game/BackgammonGame';
 
@@ -14,28 +15,40 @@ function App() {
   const [selectedGame, setSelectedGame] = useState<GameType>('chess');
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   const [aiDifficulty, setAiDifficulty] = useState<'Easy' | 'Normal' | 'Hard'>('Normal'); // Default Normal
-  const { createRoom, isAuthLoading } = useGameRoom(null);
+  const chessRoom = useGameRoom(null);
+  const backgammonRoom = useBackgammonGame(null);
+
+  // Use the appropriate hook's auth loading state
+  const isAuthLoading = selectedGame === 'chess' ? chessRoom.isAuthLoading : backgammonRoom.isAuthLoading;
 
   const handleCreateRoom = async () => {
-    const id = await createRoom();
-    if (id) {
-      setCurrentRoomId(id);
-      setGameMode('online');
+    try {
+      const id = selectedGame === 'chess' 
+        ? await chessRoom.createRoom()
+        : await backgammonRoom.createRoom();
+      if (id) {
+        setCurrentRoomId(id);
+        setGameMode('online');
+      }
+    } catch (error) {
+      console.error('Failed to create room:', error);
     }
   };
 
-  const handleJoinRoom = (id: string) => {
+  const handleJoinRoom = async (id: string) => {
     if (id.trim()) {
-      setCurrentRoomId(id);
-      setGameMode('online');
-      // If ID starts with certain prefix or valid room check could set game type, 
-      // but for now let's assume Chess unless logic later says otherwise?
-      // Actually we need to know what game type to join.
-      // Simplify: Let user pick game type likely, OR auto-detect. 
-      // For now, let's just default Chess for existing flow, or if we want generic support we need metadata.
-      // But Backgammon rooms are separate collection 'rooms_bg'.
-      // TODO: Better room handling. For now assuming Lobby sets game type before join?
-      // Actually handleJoinRoom is called from Lobby.
+      try {
+        if (selectedGame === 'chess') {
+          await chessRoom.joinRoom(id);
+        } else {
+          await backgammonRoom.joinRoom(id);
+        }
+        setCurrentRoomId(id);
+        setGameMode('online');
+      } catch (error) {
+        console.error('Failed to join room:', error);
+        alert('Room not found or could not join');
+      }
     }
   };
 

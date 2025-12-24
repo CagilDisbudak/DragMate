@@ -50,9 +50,8 @@ export const createBackgammonGame = (): BackgammonState => {
     };
 };
 
-export const isValidMove = (state: BackgammonState, move: Move): boolean => {
-    // Basic validation logic placeholder
-    // This function can be used to sanity check, but usually we generate all valid moves
+// function isValidMove removed or simplified if empty.
+export const isValidMove = (): boolean => {
     return true;
 };
 
@@ -91,8 +90,6 @@ export const getValidMoves = (state: BackgammonState): Move[] => {
 
     const isWhite = turn === 'white';
     const direction = isWhite ? 1 : -1;
-    const homeStart = isWhite ? 18 : 0;
-    const homeEnd = isWhite ? 23 : 5;
 
     // 1. Check Bar first
     const barCount = isWhite ? bar.white : bar.black;
@@ -105,7 +102,6 @@ export const getValidMoves = (state: BackgammonState): Move[] => {
             const targetContent = board[targetIndex];
 
             // Can enter if empty, own color, or singly occupied by opponent (hit)
-            const isOwnColor = isWhite ? targetContent >= 0 : targetContent <= 0;
             const isOpponentMulti = isWhite ? targetContent < -1 : targetContent > 1;
 
             if (!isOpponentMulti) {
@@ -203,7 +199,6 @@ export const applyMove = (state: BackgammonState, move: Move): BackgammonState =
         const destIdx = move.to as number;
         // Hit logic
         if (move.isHit) {
-            const existing = newState.board[destIdx]; // Should be -1 (if white moving) or 1 (if black moving)
             // Send opponent to bar
             if (isWhite) newState.bar.black++;
             else newState.bar.white++;

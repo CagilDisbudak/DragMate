@@ -1,7 +1,6 @@
 
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 
 interface CheckerProps {
     id: string;

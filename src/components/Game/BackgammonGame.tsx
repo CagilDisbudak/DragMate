@@ -10,7 +10,7 @@ import {
     applyMove
 } from '../../logic/backgammonLogic';
 import { getBestBackgammonMove } from '../../logic/backgammonAI';
-import { ArrowLeft, RotateCcw, Trophy, X } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Copy, Share2, Flag, Users, Zap, Loader2 } from 'lucide-react';
 
 interface BackgammonGameProps {
     roomId?: string;
@@ -24,70 +24,75 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
 
     // Local State
     const [localGame, setLocalGame] = useState<BackgammonState>(() => createBackgammonGame());
+    const [optimisticGame, setOptimisticGame] = useState<BackgammonState | null>(null);
 
     // Unified Access
     const isLocal = mode === 'local';
-    const gameState = isLocal ? localGame : (gameRoom.room ? {
-        ...gameRoom.room,
-        validMoves: [] // Recalculated locally usually, or sync? Let's recalc.
-    } as unknown as BackgammonState : null);
-    // Note: Firestore data doesn't store computed validMoves, so we compute them here.
 
-    // If online game is loading
-    if (!isLocal && gameRoom.loading) return <div className="text-white">Loading Arena...</div>;
-    if (!gameState) return <div className="text-white">Game Not Found</div>;
+    const gameState = React.useMemo(() => {
+        if (isLocal) return localGame;
+        if (optimisticGame) return optimisticGame; // Prefer optimistic state if available
+        if (!gameRoom.room) return null;
+        return {
+            ...gameRoom.room,
+            validMoves: []
+        } as unknown as BackgammonState;
+    }, [isLocal, localGame, gameRoom.room, optimisticGame]);
 
-    // Compute Valid Moves
-    // In local, we trust state. In online, we define moves based on synced state.
-    // If it's my turn, calculate moves.
-    const validMoves = getValidMoves(gameState);
+    // Sync Optimistic State with Server
+    useEffect(() => {
+        if (!gameRoom.room || !optimisticGame) return;
+
+        // If server state matches optimistic state, clear optimistic to relying on source of truth
+        // We check turn and board state. simple board comparison is fast for 24 ints.
+        const isSameTurn = gameRoom.room.turn === optimisticGame.turn;
+        const isSameBoard = JSON.stringify(gameRoom.room.board) === JSON.stringify(optimisticGame.board);
+        const isSameMoves = gameRoom.room.movesLeft.length === optimisticGame.movesLeft.length;
+
+        if (isSameTurn && isSameBoard && isSameMoves) {
+            setOptimisticGame(null);
+        } else if (!isSameTurn) {
+            // Turn changed on server (e.g. opponent moved or we finished turn), sync to server
+            setOptimisticGame(null);
+        }
+    }, [gameRoom.room, optimisticGame]);
+
+    // Compute Valid Moves (only if gameState exists)
+    const validMoves = React.useMemo(() => {
+        return gameState ? getValidMoves(gameState) : [];
+    }, [gameState]);
 
     // Player Identity
-    const currentUserId = isLocal ? (gameState.turn === 'white' ? 'local-white' : 'local-black') : gameRoom.userId;
+    const currentUserId = isLocal ? (gameState?.turn === 'white' ? 'local-white' : 'local-black') : gameRoom.userId;
     // In Local: Human is White. AI is Black.
     const playerColor = isLocal ? 'white' : (
         gameRoom.room?.whitePlayer === currentUserId ? 'white' : 'black'
     );
 
-    const isWhiteTurn = gameState.turn === 'white';
-    const isOurTurn = playerColor === gameState.turn;
+    const isOurTurn = playerColor === gameState?.turn;
 
-    // Auto-skip turn if no moves possible
     useEffect(() => {
-        if (gameState.movesLeft.length > 0 && validMoves.length === 0 && !gameState.winner) {
-            // No moves possible!
-            const timer = setTimeout(() => {
-                let finalState = { ...gameState };
-                // Switch turn
-                finalState.turn = finalState.turn === 'white' ? 'black' : 'white';
-                finalState.dice = rollDice();
-                finalState.movesLeft = [...finalState.dice];
-
-                if (isLocal) {
-                    setLocalGame(finalState);
-                } else {
-                    gameRoom.updateGameState(finalState);
-                }
-            }, 1500); // 1.5s delay so user sees "No Moves" or realizes
-            return () => clearTimeout(timer);
+        if (!isLocal && roomId && gameRoom.joinRoom) {
+            gameRoom.joinRoom(roomId);
         }
-    }, [gameState.movesLeft, validMoves, gameState.winner, gameState.turn, isLocal]);
+    }, [roomId, isLocal]);
 
-    // const isMyTurn = gameState.turn === playerColor; // Unused for now visually, but kept logic below
+    const copyRoomId = () => {
+        navigator.clipboard.writeText(roomId);
+        alert('Room ID copied to clipboard!');
+    };
+    // ... (skip to Timer)
+    const isWhite = gameRoom.room?.whitePlayer === currentUserId || isLocal;
+    const isBlack = gameRoom.room?.blackPlayer === currentUserId;
+    const isGameOver = gameState?.winner ? true : false;
 
     // Handlers
     const handleMove = (newState: BackgammonState) => {
-        // Check availability of next moves?
-        // If movesLeft is empty, switch turn automatically? 
-        // Logic: if movesLeft is empty, switch turn.
-
         let finalState = { ...newState };
         if (finalState.movesLeft.length === 0) {
             // End of turn
             finalState.turn = finalState.turn === 'white' ? 'black' : 'white';
-            finalState.dice = rollDice(); // Roll for next player? 
-            // Usually standard BG: player rolls at START of turn.
-            // But for simplicity/speed: Auto-roll for next player at end of current turn
+            finalState.dice = rollDice();
             finalState.movesLeft = [...finalState.dice];
         } else {
             // Check if any valid moves remain. If none, forfeiture remaining dice.
@@ -102,12 +107,36 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
         if (isLocal) {
             setLocalGame(finalState);
         } else {
-            gameRoom.updateGameState(finalState);
+            setOptimisticGame(finalState); // Immediate local update
+            gameRoom.updateGameState(finalState); // Network update
         }
     };
 
+    // Auto-skip turn if no moves possible
+    useEffect(() => {
+        if (!gameState) return;
+        if (gameState.movesLeft.length > 0 && validMoves.length === 0 && !gameState.winner) {
+            const timer = setTimeout(() => {
+                let finalState = { ...gameState };
+                // Switch turn
+                finalState.turn = finalState.turn === 'white' ? 'black' : 'white';
+                finalState.dice = rollDice();
+                finalState.movesLeft = [...finalState.dice];
+
+                if (isLocal) {
+                    setLocalGame(finalState);
+                } else {
+                    setOptimisticGame(finalState);
+                    gameRoom.updateGameState(finalState);
+                }
+            }, 1500);
+            return () => clearTimeout(timer);
+        }
+    }, [gameState?.movesLeft, validMoves.length, gameState?.winner, gameState?.turn, isLocal, gameState]);
+
     // AI Trigger
     useEffect(() => {
+        if (!gameState) return;
         if (isLocal && gameState.turn === 'black' && !gameState.winner) {
             const timer = setTimeout(() => {
                 const bestMove = getBestBackgammonMove(gameState, aiDifficulty);
@@ -127,103 +156,256 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
         }
     }, [gameState, isLocal, aiDifficulty]);
 
-    return (
-        <div className="flex flex-col items-center gap-8 w-full max-w-6xl mx-auto px-4 py-8">
-            <header className="w-full flex items-center justify-between">
-                <button onClick={onExit} className="flex items-center gap-2 text-slate-500 hover:text-white font-bold uppercase tracking-widest text-xs">
-                    <ArrowLeft size={16} /> Back
-                </button>
-                <div className="text-white font-black uppercase tracking-widest text-xl">
-                    Backgammon / Tavla
+    // Early returns AFTER all hooks
+    if (!isLocal && gameRoom.loading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[80vh] gap-6 animate-pulse">
+                <div className="relative shadow-2xl shadow-indigo-500/20 rounded-full p-4">
+                    <Loader2 className="w-16 h-16 text-indigo-500 animate-spin" />
                 </div>
-                <div className="w-16"></div> {/* Spacer */}
-            </header>
-
-            {/* Turn Indicator */}
-            <div className="flex items-center justify-between w-full bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 backdrop-blur-sm">
-                <div className={`flex items-center gap-3 ${isWhiteTurn ? 'opacity-100' : 'opacity-40'}`}>
-                    <div className="w-4 h-4 rounded-full bg-slate-200 border border-slate-300 shadow-sm" />
-                    <div>
-                        <div className="text-sm font-bold text-white">White</div>
-                        {isWhiteTurn && <div className="text-xs text-indigo-400 font-medium animate-pulse">Playing...</div>}
-                    </div>
-                </div>
-
-                {/* Timer Placeholder / VS */}
-                <div className="text-slate-600 font-black text-sm">VS</div>
-
-                <div className={`flex items-center gap-3 ${!isWhiteTurn ? 'opacity-100' : 'opacity-40'}`}>
-                    <div className="text-right">
-                        <div className="text-sm font-bold text-white">Black</div>
-                        {!isWhiteTurn && <div className="text-xs text-indigo-400 font-medium animate-pulse">Playing...</div>}
-                    </div>
-                    <div className="w-4 h-4 rounded-full bg-slate-900 border border-slate-700 shadow-sm" />
+                <div className="text-center space-y-2">
+                    <h2 className="text-xl font-black text-white uppercase tracking-widest">Entering Arena</h2>
+                    <p className="text-slate-500 font-medium">Synchronizing with the global lattice...</p>
                 </div>
             </div>
+        );
+    }
 
-            <BackgammonBoard
-                gameState={gameState}
-                playerColor={playerColor}
-                onMove={handleMove}
-                onRollDice={() => { }} // Auto handled for now
-                validMoves={validMoves}
-            />
+    if (!gameState) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[80vh] gap-8">
+                <div className="text-center space-y-4">
+                    <h2 className="text-5xl font-black text-white italic">Room Dissolved</h2>
+                    <p className="text-slate-400 text-lg">The arena you seek no longer exists or the link is expired.</p>
+                </div>
+                <button onClick={onExit} className="btn-premium px-10 py-4 text-xl">Return to Lobby</button>
+            </div>
+        );
+    }
 
-            <div className="flex gap-4">
+    const statusLabel = (() => {
+        if (gameState.winner) return `${gameState.winner === 'white' ? 'White' : 'Black'} Wins!`;
+        return isOurTurn ? 'Your Turn' : 'Waiting...';
+    })();
+
+    return (
+        <div className="flex flex-col items-center gap-8 lg:gap-12 py-6 lg:py-10 w-full animate-in fade-in duration-700">
+            <header className="w-full max-w-6xl flex items-center justify-between px-4 lg:px-6">
                 <button
                     onClick={() => {
-                        const newGame = createBackgammonGame();
-                        if (isLocal) setLocalGame(newGame);
-                        else gameRoom.resetGame();
+                        if (!isLocal && gameRoom.leaveRoom) gameRoom.leaveRoom();
+                        onExit();
                     }}
-                    className="btn-premium px-6 py-2 text-sm flex items-center gap-2"
+                    className="group flex items-center gap-3 text-slate-500 hover:text-white transition-all font-bold uppercase tracking-widest text-xs"
                 >
-                    <RotateCcw size={16} /> Restart
+                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800 group-hover:border-slate-700 group-hover:-translate-x-1 transition-transform">
+                        <ArrowLeft size={18} />
+                    </div>
+                    Back
                 </button>
-            </div>
 
-            {/* Game Over Modal */}
-            {gameState.winner && (
-                <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center animate-in fade-in duration-300">
-                    <div className="bg-slate-800 border border-slate-700 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center space-y-6">
-                        <div className="mx-auto w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center">
-                            <Trophy className="w-8 h-8 text-yellow-400" />
+                {!isLocal && (
+                    <div className="flex items-center gap-4">
+                        <div className="liquid-glass px-6 py-3 flex items-center gap-6">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-black">Arena ID</span>
+                                <code className="text-indigo-300 font-mono font-bold">{roomId}</code>
+                            </div>
+                            <div className="h-8 w-px bg-slate-800" />
+                            <div className="flex items-center gap-3">
+                                <button onClick={copyRoomId} className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-all">
+                                    <Copy size={18} />
+                                </button>
+                                <button className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-all">
+                                    <Share2 size={18} />
+                                </button>
+                            </div>
                         </div>
+                    </div>
+                )}
+                {isLocal && (
+                    <div className="px-6 py-3 liquid-glass text-indigo-300 font-bold uppercase tracking-widest text-xs">
+                        Single Player Mode
+                    </div>
+                )}
+            </header>
 
-                        <div>
-                            <h2 className="text-3xl font-black text-white mb-2">
-                                {gameState.winner === 'white' ? 'White' : 'Black'} Wins!
-                            </h2>
-                            <p className="text-slate-400">
+            <div className="flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-16 w-full max-w-7xl px-4 lg:px-6">
+                <div className="relative group w-full flex justify-center max-w-full overflow-visible">
+                    <div className="absolute -inset-4 bg-linear-to-r from-indigo-500 to-pink-500 rounded-[2.5rem] blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
+                    <BackgammonBoard
+                        gameState={gameState}
+                        playerColor={playerColor}
+                        onMove={handleMove}
+                        onRollDice={() => { }} // Auto handled for now
+                        validMoves={validMoves}
+                    />
+                </div>
+
+                <div className="w-full lg:w-96 flex flex-col gap-6 lg:gap-8 mt-0 lg:mt-0">
+                    <div className="liquid-glass p-5 lg:p-8 space-y-6 lg:space-y-8 border-l-4 border-l-indigo-500">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-black text-slate-500 uppercase tracking-[0.3em]">
+                                Game Status
+                            </h3>
+                            <div
+                                className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${!gameState.winner
+                                    ? (isOurTurn ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-slate-800 text-slate-500')
+                                    : 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/30'
+                                    }`}
+                            >
+                                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${!gameState.winner ? 'bg-green-500' : 'bg-indigo-400'}`} />
                                 {isLocal
-                                    ? (gameState.winner === 'white' ? 'You won!' : 'AI won!')
-                                    : (gameState.winner === playerColor ? 'You Won!' : 'Opponent Won!')
-                                }
-                            </p>
+                                    ? (gameState.turn === 'white' ? '⚪ White Turn' : '⚫ Black Turn')
+                                    : statusLabel}
+                            </div>
                         </div>
 
-                        <div className="flex flex-col gap-3">
+                        {isGameOver && (
+                            <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-100 text-sm lg:text-base font-bold">
+                                {statusLabel}
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            <GameTimer gameState={gameState} />
+
+                            {!isLocal && (
+                                <>
+                                    <div className="flex items-center gap-3 lg:gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${isWhite ? 'bg-white text-slate-950' : 'bg-slate-800 text-slate-400'}`}>W</div>
+                                        <div className="flex-1">
+                                            <div className="text-sm font-bold text-white uppercase tracking-wide">White Player</div>
+                                            <div className="text-xs text-slate-500 font-medium">
+                                                {gameRoom.room?.whitePlayer === currentUserId ? 'Connected (You)' : (gameRoom.room?.whitePlayer ? 'Opponent Ready' : 'Awaiting Entry...')}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-3 lg:gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${isBlack ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>B</div>
+                                        <div className="flex-1">
+                                            <div className="text-sm font-bold text-white uppercase tracking-wide">Black Player</div>
+                                            <div className="text-xs text-slate-500 font-medium">
+                                                {gameRoom.room?.blackPlayer === currentUserId ? 'Connected (You)' : (gameRoom.room?.blackPlayer ? 'Opponent Ready' : 'Awaiting Entry...')}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3">
                             <button
+                                disabled={isGameOver}
+                                onClick={() => {
+                                    if (isLocal) {
+                                        const finalState = { ...gameState };
+                                        finalState.winner = playerColor === 'white' ? 'black' : 'white';
+                                        setLocalGame(finalState);
+                                    } else {
+                                        gameRoom.resignGame(playerColor as 'white' | 'black');
+                                    }
+                                }}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-800 bg-slate-900/60 text-slate-200 font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:border-red-500/50 hover:text-red-200 transition"
+                            >
+                                <Flag size={18} />
+                                Resign
+                            </button>
+                            <button
+                                disabled={!isGameOver && !isLocal}
                                 onClick={() => {
                                     const newGame = createBackgammonGame();
+                                    setOptimisticGame(null);
                                     if (isLocal) setLocalGame(newGame);
                                     else gameRoom.resetGame();
                                 }}
-                                className="btn-premium w-full py-3"
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 text-indigo-100 font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500/20 transition"
                             >
-                                Play Again
-                            </button>
-                            <button
-                                onClick={onExit}
-                                className="w-full py-3 rounded-xl hover:bg-slate-700 text-slate-400 font-bold transition-colors"
-                            >
-                                Exit
+                                <RotateCcw size={18} />
+                                Rematch
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
 
+                    {!isLocal && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="liquid-glass p-6 text-center space-y-2">
+                                <Users size={20} className="mx-auto text-slate-600" />
+                                <div className="text-xl font-black text-white italic">
+                                    {gameRoom.room?.whitePlayer && gameRoom.room?.blackPlayer ? '2/2' : (gameRoom.room?.whitePlayer || gameRoom.room?.blackPlayer ? '1/2' : '0/2')}
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Connected</div>
+                            </div>
+                            <div className="liquid-glass p-6 text-center space-y-2">
+                                <Zap size={20} className="mx-auto text-indigo-400" />
+                                <div className="text-xl font-black text-white italic">24ms</div>
+                                <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Latency</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <footer className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[10px] pt-10">
+                Transparent Strategy Arena
+            </footer>
+        </div>
+    );
+};
+
+const GameTimer: React.FC<{ gameState: BackgammonState }> = ({ gameState }) => {
+    const [totalSeconds, setTotalSeconds] = useState(0);
+    const [whiteSeconds, setWhiteSeconds] = useState(0);
+    const [blackSeconds, setBlackSeconds] = useState(0);
+    const prevWinner = React.useRef(gameState?.winner);
+
+    useEffect(() => {
+        // Detect reset: Winner was set, now it is not.
+        if (prevWinner.current && !gameState?.winner) {
+            setTotalSeconds(0);
+            setWhiteSeconds(0);
+            setBlackSeconds(0);
+        }
+        prevWinner.current = gameState?.winner;
+    }, [gameState?.winner]);
+
+    useEffect(() => {
+        if (!gameState || gameState.winner) {
+            // If game is over or not loaded, stop timer.
+            // But we don't reset here (handled by reset detection above).
+            return;
+        }
+
+        const interval = window.setInterval(() => {
+            setTotalSeconds((s) => s + 1);
+            setWhiteSeconds((s) => s + (gameState.turn === 'white' ? 1 : 0));
+            setBlackSeconds((s) => s + (gameState.turn === 'black' ? 1 : 0));
+        }, 1000);
+
+        return () => window.clearInterval(interval);
+    }, [gameState?.turn, gameState?.winner]);
+
+    const formatTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    };
+
+    return (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-[10px] lg:text-xs font-bold uppercase tracking-widest">
+            <div className="space-y-1">
+                <div className="text-slate-500">Time</div>
+                <div className="text-white text-base">{formatTime(totalSeconds)}</div>
+            </div>
+            <div className="space-y-1">
+                <div className="text-slate-500">White</div>
+                <div className="text-emerald-300 text-base">{formatTime(whiteSeconds)}</div>
+            </div>
+            <div className="space-y-1">
+                <div className="text-slate-500">Black</div>
+                <div className="text-sky-300 text-base">{formatTime(blackSeconds)}</div>
+            </div>
         </div>
     );
 };

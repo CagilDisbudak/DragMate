@@ -180,7 +180,10 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
         <div className="flex flex-col items-center gap-8 lg:gap-12 py-6 lg:py-10 w-full animate-in fade-in duration-700">
             <header className="w-full max-w-6xl flex items-center justify-between px-4 lg:px-6">
                 <button
-                    onClick={onExit}
+                    onClick={() => {
+                        if (!isLocal && gameRoom.leaveRoom) gameRoom.leaveRoom();
+                        onExit();
+                    }}
                     className="group flex items-center gap-3 text-slate-500 hover:text-white transition-all font-bold uppercase tracking-widest text-xs"
                 >
                     <div className="p-2 rounded-xl bg-slate-900 border border-slate-800 group-hover:border-slate-700 group-hover:-translate-x-1 transition-transform">

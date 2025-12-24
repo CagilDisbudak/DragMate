@@ -8,7 +8,6 @@ import {
     TouchSensor,
     useSensor,
     useSensors,
-    PointerSensor,
     useDroppable,
     DragOverlay
 } from '@dnd-kit/core';
@@ -208,7 +207,6 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                         <OffTray
                             playerColor="white"
                             count={off.white}
-                            isHighlighted={highlightedPoints.includes(99) && turn === 'white'}
                             isTop={true}
                         />
                     </div>
@@ -218,7 +216,6 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                         <OffTray
                             playerColor="black"
                             count={off.black}
-                            isHighlighted={highlightedPoints.includes(99) && turn === 'black'}
                             isTop={false}
                         />
                     </div>
@@ -273,7 +270,7 @@ const OffTrayDroppable: React.FC<{ isHighlighted: boolean }> = ({ isHighlighted 
     );
 };
 
-const OffTray: React.FC<{ playerColor: string; count: number, isHighlighted: boolean, isTop: boolean }> = ({ playerColor, count, isHighlighted, isTop }) => {
+const OffTray: React.FC<{ playerColor: string; count: number, isTop: boolean }> = ({ playerColor, count, isTop }) => {
     // This is purely visual now, droppable is separate
     return (
         <div
