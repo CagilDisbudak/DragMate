@@ -7,13 +7,14 @@ interface PointProps {
     index: number; // 0-23
     count: number; // >0 white, <0 black
     isTop: boolean; // Top row (12-23) vs Bottom row (0-11)
+    isHitTarget?: boolean;
     isHighlighted?: boolean;
     onDragStart?: (id: string) => void;
     playerColor: 'white' | 'black';
     canDragFrom: boolean;
 }
 
-export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted, playerColor, canDragFrom }) => {
+export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted, playerColor, canDragFrom, isHitTarget }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: index.toString(),
     });
@@ -82,6 +83,68 @@ export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted
             <div className={`z-10 w-full h-full flex ${isTop ? 'flex-col pt-2' : 'flex-col-reverse pb-2'} items-center`}>
                 {checkersList}
             </div>
+
+            {/* Hit Effect */}
+            {/* Hit Effect - Shattering Checker */}
+            {isHitTarget && (
+                <div className={`absolute ${isTop ? 'top-6' : 'bottom-6'} left-1/2 -translate-x-1/2 z-50 pointer-events-none`}>
+                    <style>
+                        {`
+                        @keyframes shatter-left {
+                            0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+                            100% { transform: translate(-20px, -10px) rotate(-15deg); opacity: 0; }
+                        }
+                        @keyframes shatter-right {
+                            0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+                            100% { transform: translate(20px, -10px) rotate(15deg); opacity: 0; }
+                        }
+                        @keyframes impact-flash {
+                            0% { transform: scale(0.5); opacity: 0; }
+                            10% { transform: scale(1.2); opacity: 1; }
+                            100% { transform: scale(0); opacity: 0; }
+                        }
+                        `}
+                    </style>
+                    <div className="relative w-10 h-10 md:w-12 md:h-12">
+                        {(() => {
+                            const victimColor = count > 0 ? 'black' : 'white';
+                            const baseClass = victimColor === 'white'
+                                ? 'bg-slate-200 border-slate-300 shadow-sm'
+                                : 'bg-slate-900 border-slate-700 shadow-xl';
+                            const innerBorder = victimColor === 'white' ? 'border-slate-300' : 'border-slate-700';
+
+                            return (
+                                <>
+                                    {/* Left Half */}
+                                    <div
+                                        className={`absolute inset-0 rounded-full border-4 ${baseClass} overflow-hidden`}
+                                        style={{
+                                            clipPath: 'polygon(0% 0%, 55% 0%, 45% 100%, 0% 100%)',
+                                            animation: 'shatter-left 0.6s ease-out forwards'
+                                        }}
+                                    >
+                                        <div className={`absolute inset-2 rounded-full border-2 ${innerBorder} opacity-30`} />
+                                    </div>
+
+                                    {/* Right Half */}
+                                    <div
+                                        className={`absolute inset-0 rounded-full border-4 ${baseClass} overflow-hidden`}
+                                        style={{
+                                            clipPath: 'polygon(55% 0%, 100% 0%, 100% 100%, 45% 100%)',
+                                            animation: 'shatter-right 0.6s ease-out forwards'
+                                        }}
+                                    >
+                                        <div className={`absolute inset-2 rounded-full border-2 ${innerBorder} opacity-30`} />
+                                    </div>
+
+                                    {/* Impact Flash */}
+                                    <div className="absolute inset-0 bg-white rounded-full mix-blend-overlay" style={{ animation: 'impact-flash 0.4s ease-out forwards' }} />
+                                </>
+                            );
+                        })()}
+                    </div>
+                </div>
+            )}
 
             {/* Point Number (Optional debugging or visual aid) */}
             <span className={`absolute ${isTop ? 'top-0' : 'bottom-0'} text-[8px] text-slate-600 font-mono opacity-50`}>

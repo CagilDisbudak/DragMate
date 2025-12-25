@@ -32,6 +32,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
     const { board, bar, off, turn } = gameState;
     const [activeId, setActiveId] = useState<string | null>(null);
     const [highlightedPoints, setHighlightedPoints] = useState<number[]>([]);
+    const [hitEffectPoint, setHitEffectPoint] = useState<number | null>(null);
 
     // Optimized sensors for smoother drag
     // Optimized sensors for smoother drag
@@ -75,6 +76,37 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
         setHighlightedPoints(targets);
     };
 
+    // Track previous board state to detect hits from any source (AI, Network, Local)
+    const prevBoard = React.useRef(gameState.board);
+
+    React.useEffect(() => {
+        const oldBoard = prevBoard.current;
+        const newBoard = gameState.board;
+
+        // Detect changes where a single checker was replaced by opponent
+        for (let i = 0; i < 24; i++) {
+            const oldVal = oldBoard[i];
+            const newVal = newBoard[i];
+
+            // Case 1: White hit Black
+            // Old was -1 (Black Blot), New is >= 1 (White Occupied)
+            if (oldVal === -1 && newVal >= 1) {
+                setHitEffectPoint(i);
+                setTimeout(() => setHitEffectPoint(null), 800);
+            }
+
+            // Case 2: Black hit White
+            // Old was 1 (White Blot), New is <= -1 (Black Occupied)
+            if (oldVal === 1 && newVal <= -1) {
+                setHitEffectPoint(i);
+                setTimeout(() => setHitEffectPoint(null), 800);
+            }
+        }
+
+        prevBoard.current = gameState.board;
+    }, [gameState.board]);
+
+
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
         setActiveId(null);
@@ -101,6 +133,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
         const move = validMoves.find(m => m.from === fromIndex && m.to === toIndex);
 
         if (move) {
+            // Hit effect now handled by useEffect via state change
             const nextState = applyMove(gameState, move);
             onMove(nextState);
         }
@@ -128,6 +161,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                             (playerColor === 'white' && bar.white === 0) ||
                             (playerColor === 'black' && bar.black === 0)
                         )}
+                        isHitTarget={hitEffectPoint === i}
                     />
                 ))}
             </div>
