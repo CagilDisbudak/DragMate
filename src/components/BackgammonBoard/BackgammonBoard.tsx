@@ -220,7 +220,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                             {gameState.movesLeft.map((val, i) => (
                                 <div
                                     key={`${turn}-${i}-${val}`}
-                                    className={`w-12 h-12 md:w-14 md:h-14 rounded-lg shadow-xl flex items-center justify-center text-xl md:text-2xl font-black border-2 animate-in zoom-in spin-in-3 duration-300 ${turn === 'white'
+                                    className={`w-10 h-10 md:w-12 md:h-12 rounded-lg shadow-xl flex items-center justify-center text-lg md:text-xl font-black border-2 animate-in zoom-in spin-in-3 duration-300 ${turn === 'white'
                                         ? 'bg-white text-slate-900 border-slate-200'
                                         : 'bg-slate-900 text-white border-slate-700'
                                         }`}
