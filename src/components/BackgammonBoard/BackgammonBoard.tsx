@@ -184,7 +184,13 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-50">
                         <div className="flex gap-3">
                             {gameState.movesLeft.map((val, i) => (
-                                <div key={i} className="w-12 h-12 md:w-14 md:h-14 bg-white rounded-lg shadow-xl flex items-center justify-center text-xl md:text-2xl font-black text-slate-900 border-2 border-slate-200 animate-in zoom-in spin-in-3 duration-300">
+                                <div
+                                    key={`${turn}-${i}-${val}`}
+                                    className={`w-12 h-12 md:w-14 md:h-14 rounded-lg shadow-xl flex items-center justify-center text-xl md:text-2xl font-black border-2 animate-in zoom-in spin-in-3 duration-300 ${turn === 'white'
+                                        ? 'bg-white text-slate-900 border-slate-200'
+                                        : 'bg-slate-900 text-white border-slate-700'
+                                        }`}
+                                >
                                     {val}
                                 </div>
                             ))}
