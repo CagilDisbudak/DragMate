@@ -10,7 +10,7 @@ import {
     applyMove
 } from '../../logic/backgammonLogic';
 import { getBestBackgammonMove } from '../../logic/backgammonAI';
-import { ArrowLeft, RotateCcw, Copy, Share2, Flag, Users, Zap, Loader2 } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Copy, Share2, Flag, Users, Zap, Loader2, Trophy, XCircle, Home } from 'lucide-react';
 
 interface BackgammonGameProps {
     roomId?: string;
@@ -240,6 +240,23 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                         onRollDice={() => { }} // Auto handled for now
                         validMoves={validMoves}
                     />
+
+                    {isGameOver && (
+                        <GameOverOverlay
+                            winner={gameState.winner}
+                            playerColor={playerColor}
+                            onRematch={() => {
+                                const newGame = createBackgammonGame();
+                                setOptimisticGame(null);
+                                if (isLocal) setLocalGame(newGame);
+                                else gameRoom.resetGame();
+                            }}
+                            onExit={() => {
+                                if (!isLocal && gameRoom.leaveRoom) gameRoom.leaveRoom();
+                                onExit();
+                            }}
+                        />
+                    )}
                 </div>
 
                 <div className="w-full lg:w-96 flex flex-col gap-3 lg:gap-8 mt-0 lg:mt-0">
@@ -405,6 +422,48 @@ const GameTimer: React.FC<{ gameState: BackgammonState }> = ({ gameState }) => {
             <div className="space-y-1">
                 <div className="text-slate-500">Black</div>
                 <div className="text-sky-300 text-base">{formatTime(blackSeconds)}</div>
+            </div>
+        </div>
+    );
+};
+
+const GameOverOverlay: React.FC<{
+    winner: 'white' | 'black' | null | undefined;
+    playerColor: 'white' | 'black';
+    onRematch: () => void;
+    onExit: () => void;
+}> = ({ winner, playerColor, onRematch, onExit }) => {
+    const isWin = winner === playerColor;
+
+    return (
+        <div className="absolute inset-0 z-50 rounded-[2rem] bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-500">
+            <div className={`p-6 rounded-full mb-6 ${isWin ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_50px_-12px_rgba(245,158,11,0.5)]' : 'bg-red-500/20 text-red-400 shadow-[0_0_50px_-12px_rgba(239,68,68,0.5)]'}`}>
+                {isWin ? <Trophy size={64} className="animate-bounce" /> : <XCircle size={64} />}
+            </div>
+
+            <h2 className={`text-4xl md:text-5xl font-black uppercase tracking-widest mb-2 ${isWin ? 'text-transparent bg-clip-text bg-linear-to-b from-amber-300 to-amber-600' : 'text-slate-200'}`}>
+                {isWin ? 'Victory!' : 'Defeat'}
+            </h2>
+
+            <p className="text-slate-400 font-bold text-lg mb-8 uppercase tracking-widest">
+                {isWin ? 'You conquered the board.' : 'Better luck next time.'}
+            </p>
+
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+                <button
+                    onClick={onRematch}
+                    className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-lg shadow-indigo-500/30"
+                >
+                    <RotateCcw size={20} />
+                    Rematch
+                </button>
+                <button
+                    onClick={onExit}
+                    className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold uppercase tracking-widest transition-all hover:scale-105 active:scale-95"
+                >
+                    <Home size={20} />
+                    Return to Lobby
+                </button>
             </div>
         </div>
     );
