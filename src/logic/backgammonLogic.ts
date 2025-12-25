@@ -15,8 +15,9 @@ export interface BackgammonState {
 export interface Move {
     from: number | 'bar'; // 0-23 or 'bar'
     to: number | 'off';   // 0-23 or 'off'
-    roll: number;         // The dice value used
+    roll: number;         // The dice value used (sum if composite)
     isHit?: boolean;      // Does this move hit a blot?
+    subMoves?: Move[];    // For composite moves (e.g. combined dice)
 }
 
 export const INITIAL_BOARD = [
@@ -75,101 +76,133 @@ export const canBearOff = (state: BackgammonState, player: PlayerColor): boolean
 };
 
 export const getValidMoves = (state: BackgammonState): Move[] => {
-    const moves: Move[] = [];
     if (state.winner) return [];
 
-    // Simplification for the first pass:
-    // This is complex because moves can be sequential.
-    // Ideally we return ALL legal sequences, but UI often handles one checker at a time.
-    // So we return valid single moves for the CURRENT state and CURRENT available dice.
+    // Helper to get single-step moves for a specific state
+    const getSingleStepMoves = (currentState: BackgammonState): Move[] => {
+        const moves: Move[] = [];
+        const { turn, board, bar, movesLeft } = currentState;
+        const uniqueRolls = Array.from(new Set(movesLeft));
 
-    const { turn, board, bar, movesLeft } = state;
-    const uniqueRolls = Array.from(new Set(movesLeft));
+        if (movesLeft.length === 0) return [];
 
-    if (movesLeft.length === 0) return [];
+        const isWhite = turn === 'white';
+        const direction = isWhite ? 1 : -1;
 
-    const isWhite = turn === 'white';
-    const direction = isWhite ? 1 : -1;
+        // 1. Check Bar first
+        const barCount = isWhite ? bar.white : bar.black;
+        if (barCount > 0) {
+            for (const roll of uniqueRolls) {
+                const targetIndex = isWhite ? roll - 1 : 24 - roll;
+                const targetContent = board[targetIndex];
+                const isOpponentMulti = isWhite ? targetContent < -1 : targetContent > 1;
 
-    // 1. Check Bar first
-    const barCount = isWhite ? bar.white : bar.black;
-    if (barCount > 0) {
-        // Must enter from bar
-        // White enters at 0-5 (index = roll - 1)
-        // Black enters at 23-18 (index = 24 - roll)
-        for (const roll of uniqueRolls) {
-            const targetIndex = isWhite ? roll - 1 : 24 - roll;
-            const targetContent = board[targetIndex];
+                if (!isOpponentMulti) {
+                    moves.push({
+                        from: 'bar',
+                        to: targetIndex,
+                        roll,
+                        isHit: isWhite ? targetContent === -1 : targetContent === 1
+                    });
+                }
+            }
+            return moves; // If on bar, MUST move from bar.
+        }
 
-            // Can enter if empty, own color, or singly occupied by opponent (hit)
-            const isOpponentMulti = isWhite ? targetContent < -1 : targetContent > 1;
+        // 2. Normal moves
+        for (let i = 0; i < 24; i++) {
+            const pieceCount = board[i];
+            if (isWhite && pieceCount <= 0) continue;
+            if (!isWhite && pieceCount >= 0) continue;
 
-            if (!isOpponentMulti) {
-                moves.push({
-                    from: 'bar',
-                    to: targetIndex,
-                    roll,
-                    isHit: isWhite ? targetContent === -1 : targetContent === 1 // Hit validation
-                });
+            for (const roll of uniqueRolls) {
+                const targetIndex = i + (direction * roll);
+                const bearingOffAllowed = canBearOff(currentState, turn);
+
+                if (bearingOffAllowed) {
+                    if (isWhite && targetIndex === 24) {
+                        moves.push({ from: i, to: 'off', roll });
+                        continue;
+                    }
+                    if (!isWhite && targetIndex === -1) {
+                        moves.push({ from: i, to: 'off', roll });
+                        continue;
+                    }
+                    if (isWhite && targetIndex > 24) {
+                        let isFurthest = true;
+                        for (let k = 18; k < i; k++) { if (board[k] > 0) isFurthest = false; }
+                        if (isFurthest) moves.push({ from: i, to: 'off', roll });
+                    }
+                    if (!isWhite && targetIndex < -1) {
+                        let isFurthest = true;
+                        for (let k = 5; k > i; k--) { if (board[k] < 0) isFurthest = false; }
+                        if (isFurthest) moves.push({ from: i, to: 'off', roll });
+                    }
+                }
+
+                if (targetIndex < 0 || targetIndex > 23) continue;
+
+                const targetContent = board[targetIndex];
+                const isOpponentMulti = isWhite ? targetContent < -1 : targetContent > 1;
+
+                if (!isOpponentMulti) {
+                    moves.push({
+                        from: i,
+                        to: targetIndex,
+                        roll,
+                        isHit: isWhite ? targetContent === -1 : targetContent === 1 // Hit validation
+                    });
+                }
             }
         }
-        return moves; // If on bar, MUST move from bar.
-    }
+        return moves;
+    };
 
-    // 2. Normal moves
-    for (let i = 0; i < 24; i++) {
-        const pieceCount = board[i];
-        if (isWhite && pieceCount <= 0) continue;
-        if (!isWhite && pieceCount >= 0) continue;
+    // 1. Get Base Moves for current state
+    const baseMoves = getSingleStepMoves(state);
+    const allMoves = [...baseMoves];
 
-        for (const roll of uniqueRolls) {
-            const targetIndex = i + (direction * roll);
+    // 2. Try to extend each base move to form composite moves (depth 2 for now, covers sum of 2 dice)
+    // Only extend if there are dice left after the first move.
+    if (state.movesLeft.length > 1) {
+        for (const m1 of baseMoves) {
+            // Apply first move logically
+            const tempState = applyMove(state, m1);
 
-            // Bearing off
-            const bearingOffAllowed = canBearOff(state, turn);
-            if (bearingOffAllowed) {
-                // Exact bear off
-                if (isWhite && targetIndex === 24) {
-                    moves.push({ from: i, to: 'off', roll });
-                    continue;
+            // Get possible next steps
+            const nextMoves = getSingleStepMoves(tempState);
+
+            // Filter for moves that continue from where m1 ended
+            // If m1 went to 'off', it can't continue.
+            if (m1.to !== 'off') {
+                const continuations = nextMoves.filter(m2 => m2.from === m1.to);
+
+                for (const m2 of continuations) {
+                    allMoves.push({
+                        from: m1.from,
+                        to: m2.to,
+                        roll: m1.roll + m2.roll, // Sum of rolls
+                        isHit: m2.isHit, // Hit check on final destination (intermediate hit is implicit in subMove action)
+                        subMoves: [m1, m2]
+                    });
+
+                    // Note: We could go deeper (Depth 3/4) for doubles here by recursing, 
+                    // but "sum of two dice" usually implies 2 steps. 
+                    // Let's stick to 2 to avoid clutter unless requested.
                 }
-                if (!isWhite && targetIndex === -1) {
-                    moves.push({ from: i, to: 'off', roll });
-                    continue;
-                }
-
-                // Overshoot bear off (only allowed if no pieces further away)
-                if (isWhite && targetIndex > 24) {
-                    // Check if this is the furthest piece
-                    let isFurthest = true;
-                    for (let k = 18; k < i; k++) { if (board[k] > 0) isFurthest = false; }
-                    if (isFurthest) moves.push({ from: i, to: 'off', roll });
-                }
-                if (!isWhite && targetIndex < -1) {
-                    let isFurthest = true;
-                    for (let k = 5; k > i; k--) { if (board[k] < 0) isFurthest = false; }
-                    if (isFurthest) moves.push({ from: i, to: 'off', roll });
-                }
-            }
-
-            // Normal move bounds check
-            if (targetIndex < 0 || targetIndex > 23) continue;
-
-            const targetContent = board[targetIndex];
-            const isOpponentMulti = isWhite ? targetContent < -1 : targetContent > 1;
-
-            if (!isOpponentMulti) {
-                moves.push({
-                    from: i,
-                    to: targetIndex,
-                    roll,
-                    isHit: isWhite ? targetContent === -1 : targetContent === 1
-                });
             }
         }
     }
 
-    return moves;
+    // Deduplicate? (e.g. 3 then 4 vs 4 then 3 arriving at same spot)
+    // Usually in BG, 3-then-4 and 4-then-3 are distinct in *how* they get there (intermediate point might be blocked for one)
+    // But if both valid, they result in same final state.
+    // For UI simplicity, if we have multiple composite moves to same target from components, maybe just keep one?
+    // Actually letting the user pick either path is "correct", but UI might just show one dot.
+    // We'll leave all valid variations in the array. The Board UI will highlight the target 'to'.
+    // If user drops on 'to', we pick the first matching valid move.
+
+    return allMoves;
 };
 
 export const applyMove = (state: BackgammonState, move: Move): BackgammonState => {
@@ -182,6 +215,15 @@ export const applyMove = (state: BackgammonState, move: Move): BackgammonState =
     };
 
     const isWhite = state.turn === 'white';
+
+    // Handle Composite Moves (Recursive)
+    if (move.subMoves && move.subMoves.length > 0) {
+        let currentState = state;
+        for (const subMove of move.subMoves) {
+            currentState = applyMove(currentState, subMove);
+        }
+        return currentState;
+    }
 
     // Remove from source
     if (move.from === 'bar') {
@@ -203,7 +245,7 @@ export const applyMove = (state: BackgammonState, move: Move): BackgammonState =
             if (isWhite) newState.bar.black++;
             else newState.bar.white++;
 
-            // Reset checking to 0 before placing new piece (not strictly needed if we just overwrite, but cleaner)
+            // Reset checking to 0 before placing new piece
             newState.board[destIdx] = 0;
         }
 
