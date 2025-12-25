@@ -136,7 +136,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
 
     return (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="flex w-full max-w-full md:max-w-7xl mx-auto gap-1 md:gap-4 items-stretch p-1 md:p-4">
+            <div className="flex flex-col md:flex-row w-full max-w-full md:max-w-7xl mx-auto gap-2 md:gap-4 items-stretch p-1 md:p-4">
 
                 {/* Main Board Area */}
                 <div className="relative flex-1 aspect-square md:aspect-[4/3] bg-slate-800/80 rounded-xl border-4 md:border-[12px] border-slate-900 shadow-2xl flex flex-col overflow-hidden">
@@ -193,17 +193,18 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
 
                 </div>
 
-                {/* Off Tray Sidebar - Completely Outside */}
-                <div className="w-14 md:w-32 bg-slate-900/40 rounded-xl border-4 border-slate-800 flex flex-col relative overflow-hidden">
+                {/* Off Tray Sidebar - Bottom on Mobile, Right on Desktop */}
+                <div className="w-full h-20 md:w-32 md:h-auto bg-slate-900/40 rounded-xl border-4 border-slate-800 flex flex-row md:flex-col relative overflow-hidden shrink-0">
                     {/* Background Pattern or Label */}
-                    <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-slate-800/50" />
+                    <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-slate-800/50 hidden md:block" />
+                    <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-slate-800/50 md:hidden" />
 
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-90 text-slate-700 font-bold text-sm tracking-[0.5em] pointer-events-none whitespace-nowrap opacity-50">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:-rotate-90 text-slate-700 font-bold text-xs md:text-sm tracking-[0.5em] pointer-events-none whitespace-nowrap opacity-50 z-0">
                         COLLECT
                     </div>
 
-                    {/* Top Collection (White) */}
-                    <div className="flex-1 w-full p-2 flex flex-col gap-1 z-10">
+                    {/* Top Collection (White) - Left on Mobile, Top on Desktop */}
+                    <div className="flex-1 w-full p-2 flex flex-col gap-1 z-10 border-r md:border-r-0 md:border-b border-slate-800/50">
                         <OffTray
                             playerColor="white"
                             count={off.white}
@@ -211,7 +212,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                         />
                     </div>
 
-                    {/* Bottom Collection (Black) */}
+                    {/* Bottom Collection (Black) - Right on Mobile, Bottom on Desktop */}
                     <div className="flex-1 w-full p-2 flex flex-col-reverse gap-1 z-10">
                         <OffTray
                             playerColor="black"
