@@ -230,7 +230,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                 )}
             </header>
 
-            <div className="flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-16 w-full max-w-7xl px-4 lg:px-6">
+            <div className="flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-16 w-full max-w-7xl px-0 lg:px-6">
                 <div className="relative group w-full flex justify-center max-w-full overflow-visible">
                     <div className="absolute -inset-4 bg-linear-to-r from-indigo-500 to-pink-500 rounded-[2.5rem] blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
                     <BackgammonBoard
@@ -242,8 +242,8 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                     />
                 </div>
 
-                <div className="w-full lg:w-96 flex flex-col gap-6 lg:gap-8 mt-0 lg:mt-0">
-                    <div className="liquid-glass p-5 lg:p-8 space-y-6 lg:space-y-8 border-l-4 border-l-indigo-500">
+                <div className="w-full lg:w-96 flex flex-col gap-3 lg:gap-8 mt-0 lg:mt-0">
+                    <div className="liquid-glass p-3 lg:p-8 space-y-3 lg:space-y-8 border-l-4 border-l-indigo-500">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-black text-slate-500 uppercase tracking-[0.3em]">
                                 Game Status
@@ -267,26 +267,26 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                             </div>
                         )}
 
-                        <div className="space-y-4">
+                        <div className="space-y-2 lg:space-y-4">
                             <GameTimer gameState={gameState} />
 
                             {!isLocal && (
                                 <>
-                                    <div className="flex items-center gap-3 lg:gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${isWhite ? 'bg-white text-slate-950' : 'bg-slate-800 text-slate-400'}`}>W</div>
+                                    <div className="flex items-center gap-2 lg:gap-4 p-2 lg:p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
+                                        <div className={`w-8 h-8 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center text-lg lg:text-xl font-bold ${isWhite ? 'bg-white text-slate-950' : 'bg-slate-800 text-slate-400'}`}>W</div>
                                         <div className="flex-1">
-                                            <div className="text-sm font-bold text-white uppercase tracking-wide">White Player</div>
-                                            <div className="text-xs text-slate-500 font-medium">
+                                            <div className="text-xs lg:text-sm font-bold text-white uppercase tracking-wide">White Player</div>
+                                            <div className="text-[10px] lg:text-xs text-slate-500 font-medium">
                                                 {gameRoom.room?.whitePlayer === currentUserId ? 'Connected (You)' : (gameRoom.room?.whitePlayer ? 'Opponent Ready' : 'Awaiting Entry...')}
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-3 lg:gap-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${isBlack ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>B</div>
+                                    <div className="flex items-center gap-2 lg:gap-4 p-2 lg:p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80">
+                                        <div className={`w-8 h-8 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center text-lg lg:text-xl font-bold ${isBlack ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>B</div>
                                         <div className="flex-1">
-                                            <div className="text-sm font-bold text-white uppercase tracking-wide">Black Player</div>
-                                            <div className="text-xs text-slate-500 font-medium">
+                                            <div className="text-xs lg:text-sm font-bold text-white uppercase tracking-wide">Black Player</div>
+                                            <div className="text-[10px] lg:text-xs text-slate-500 font-medium">
                                                 {gameRoom.room?.blackPlayer === currentUserId ? 'Connected (You)' : (gameRoom.room?.blackPlayer ? 'Opponent Ready' : 'Awaiting Entry...')}
                                             </div>
                                         </div>
@@ -295,7 +295,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                             )}
                         </div>
 
-                        <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex flex-col sm:flex-row gap-2 lg:gap-3">
                             <button
                                 disabled={isGameOver}
                                 onClick={() => {
@@ -307,9 +307,9 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                                         gameRoom.resignGame(playerColor as 'white' | 'black');
                                     }
                                 }}
-                                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-800 bg-slate-900/60 text-slate-200 font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:border-red-500/50 hover:text-red-200 transition"
+                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 lg:px-4 lg:py-3 rounded-xl border border-slate-800 bg-slate-900/60 text-slate-200 text-sm lg:text-base font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:border-red-500/50 hover:text-red-200 transition"
                             >
-                                <Flag size={18} />
+                                <Flag size={16} className="lg:w-[18px] lg:h-[18px]" />
                                 Resign
                             </button>
                             <button
@@ -320,16 +320,16 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                                     if (isLocal) setLocalGame(newGame);
                                     else gameRoom.resetGame();
                                 }}
-                                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 text-indigo-100 font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500/20 transition"
+                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 lg:px-4 lg:py-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 text-indigo-100 text-sm lg:text-base font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500/20 transition"
                             >
-                                <RotateCcw size={18} />
+                                <RotateCcw size={16} className="lg:w-[18px] lg:h-[18px]" />
                                 Rematch
                             </button>
                         </div>
                     </div>
 
                     {!isLocal && (
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="hidden lg:grid grid-cols-2 gap-4">
                             <div className="liquid-glass p-6 text-center space-y-2">
                                 <Users size={20} className="mx-auto text-slate-600" />
                                 <div className="text-xl font-black text-white italic">
@@ -393,7 +393,7 @@ const GameTimer: React.FC<{ gameState: BackgammonState }> = ({ gameState }) => {
     };
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-[10px] lg:text-xs font-bold uppercase tracking-widest">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 p-2 md:p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-[10px] lg:text-xs font-bold uppercase tracking-widest">
             <div className="space-y-1">
                 <div className="text-slate-500">Time</div>
                 <div className="text-white text-base">{formatTime(totalSeconds)}</div>

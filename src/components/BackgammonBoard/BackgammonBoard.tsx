@@ -136,19 +136,19 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
 
     return (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="flex w-full max-w-6xl mx-auto gap-4 items-stretch p-4">
+            <div className="flex w-full max-w-full md:max-w-7xl mx-auto gap-1 md:gap-4 items-stretch p-1 md:p-4">
 
                 {/* Main Board Area */}
-                <div className="relative flex-1 aspect-[4/3] bg-slate-800/80 rounded-xl border-[12px] border-slate-900 shadow-2xl flex flex-col overflow-hidden">
+                <div className="relative flex-1 aspect-square md:aspect-[4/3] bg-slate-800/80 rounded-xl border-4 md:border-[12px] border-slate-900 shadow-2xl flex flex-col overflow-hidden">
 
                     {/* Top Half (12-23) */}
                     <div className="flex-1 flex">
                         {renderQuadrant(12, 17, true)}
 
                         {/* Bar (Middle) */}
-                        <div className="w-12 bg-slate-900/50 border-x-4 border-slate-900 flex flex-col items-center justify-center gap-1 py-2">
+                        <div className="w-12 md:w-20 bg-slate-900/50 border-x-4 border-slate-900 flex flex-col items-center justify-center gap-1 py-2">
                             {Array.from({ length: bar.white }).map((_, i) => (
-                                <div key={`bar-w-${i}`} className="w-8">
+                                <div key={`bar-w-${i}`} className="w-10 md:w-12">
                                     <Checker
                                         id={`bar-white-${i}`}
                                         color="white"
@@ -157,7 +157,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                                 </div>
                             ))}
                             {Array.from({ length: bar.black }).map((_, i) => (
-                                <div key={`bar-b-${i}`} className="w-8">
+                                <div key={`bar-b-${i}`} className="w-10 md:w-12">
                                     <Checker
                                         id={`bar-black-${i}`}
                                         color="black"
@@ -174,7 +174,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                     <div className="flex-1 flex">
                         {renderQuadrant(11, 6, false)}
 
-                        <div className="w-12 bg-slate-900/50 border-x-4 border-slate-900 flex flex-col-reverse items-center justify-start gap-1 py-2">
+                        <div className="w-12 md:w-20 bg-slate-900/50 border-x-4 border-slate-900 flex flex-col-reverse items-center justify-start gap-1 py-2">
                         </div>
 
                         {renderQuadrant(5, 0, false)}
@@ -184,7 +184,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-50">
                         <div className="flex gap-3">
                             {gameState.movesLeft.map((val, i) => (
-                                <div key={i} className="w-9 h-9 bg-white rounded-lg shadow-xl flex items-center justify-center text-lg font-black text-slate-900 border-2 border-slate-200 animate-in zoom-in spin-in-3 duration-300">
+                                <div key={i} className="w-12 h-12 md:w-14 md:h-14 bg-white rounded-lg shadow-xl flex items-center justify-center text-xl md:text-2xl font-black text-slate-900 border-2 border-slate-200 animate-in zoom-in spin-in-3 duration-300">
                                     {val}
                                 </div>
                             ))}
@@ -194,7 +194,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                 </div>
 
                 {/* Off Tray Sidebar - Completely Outside */}
-                <div className="w-24 bg-slate-900/40 rounded-xl border-4 border-slate-800 flex flex-col relative overflow-hidden">
+                <div className="w-14 md:w-32 bg-slate-900/40 rounded-xl border-4 border-slate-800 flex flex-col relative overflow-hidden">
                     {/* Background Pattern or Label */}
                     <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-slate-800/50" />
 
@@ -230,7 +230,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
 
             <DragOverlay>
                 {activeId ? (
-                    <div className="w-10 h-10 cursor-grabbing">
+                    <div className="w-12 h-12 md:w-14 md:h-14 cursor-grabbing">
                         <CheckerVisual color={
                             (function () {
                                 if (activeId.startsWith('bar-white')) return 'white';
