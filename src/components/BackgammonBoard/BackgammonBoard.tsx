@@ -175,9 +175,13 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                 {/* Main Board Area */}
                 <div className="relative flex-1 aspect-square md:aspect-[4/3] bg-slate-800/80 rounded-xl border-4 md:border-[12px] border-slate-900 shadow-2xl flex flex-col overflow-hidden">
 
-                    {/* Top Half (12-23) */}
+                    {/* Top Half */}
                     <div className="flex-1 flex">
-                        {renderQuadrant(12, 17, true)}
+                        {renderQuadrant(
+                            playerColor === 'white' ? 11 : 12,
+                            playerColor === 'white' ? 6 : 17,
+                            true
+                        )}
 
                         {/* Bar (Middle) */}
                         <div className="w-12 md:w-20 bg-slate-900/50 border-x-4 border-slate-900 flex flex-col items-center justify-center gap-1 py-2">
@@ -201,17 +205,29 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                             ))}
                         </div>
 
-                        {renderQuadrant(18, 23, true)}
+                        {renderQuadrant(
+                            playerColor === 'white' ? 5 : 18,
+                            playerColor === 'white' ? 0 : 23,
+                            true
+                        )}
                     </div>
 
-                    {/* Bottom Half (11-0) */}
+                    {/* Bottom Half */}
                     <div className="flex-1 flex">
-                        {renderQuadrant(11, 6, false)}
+                        {renderQuadrant(
+                            playerColor === 'white' ? 12 : 11,
+                            playerColor === 'white' ? 17 : 6,
+                            false
+                        )}
 
                         <div className="w-12 md:w-20 bg-slate-900/50 border-x-4 border-slate-900 flex flex-col-reverse items-center justify-start gap-1 py-2">
                         </div>
 
-                        {renderQuadrant(5, 0, false)}
+                        {renderQuadrant(
+                            playerColor === 'white' ? 18 : 5,
+                            playerColor === 'white' ? 23 : 0,
+                            false
+                        )}
                     </div>
 
                     {/* Dice Display */}
