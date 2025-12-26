@@ -1,74 +1,65 @@
-## DragMate ♟
+# DragMate ♟️🎲
 
-**DragMate** is a real‑time‑style chess playground built with **React**, **TypeScript**, **Vite**, **chess.js**, and **@dnd-kit**.
-It lets two players share a room and play chess by dragging pieces on a modern, animated board. In demo mode you can also use it locally without a backend.
+**DragMate** is a real-time multiplayer strategy playground built with **React**, **TypeScript**, **Vite**, and **TailwindCSS**.
+It features both **Chess** and **Backgammon** games with a premium "Liquid Glass" aesthetic, seamless drag-and-drop interactions, and optimized mobile experience.
 
-### Tech stack
+## Features
+
+### ♟️ Chess
+- **Real-time Multiplayer**: Challenge friends via room ID.
+- **Single Player vs AI**: Play against an adaptive AI engine (Stockfish-lite logic).
+- **Move Validation**: Full implementation of chess rules via `chess.js`.
+- **Drag & Drop**: Smooth interaction using `@dnd-kit/core`.
+
+### 🎲 Backgammon
+- **Smart Moves**: Drag a checker to the sum of two dice (e.g., 3+5=8) to execute a combined move instantly.
+- **Dynamic Dice**: Dice visual update based on player turn (White/Black themes).
+- **Mobile Optimized**: Full-width square board on mobile with a "Collect" bar at the bottom for better ergonomics.
+- **Game Over Screens**: Visual victory/defeat overlays with rematch options.
+
+### 🎨 UI & UX
+- **Liquid Glass Aesthetic**: Modern, translucent UI components with blurred backdrops.
+- **Responsive Design**: Carefully tuned for both desktop and mobile play.
+- **Animations**: Smooth entry animations for pieces, dice, and overlays.
+
+## Tech Stack
 
 - **Frontend**: React + TypeScript + Vite
-- **Board / Drag & Drop**: `@dnd-kit/core`
-- **Chess rules & validation**: `chess.js`
-- **State sync (demo)**: `localStorage` polling via `useGameRoom`
+- **Styling**: TailwindCSS + Custom CSS Variables
+- **State Management**: React Hooks + LocalStorage (for local/demo sync)
+- **Drag & Drop**: `@dnd-kit/core`
+- **Logic**: `chess.js` (Chess), Custom implementation (Backgammon)
+- **Icons**: `lucide-react`
 
 ---
 
-### Getting started
+## Getting Started
 
-- **Install dependencies**
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-```bash
-npm install
-```
+2. **Run the dev server**
+   ```bash
+   npm run dev
+   ```
 
-- **Run the dev server**
-
-```bash
-npm run dev
-```
-
-Then open the printed URL in your browser (usually `http://localhost:5173`).
+3. Open the printed URL in your browser (usually `http://localhost:5173`).
 
 ---
 
-### How rooms, colors, and turns work
+## How It Works
 
-- **Creating / joining a room**
-  - From the lobby UI you can create a room (a short alphanumeric ID is generated).
-  - Share this room ID with a friend; they can join from the lobby by entering the same ID.
-  - Under the hood, room data is stored in `localStorage` under the key `dragmate-rooms`.
+- **Rooms**: Game state is synchronized via `localStorage` in this demo version (simulating a backend). Room IDs share state across tabs.
+- **Turns**: The game strictly enforces turn-based entry. You can only drag your own pieces/checkers when it's your turn.
+- **AI Mode**: In local/single-player mode, the standard opponent is an AI bot that responds after a brief "thinking" delay.
 
-- **Player colors**
-  - The **first player** in a room becomes **White**.
-  - The **second player** (joining from another tab/browser) becomes **Black**.
-  - The game board orients itself based on your color: White sees rank 1 at the bottom, Black sees rank 8 at the bottom.
+## Project Structure
 
-- **Turn logic**
-  - Turn information is derived from the FEN and stored in the room as `turn: 'w' | 'b'`.
-  - After each valid move, the FEN and `turn` are updated in `localStorage` via `useGameRoom.updateMove`.
-  - The sidebar shows:
-    - **“Your Turn”** if `room.turn` matches your color.
-    - **“Waiting…”** when it is your opponent’s turn.
-
-- **Who can move which pieces**
-  - You can **only drag your own color’s pieces**.
-  - You can **only drag when it is your turn**.
-  - Any attempted drag that does not result in a legal move (per `chess.js`) is ignored.
-
----
-
-### Project structure (high level)
-
-- `src/App.tsx` – main app shell and routing between lobby and game
-- `src/components/Lobby/` – room creation/join UI
-- `src/components/Game/` – game screen, status panel, and board container
-- `src/components/ChessBoard/` – board rendering and drag‑and‑drop logic
-- `src/components/Piece/` – visual representation of a chess piece
-- `src/hooks/useGameRoom.ts` – room state, users, and FEN/turn syncing via `localStorage`
-- `src/logic/chessLogic.ts` – thin wrapper around `chess.js` for creating a game, validating moves, and reading game state
-
----
-
-### Notes
-
-- The current implementation uses `localStorage` polling to simulate real‑time updates.
-- A Firebase‑backed or WebSocket‑backed implementation can be wired in later by swapping out the logic in `useGameRoom`.
+- `src/App.tsx`: Main routing and layout.
+- `src/components/Lobby/`: Room creation and game selection.
+- `src/components/Game/`: Game containers and HUDs.
+- `src/components/ChessBoard/`: Chess visual logic.
+- `src/components/BackgammonBoard/`: Backgammon visual logic.
+- `src/logic/`: Game rules and AI engines.
