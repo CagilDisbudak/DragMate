@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, LogIn, Users, User, Trophy, ArrowLeft } from 'lucide-react';
+import { Plus, LogIn, Users, User, Trophy, ArrowLeft, Dices, LayoutGrid } from 'lucide-react';
 import { useGlobalActivePlayers } from '../../hooks/useGlobalActivePlayers';
 
 interface LobbyProps {
@@ -30,43 +30,43 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
     const renderGameSelect = () => (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
             <h2 className="text-2xl font-bold text-white text-center">Choose Your Game</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <button
                     onClick={() => { onSelectGame('chess'); setStep('mode-select'); }}
-                    className="group relative w-full aspect-[4/3] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-indigo-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/20 overflow-hidden text-left p-6 flex flex-col justify-between"
+                    className="group relative w-full aspect-square sm:aspect-[4/5] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-indigo-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/20 overflow-hidden text-left p-4 sm:p-6 flex flex-col justify-between"
                 >
                     <div>
-                        <Trophy className="w-10 h-10 text-indigo-400 mb-3 group-hover:scale-110 transition-transform" />
-                        <h3 className="text-2xl font-black text-white">CHESS</h3>
-                        <p className="text-slate-400 text-sm font-medium mt-1">The classic strategy game.</p>
+                        <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400 mb-2 sm:mb-3 group-hover:scale-110 transition-transform" />
+                        <h3 className="text-xl sm:text-2xl font-black text-white">CHESS</h3>
+                        <p className="text-slate-400 text-xs sm:text-sm font-medium mt-1">Classic strategy.</p>
                     </div>
                 </button>
 
                 <button
                     onClick={() => { onSelectGame('backgammon'); setStep('mode-select'); }}
-                    className="group relative w-full aspect-[4/3] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-emerald-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-500/20 overflow-hidden text-left p-6 flex flex-col justify-between"
+                    className="group relative w-full aspect-square sm:aspect-[4/5] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-emerald-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-500/20 overflow-hidden text-left p-4 sm:p-6 flex flex-col justify-between"
                 >
-                    <div className="absolute top-0 right-0 p-2 bg-emerald-500/10 text-emerald-300 rounded-bl-2xl text-[10px] font-black uppercase tracking-widest border-b border-l border-emerald-500/20">
+                    <div className="absolute top-0 right-0 p-1.5 sm:p-2 bg-emerald-500/10 text-emerald-300 rounded-bl-2xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest border-b border-l border-emerald-500/20">
                         New
                     </div>
                     <div>
-                        <div className="w-10 h-10 rounded-full bg-slate-700 border-2 border-slate-600 mb-3 group-hover:border-emerald-500 transition-colors" />
-                        <h3 className="text-2xl font-black text-white">TAVLA</h3>
-                        <p className="text-slate-400 text-sm font-medium mt-1">Classic Turkish Backgammon.</p>
+                        <Dices className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-400 mb-2 sm:mb-3 group-hover:scale-110 transition-transform" />
+                        <h3 className="text-xl sm:text-2xl font-black text-white">TAVLA</h3>
+                        <p className="text-slate-400 text-xs sm:text-sm font-medium mt-1">Persian legacy.</p>
                     </div>
                 </button>
 
                 <button
                     onClick={() => { onSelectGame('okey'); setStep('mode-select'); }}
-                    className="group relative w-full aspect-[4/3] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-amber-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-amber-500/20 overflow-hidden text-left p-6 flex flex-col justify-between"
+                    className="group relative w-full aspect-square sm:aspect-[4/5] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-amber-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-amber-500/20 overflow-hidden text-left p-4 sm:p-6 flex flex-col justify-between"
                 >
-                    <div className="absolute top-0 right-0 p-2 bg-amber-500/10 text-amber-300 rounded-bl-2xl text-[10px] font-black uppercase tracking-widest border-b border-l border-amber-500/20">
+                    <div className="absolute top-0 right-0 p-1.5 sm:p-2 bg-amber-500/10 text-amber-300 rounded-bl-2xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest border-b border-l border-amber-500/20">
                         Top
                     </div>
                     <div>
-                        <div className="w-10 h-10 rounded-full bg-slate-700 border-2 border-slate-600 mb-3 group-hover:border-amber-500 transition-colors" />
-                        <h3 className="text-2xl font-black text-white">OKEY</h3>
-                        <p className="text-slate-400 text-sm font-medium mt-1">Turkish Rummy Style.</p>
+                        <LayoutGrid className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400 mb-2 sm:mb-3 group-hover:scale-110 transition-transform" />
+                        <h3 className="text-xl sm:text-2xl font-black text-white">OKEY</h3>
+                        <p className="text-slate-400 text-xs sm:text-sm font-medium mt-1">Turkish Rummy.</p>
                     </div>
                 </button>
             </div>
@@ -234,7 +234,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
                 <div className="inline-flex items-center px-3 sm:px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs sm:text-sm font-semibold tracking-wide">
                     PREMIUM MULTIPLAYER CHESS
                 </div>
-                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-8xl font-black tracking-tight bg-clip-text text-transparent bg-linear-to-b from-white via-indigo-100 to-indigo-400">
+                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-8xl font-black tracking-normal pb-4 bg-clip-text text-transparent bg-linear-to-b from-white via-indigo-100 to-indigo-400">
                     DragMate
                 </h1>
             </div>
