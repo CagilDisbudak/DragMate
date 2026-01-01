@@ -16,9 +16,10 @@ interface RackSlotProps {
     tile: OkeyTileType | null;
     isJoker: boolean;
     index: number;
+    okeyTile: OkeyTileType | null;
 }
 
-const RackSlot: React.FC<RackSlotProps> = ({ tile, isJoker, index }) => {
+const RackSlot: React.FC<RackSlotProps> = ({ tile, isJoker, index, okeyTile }) => {
     const slotId = `slot-${index}`;
     const { setNodeRef: setDroppableRef, isOver } = useDroppable({ id: slotId });
 
@@ -36,8 +37,8 @@ const RackSlot: React.FC<RackSlotProps> = ({ tile, isJoker, index }) => {
         <div
             ref={setDroppableRef}
             className={`
-                relative w-12 h-16 rounded shadow-inner flex items-center justify-center transition-all duration-200
-                ${isOver ? 'bg-green-500/20 ring-2 ring-green-400 scale-105 z-20' : 'bg-black/10 border border-black/5'}
+                relative w-13 h-17 rounded-lg shadow-inner flex items-center justify-center transition-all duration-200
+                ${isOver ? 'bg-green-500/30 ring-4 ring-green-400 scale-110 z-20 shadow-2xl' : 'bg-black/15 border border-black/10'}
             `}
         >
             {tile && (
@@ -49,6 +50,7 @@ const RackSlot: React.FC<RackSlotProps> = ({ tile, isJoker, index }) => {
                 >
                     <OkeyTile
                         tile={tile}
+                        okeyTile={okeyTile}
                         isJoker={isJoker}
                         dragging={isDragging}
                     />
@@ -107,6 +109,7 @@ export const PlayerRack: React.FC<PlayerRackProps> = ({ tiles, isCurrentPlayer, 
                                 key={i}
                                 index={i}
                                 tile={tile}
+                                okeyTile={okeyTile}
                                 isJoker={isActualOkey || false}
                             />
                         );
@@ -123,6 +126,7 @@ export const PlayerRack: React.FC<PlayerRackProps> = ({ tiles, isCurrentPlayer, 
                                 key={actualIndex}
                                 index={actualIndex}
                                 tile={tile}
+                                okeyTile={okeyTile}
                                 isJoker={isActualOkey || false}
                             />
                         );

@@ -11,7 +11,18 @@ interface OkeyGameProps {
 }
 
 export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, onExit }) => {
-    const { gameState, drawFromCenter, drawFromDiscard, moveTileInRack, discardTile, autoSortTiles } = useOkeyGame(roomId);
+    const {
+        gameState,
+        drawFromCenter,
+        drawFromDiscard,
+        moveTileInRack,
+        discardTile,
+        autoSortTiles,
+        finishGame,
+        resetGame,
+        reshuffleDiscards,
+        endInTie
+    } = useOkeyGame(roomId);
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[85vh] fade-in animate-in duration-700">
@@ -41,6 +52,11 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
                 onMoveTile={moveTileInRack}
                 onDiscard={discardTile}
                 onAutoSort={autoSortTiles}
+                onFinish={finishGame}
+                onReset={resetGame}
+                onReshuffle={reshuffleDiscards}
+                onEndTie={endInTie}
+                onExit={onExit}
             />
         </div>
     );

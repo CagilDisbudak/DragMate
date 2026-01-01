@@ -13,7 +13,7 @@ export interface PlayerHand {
     tiles: (OkeyTile | null)[]; // The tiles in the player's rack (length = RACK_SIZE)
 }
 
-export type OkeyPhase = 'dealing' | 'playing' | 'roundOver';
+export type OkeyPhase = 'dealing' | 'playing' | 'roundOver' | 'stackEmpty';
 
 export interface OkeyGameState {
     phase: OkeyPhase;
@@ -25,6 +25,126 @@ export interface OkeyGameState {
     currentTurn: number; // 0-3
     winner: number | null;
 }
+
+/**
+ * Validates if the hand is a winning hand (14 tiles in valid sets/runs).
+ */
+export const isWinningHand = (tiles: (OkeyTile | null)[], okeyTile: OkeyTile | null): boolean => {
+    const actualTiles = tiles.filter((t): t is OkeyTile => t !== null);
+    if (actualTiles.length !== 14) return false;
+
+    const wildcards: OkeyTile[] = [];
+    const normals: OkeyTile[] = [];
+
+    actualTiles.forEach(t => {
+        const isRealOkey = !t.isFakeOkey && okeyTile && t.color === okeyTile.color && t.value === okeyTile.value;
+        if (isRealOkey) {
+            wildcards.push(t);
+        } else {
+            if (t.isFakeOkey) {
+                normals.push({ ...t, value: okeyTile?.value || 1, color: okeyTile?.color || 'red', isFakeOkey: false });
+            } else {
+                normals.push(t);
+            }
+        }
+    });
+
+    normals.sort((a, b) => {
+        if (a.color !== b.color) return a.color!.localeCompare(b.color!);
+        return a.value - b.value;
+    });
+
+    return checkRecursive(normals, wildcards.length);
+};
+
+const checkRecursive = (remainingTiles: OkeyTile[], wildcardCount: number): boolean => {
+    if (remainingTiles.length === 0) return true;
+
+    const first = remainingTiles[0];
+
+    // OPTION 1: Run (same color, consecutive)
+    const sameColorTiles = remainingTiles.filter(t => t.color === first.color);
+
+    for (let size = 3; size <= 13; size++) {
+        const expectedValues = [];
+        let valid = true;
+        for (let i = 0; i < size; i++) {
+            const v = first.value + i;
+            if (v > 13) { valid = false; break; }
+            expectedValues.push(v);
+        }
+        if (!valid) break;
+
+        const consumed: OkeyTile[] = [];
+        let missing = 0;
+        let tempColorTiles = [...sameColorTiles];
+        for (const v of expectedValues) {
+            const idx = tempColorTiles.findIndex(t => t.value === v);
+            if (idx !== -1) {
+                consumed.push(tempColorTiles[idx]);
+                tempColorTiles.splice(idx, 1);
+            } else {
+                missing++;
+            }
+        }
+
+        if (missing <= wildcardCount) {
+            const consumedIds = consumed.map(c => c.id);
+            const nextRemaining = remainingTiles.filter(t => !consumedIds.includes(t.id));
+            if (checkRecursive(nextRemaining, wildcardCount - missing)) return true;
+        }
+    }
+
+    // Wrap-around Run (if first is '1')
+    if (first.value === 1) {
+        for (let size = 3; size <= 4; size++) {
+            const expectedValues = [];
+            for (let v = 13 - (size - 2); v <= 13; v++) expectedValues.push(v);
+            expectedValues.push(1);
+
+            const consumed: OkeyTile[] = [];
+            let missing = 0;
+            let tempColorTiles = [...sameColorTiles];
+            for (const v of expectedValues) {
+                const idx = tempColorTiles.findIndex(t => t.value === v);
+                if (idx !== -1) {
+                    consumed.push(tempColorTiles[idx]);
+                    tempColorTiles.splice(idx, 1);
+                } else {
+                    missing++;
+                }
+            }
+            if (missing <= wildcardCount) {
+                const consumedIds = consumed.map(c => c.id);
+                const nextRemaining = remainingTiles.filter(t => !consumedIds.includes(t.id));
+                if (checkRecursive(nextRemaining, wildcardCount - missing)) return true;
+            }
+        }
+    }
+
+    // OPTION 2: Set (same value, different colors)
+    const sameValueTiles = remainingTiles.filter(t => t.value === first.value);
+    const uniqueColorTiles: OkeyTile[] = [];
+    const colorsFound = new Set();
+    for (const t of sameValueTiles) {
+        if (!colorsFound.has(t.color)) {
+            colorsFound.add(t.color);
+            uniqueColorTiles.push(t);
+        }
+    }
+
+    for (let size = 3; size <= 4; size++) {
+        const possibleRealTiles = uniqueColorTiles.slice(0, Math.min(size, uniqueColorTiles.length));
+        const missing = size - possibleRealTiles.length;
+        if (missing >= 0 && missing <= wildcardCount) {
+            const consumedIds = possibleRealTiles.map(p => p.id);
+            const nextRemaining = remainingTiles.filter(t => !consumedIds.includes(t.id));
+            if (checkRecursive(nextRemaining, wildcardCount - missing)) return true;
+        }
+    }
+
+    return false;
+};
 
 // Helpers
 const COLORS: OkeyColor[] = ['red', 'black', 'blue', 'yellow'];

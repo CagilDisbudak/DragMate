@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { initializeOkeyGame } from '../logic/okeyLogic';
+import { initializeOkeyGame, isWinningHand } from '../logic/okeyLogic';
 import type { OkeyGameState } from '../logic/okeyLogic';
 
 export const useOkeyGame = (roomId: string | null) => {
@@ -20,7 +20,7 @@ export const useOkeyGame = (roomId: string | null) => {
         }
     }, [roomId]);
 
-    const drawFromCenter = useCallback(() => {
+    const drawFromCenter = useCallback((targetSlot?: number) => {
         setGameState(prev => {
             if (!prev) return null;
             if (prev.currentTurn !== 0) return prev;
@@ -33,15 +33,48 @@ export const useOkeyGame = (roomId: string | null) => {
 
             const newPlayers = [...prev.players];
             const newRack = [...newPlayers[0].tiles];
-            const emptySlotIndex = newRack.findIndex(s => s === null);
-            if (emptySlotIndex !== -1) newRack[emptySlotIndex] = drawnTile;
+
+            let finalSlot = -1;
+            if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
+                if (newRack[targetSlot] === null) {
+                    finalSlot = targetSlot;
+                } else {
+                    // Find nearest empty slot by searching outwards
+                    for (let dist = 1; dist < newRack.length; dist++) {
+                        const right = targetSlot + dist;
+                        const left = targetSlot - dist;
+                        if (right < newRack.length && newRack[right] === null) {
+                            finalSlot = right;
+                            break;
+                        }
+                        if (left >= 0 && newRack[left] === null) {
+                            finalSlot = left;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (finalSlot === -1) {
+                finalSlot = newRack.findIndex(s => s === null);
+            }
+
+            if (finalSlot !== -1) {
+                newRack[finalSlot] = drawnTile;
+            }
 
             newPlayers[0] = { ...newPlayers[0], tiles: newRack };
+
+            // Check if stack is now empty
+            if (newStack.length === 0) {
+                return { ...prev, players: newPlayers, centerStack: newStack, phase: 'stackEmpty' };
+            }
+
             return { ...prev, players: newPlayers, centerStack: newStack };
         });
     }, []);
 
-    const drawFromDiscard = useCallback(() => {
+    const drawFromDiscard = useCallback((targetSlot?: number) => {
         setGameState(prev => {
             if (!prev || prev.currentTurn !== 0) return prev;
             const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
@@ -58,11 +91,107 @@ export const useOkeyGame = (roomId: string | null) => {
 
             const newPlayers = [...prev.players];
             const newRack = [...newPlayers[0].tiles];
-            const emptySlotIndex = newRack.findIndex(s => s === null);
-            if (emptySlotIndex !== -1) newRack[emptySlotIndex] = drawnTile;
+
+            let finalSlot = -1;
+            if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
+                if (newRack[targetSlot] === null) {
+                    finalSlot = targetSlot;
+                } else {
+                    // Find nearest empty slot by searching outwards
+                    for (let dist = 1; dist < newRack.length; dist++) {
+                        const right = targetSlot + dist;
+                        const left = targetSlot - dist;
+                        if (right < newRack.length && newRack[right] === null) {
+                            finalSlot = right;
+                            break;
+                        }
+                        if (left >= 0 && newRack[left] === null) {
+                            finalSlot = left;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (finalSlot === -1) {
+                finalSlot = newRack.findIndex(s => s === null);
+            }
+
+            if (finalSlot !== -1) {
+                newRack[finalSlot] = drawnTile;
+            }
 
             newPlayers[0] = { ...newPlayers[0], tiles: newRack };
             return { ...prev, players: newPlayers, discardPiles: newDiscardPiles };
+        });
+    }, []);
+
+    const finishGame = useCallback((discardIndex: number) => {
+        setGameState(prev => {
+            if (!prev || prev.currentTurn !== 0) return prev;
+
+            const playerTiles = [...prev.players[0].tiles];
+            const winningTile = playerTiles[discardIndex];
+            if (!winningTile) return prev;
+
+            // Hand for validation is all tiles except the one being discarded to the indicator
+            const validationTiles = [...playerTiles];
+            validationTiles[discardIndex] = null;
+
+            const isWinner = isWinningHand(validationTiles, prev.okeyTile);
+
+            if (isWinner) {
+                return {
+                    ...prev,
+                    phase: 'roundOver',
+                    winner: 0
+                };
+            } else {
+                alert("Eliniz okey değil! Lütfen taşları per yapın.");
+                return prev;
+            }
+        });
+    }, []);
+
+    const resetGame = useCallback(() => {
+        setGameState(initializeOkeyGame());
+    }, []);
+
+    const reshuffleDiscards = useCallback(() => {
+        setGameState(prev => {
+            if (!prev) return null;
+
+            // Collect all tiles from discard piles
+            const allDiscards: any[] = [];
+            prev.discardPiles.forEach(pile => {
+                allDiscards.push(...pile);
+            });
+
+            if (allDiscards.length === 0) {
+                // Should not happen if we are in stackEmpty, but safety first
+                return { ...prev, phase: 'roundOver', winner: null };
+            }
+
+            // Shuffle them
+            const shuffled = [...allDiscards].sort(() => Math.random() - 0.5);
+
+            return {
+                ...prev,
+                centerStack: shuffled,
+                discardPiles: [[], [], [], []], // Clear discard piles
+                phase: 'playing'
+            };
+        });
+    }, []);
+
+    const endInTie = useCallback(() => {
+        setGameState(prev => {
+            if (!prev) return null;
+            return {
+                ...prev,
+                phase: 'roundOver',
+                winner: null // Tie
+            };
         });
     }, []);
 
@@ -150,12 +279,16 @@ export const useOkeyGame = (roomId: string | null) => {
                         const newDiscardPiles = [...prev.discardPiles];
                         newDiscardPiles[currPlayer] = [...newDiscardPiles[currPlayer], discarded!];
 
+                        // Check if stack is empty after AI draw
+                        const finalPhase = newStack.length === 0 ? 'stackEmpty' : 'playing';
+
                         return {
                             ...prev,
                             centerStack: newStack,
                             players: newPlayers,
                             discardPiles: newDiscardPiles,
-                            currentTurn: nextTurn
+                            currentTurn: nextTurn,
+                            phase: finalPhase
                         };
                     }
 
@@ -164,7 +297,7 @@ export const useOkeyGame = (roomId: string | null) => {
             }, 1500);
             return () => clearTimeout(timer);
         }
-    }, [gameState?.currentTurn]);
+    }, [gameState?.currentTurn, gameState?.phase]);
 
     // Placeholder for network methods
     const createRoom = async () => {
@@ -198,28 +331,49 @@ export const useOkeyGame = (roomId: string | null) => {
             const colors = ['red', 'blue', 'black', 'yellow'];
             colors.forEach(color => {
                 const sameColor = remaining.filter(t => t.color === color).sort((a, b) => a.value - b.value);
-                let currentRun: any[] = [];
+                let i = 0;
+                while (i < sameColor.length) {
+                    let currentRun: any[] = [sameColor[i]];
+                    let nextVal = sameColor[i].value + 1;
+                    let j = i + 1;
 
-                for (let i = 0; i < sameColor.length; i++) {
-                    if (currentRun.length === 0 || sameColor[i].value === currentRun[currentRun.length - 1].value + 1) {
-                        currentRun.push(sameColor[i]);
-                    } else {
-                        if (currentRun.length >= 3) {
-                            groups.push([...currentRun]);
-                            currentRun.forEach(t => {
-                                const idx = remaining.findIndex(r => r.id === t.id);
-                                if (idx !== -1) remaining.splice(idx, 1);
-                            });
+                    while (j < sameColor.length) {
+                        if (sameColor[j].value === nextVal) {
+                            currentRun.push(sameColor[j]);
+                            nextVal++;
+                            j++;
+                        } else if (sameColor[j].value < nextVal) {
+                            // Skip duplicates of the same value in the same color
+                            j++;
+                        } else {
+                            break;
                         }
-                        currentRun = [sameColor[i]];
                     }
-                }
-                if (currentRun.length >= 3) {
-                    groups.push([...currentRun]);
-                    currentRun.forEach(t => {
-                        const idx = remaining.findIndex(r => r.id === t.id);
-                        if (idx !== -1) remaining.splice(idx, 1);
-                    });
+
+                    // Special case: 11-12-13-1 or 12-13-1
+                    if (currentRun[currentRun.length - 1].value === 13) {
+                        const oneTile = sameColor.find(t => t.value === 1);
+                        if (oneTile && !currentRun.find(rt => rt.id === oneTile.id)) {
+                            currentRun.push(oneTile);
+                        }
+                    }
+
+                    if (currentRun.length >= 3) {
+                        groups.push([...currentRun]);
+                        currentRun.forEach(t => {
+                            const idx = remaining.findIndex(r => r.id === t.id);
+                            if (idx !== -1) remaining.splice(idx, 1);
+                        });
+                        // Move i past this run, but since we spliced 'remaining', 
+                        // we should just recalculate or be careful. 
+                        // Simpler: restart searching since we modified 'remaining'
+                        const nextSameColor = remaining.filter(t => t.color === color).sort((a, b) => a.value - b.value);
+                        sameColor.length = 0;
+                        sameColor.push(...nextSameColor);
+                        i = 0;
+                    } else {
+                        i++;
+                    }
                 }
             });
 
@@ -279,8 +433,12 @@ export const useOkeyGame = (roomId: string | null) => {
         moveTileInRack,
         drawFromCenter,
         drawFromDiscard,
+        finishGame,
+        resetGame,
         discardTile,
         autoSortTiles,
+        reshuffleDiscards,
+        endInTie,
         createRoom,
         joinRoom,
         isAuthLoading

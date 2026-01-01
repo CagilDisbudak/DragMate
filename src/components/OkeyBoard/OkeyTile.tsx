@@ -3,13 +3,14 @@ import type { OkeyTile as OkeyTileType } from '../../logic/okeyLogic';
 
 interface OkeyTileProps {
   tile: OkeyTileType;
+  okeyTile?: OkeyTileType | null;
   isJoker?: boolean;
   className?: string;
   dragging?: boolean;
   size?: 'sm' | 'md' | 'lg';
 }
 
-export const OkeyTile: React.FC<OkeyTileProps> = ({ tile, isJoker, className = '', dragging = false, size = 'md' }) => {
+export const OkeyTile: React.FC<OkeyTileProps> = ({ tile, okeyTile, isJoker, className = '', dragging = false, size = 'md' }) => {
   const getTextColor = (color: string | null) => {
     switch (color) {
       case 'red': return 'text-[#d32f2f]';
@@ -22,6 +23,9 @@ export const OkeyTile: React.FC<OkeyTileProps> = ({ tile, isJoker, className = '
 
   const dims = size === 'sm' ? 'w-10 h-13' : size === 'lg' ? 'w-16 h-22' : 'w-14 h-19';
   const fontSize = size === 'sm' ? 'text-2xl' : size === 'lg' ? 'text-5xl' : 'text-4xl';
+
+  // Real Okey check
+  const isRealOkey = okeyTile && tile.color === okeyTile.color && tile.value === okeyTile.value && !tile.isFakeOkey;
 
   const renderContent = () => {
     if (tile.isFakeOkey) {
@@ -39,6 +43,13 @@ export const OkeyTile: React.FC<OkeyTileProps> = ({ tile, isJoker, className = '
           {tile.value}
         </span>
         <div className={`w-2 h-2 rounded-full mt-1 ${tile.color === 'red' ? 'bg-red-500' : tile.color === 'blue' ? 'bg-blue-500' : tile.color === 'yellow' ? 'bg-yellow-500' : 'bg-black'} shadow-sm`} />
+
+        {/* Real Okey Badge */}
+        {isRealOkey && (
+          <div className="absolute top-1 right-1">
+            <div className="text-[10px] drop-shadow-sm">⭐</div>
+          </div>
+        )}
       </div>
     );
   };
