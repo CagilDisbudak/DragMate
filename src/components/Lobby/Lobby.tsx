@@ -7,7 +7,7 @@ interface LobbyProps {
     onJoinRoom: (id: string) => void;
     onStartLocal: (difficulty: 'Easy' | 'Normal' | 'Hard') => void;
     isAuthLoading: boolean;
-    onSelectGame: (game: 'chess' | 'backgammon') => void;
+    onSelectGame: (game: 'chess' | 'backgammon' | 'okey') => void;
 }
 
 type LobbyStep = 'game-select' | 'mode-select' | 'difficulty-select' | 'connection';
@@ -51,9 +51,22 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
                     </div>
                     <div>
                         <div className="w-10 h-10 rounded-full bg-slate-700 border-2 border-slate-600 mb-3 group-hover:border-emerald-500 transition-colors" />
-                        {/* Simple visual proxy for Backgammon piece */}
                         <h3 className="text-2xl font-black text-white">TAVLA</h3>
                         <p className="text-slate-400 text-sm font-medium mt-1">Classic Turkish Backgammon.</p>
+                    </div>
+                </button>
+
+                <button
+                    onClick={() => { onSelectGame('okey'); setStep('mode-select'); }}
+                    className="group relative w-full aspect-[4/3] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-amber-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-amber-500/20 overflow-hidden text-left p-6 flex flex-col justify-between"
+                >
+                    <div className="absolute top-0 right-0 p-2 bg-amber-500/10 text-amber-300 rounded-bl-2xl text-[10px] font-black uppercase tracking-widest border-b border-l border-amber-500/20">
+                        Top
+                    </div>
+                    <div>
+                        <div className="w-10 h-10 rounded-full bg-slate-700 border-2 border-slate-600 mb-3 group-hover:border-amber-500 transition-colors" />
+                        <h3 className="text-2xl font-black text-white">OKEY</h3>
+                        <p className="text-slate-400 text-sm font-medium mt-1">Turkish Rummy Style.</p>
                     </div>
                 </button>
             </div>

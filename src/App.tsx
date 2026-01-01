@@ -6,9 +6,11 @@ import { useGameRoom } from './hooks/useGameRoom';
 import { useBackgammonGame } from './hooks/useBackgammonGame';
 
 import { BackgammonGame } from './components/Game/BackgammonGame';
+import { OkeyGame } from './components/Game/OkeyGame';
+import { useOkeyGame } from './hooks/useOkeyGame';
 
 type GameMode = 'menu' | 'local' | 'online';
-type GameType = 'chess' | 'backgammon';
+type GameType = 'chess' | 'backgammon' | 'okey';
 
 function App() {
   const [gameMode, setGameMode] = useState<GameMode>('menu');
@@ -17,15 +19,21 @@ function App() {
   const [aiDifficulty, setAiDifficulty] = useState<'Easy' | 'Normal' | 'Hard'>('Normal'); // Default Normal
   const chessRoom = useGameRoom(null);
   const backgammonRoom = useBackgammonGame(null);
+  const okeyRoom = useOkeyGame(null);
 
   // Use the appropriate hook's auth loading state
-  const isAuthLoading = selectedGame === 'chess' ? chessRoom.isAuthLoading : backgammonRoom.isAuthLoading;
+  const isAuthLoading =
+    selectedGame === 'chess' ? chessRoom.isAuthLoading :
+      selectedGame === 'backgammon' ? backgammonRoom.isAuthLoading :
+        okeyRoom.isAuthLoading;
 
   const handleCreateRoom = async () => {
     try {
-      const id = selectedGame === 'chess' 
+      const id = selectedGame === 'chess'
         ? await chessRoom.createRoom()
-        : await backgammonRoom.createRoom();
+        : selectedGame === 'backgammon'
+          ? await backgammonRoom.createRoom()
+          : await okeyRoom.createRoom();
       if (id) {
         setCurrentRoomId(id);
         setGameMode('online');
@@ -40,8 +48,10 @@ function App() {
       try {
         if (selectedGame === 'chess') {
           await chessRoom.joinRoom(id);
-        } else {
+        } else if (selectedGame === 'backgammon') {
           await backgammonRoom.joinRoom(id);
+        } else {
+          await okeyRoom.joinRoom(id);
         }
         setCurrentRoomId(id);
         setGameMode('online');
@@ -81,8 +91,15 @@ function App() {
               aiDifficulty={aiDifficulty}
               onExit={handleExitGame}
             />
-          ) : (
+          ) : selectedGame === 'backgammon' ? (
             <BackgammonGame
+              roomId={currentRoomId || ''}
+              mode={gameMode === 'online' ? 'online' : 'local'}
+              aiDifficulty={aiDifficulty}
+              onExit={handleExitGame}
+            />
+          ) : (
+            <OkeyGame
               roomId={currentRoomId || ''}
               mode={gameMode === 'online' ? 'online' : 'local'}
               aiDifficulty={aiDifficulty}
@@ -103,6 +120,7 @@ function App() {
       <footer className="mt-auto py-8 text-slate-500 text-sm">
         DragMate — Premium Multiplayer Board Gaming
       </footer>
+
     </main>
   );
 }
