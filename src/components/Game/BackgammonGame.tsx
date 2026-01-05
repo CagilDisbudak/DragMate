@@ -151,7 +151,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                     finalState.movesLeft = [...finalState.dice];
                     setLocalGame(finalState);
                 }
-            }, 800);
+            }, 1500);
             return () => clearTimeout(timer);
         }
     }, [gameState, isLocal, aiDifficulty]);

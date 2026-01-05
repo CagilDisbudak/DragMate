@@ -14,6 +14,7 @@ import {
 import { type BackgammonState, type Move, applyMove } from '../../logic/backgammonLogic';
 import { Point } from './Point';
 import { Checker, CheckerVisual } from './Checker';
+import { Dice } from './Dice';
 
 interface BackgammonBoardProps {
     gameState: BackgammonState;
@@ -33,6 +34,8 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
     const [activeId, setActiveId] = useState<string | null>(null);
     const [highlightedPoints, setHighlightedPoints] = useState<number[]>([]);
     const [hitEffectPoint, setHitEffectPoint] = useState<number | null>(null);
+    const [isRollingDice, setIsRollingDice] = useState(false);
+    const prevDice = React.useRef(gameState.dice);
 
     // Optimized sensors for smoother drag
     // Optimized sensors for smoother drag
@@ -105,6 +108,16 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
 
         prevBoard.current = gameState.board;
     }, [gameState.board]);
+
+    // Handle Dice Animation
+    React.useEffect(() => {
+        if (JSON.stringify(prevDice.current) !== JSON.stringify(gameState.dice)) {
+            setIsRollingDice(true);
+            const timer = setTimeout(() => setIsRollingDice(false), 800);
+            prevDice.current = gameState.dice;
+            return () => clearTimeout(timer);
+        }
+    }, [gameState.dice]);
 
 
     const handleDragEnd = (event: DragEndEvent) => {
@@ -232,18 +245,38 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
 
                     {/* Dice Display */}
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-50">
-                        <div className="flex gap-3">
-                            {gameState.movesLeft.map((val, i) => (
-                                <div
-                                    key={`${turn}-${i}-${val}`}
-                                    className={`w-10 h-10 md:w-12 md:h-12 rounded-lg shadow-xl flex items-center justify-center text-lg md:text-xl font-black border-2 animate-in zoom-in spin-in-3 duration-300 ${turn === 'white'
-                                        ? 'bg-white text-slate-900 border-slate-200'
-                                        : 'bg-slate-900 text-white border-slate-700'
-                                        }`}
-                                >
-                                    {val}
-                                </div>
-                            ))}
+                        <div className="flex gap-4">
+                            {(() => {
+                                // Track how many of each value we've already "marked" as used in this render
+                                const usedCounts: Record<number, number> = {};
+
+                                return gameState.dice.map((val, i) => {
+                                    // Count how many times this value appears in current movesLeft
+                                    const remainingCount = gameState.movesLeft.filter(m => m === val).length;
+
+                                    // Increment how many times we've encountered this value in the loop
+                                    usedCounts[val] = (usedCounts[val] || 0) + 1;
+
+                                    // A die is "used" if its encounter index is greater than the remaining count
+                                    // Example for double 4:
+                                    // totalCount = 4, remainingCount = 2 (2 moves made)
+                                    // i=0: occurrence=1, used=false (since 1 <= 2)
+                                    // i=1: occurrence=2, used=false (since 2 <= 2)
+                                    // i=2: occurrence=3, used=true (since 3 > 2) -> DARKEN!
+                                    // i=3: occurrence=4, used=true (since 4 > 2) -> DARKEN!
+                                    const isUsed = usedCounts[val] > remainingCount;
+
+                                    return (
+                                        <div key={i} className={`transition-opacity duration-300 ${isUsed ? 'opacity-30 grayscale' : 'opacity-100'}`}>
+                                            <Dice
+                                                value={val}
+                                                isRolling={isRollingDice}
+                                                color={turn === 'white' ? 'white' : 'black'}
+                                            />
+                                        </div>
+                                    );
+                                });
+                            })()}
                         </div>
                     </div>
 
