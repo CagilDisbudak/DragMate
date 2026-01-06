@@ -31,26 +31,31 @@ export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted
 
     const highlightClass = (isOver || isHighlighted) ? 'bg-indigo-500/20 ring-2 ring-indigo-400/50' : '';
 
-    const checkersList = [];
     const absCount = Math.abs(count);
     const checkerColor = count > 0 ? 'white' : 'black';
 
-    // We only render up to X checkers, or handle stacking logic
-    // const MAX_STACK = 5; // Unused for now
+    // Limit visible checkers to prevent overflow
+    const MAX_VISIBLE = 5;
+    const visibleCount = Math.min(absCount, MAX_VISIBLE);
+    const hasOverflow = absCount > MAX_VISIBLE;
 
-    // Create checker elements
-    for (let i = 0; i < absCount; i++) {
-        // Only the TOP checker is draggable
-        const isTopChecker = i === absCount - 1;
+    // Dynamic overlap based on count - more checkers = more overlap
+    const getOverlapClass = () => {
+        if (absCount <= 3) return '-my-0.5';
+        if (absCount <= 5) return '-my-1';
+        return '-my-1.5';
+    };
+
+    const checkersList = [];
+
+    // Create checker elements (only visible ones)
+    for (let i = 0; i < visibleCount; i++) {
+        // Only the TOP checker is draggable (now top of visible stack)
+        const isTopChecker = i === visibleCount - 1;
         const isDraggable = canDragFrom && isTopChecker && checkerColor === playerColor;
 
-        // Stacking visual offset
-        // For bottom row, stack goes UP. For top row, stack goes DOWN.
-        // We can just use flex traverse or absolute positioning.
-        // Let's use flex-col-reverse for bottom, flex-col for top
-
         checkersList.push(
-            <div key={`${index}-${i}`} className="w-[80%] max-w-[40px] -my-1 z-10 relative">
+            <div key={`${index}-${i}`} className={`w-[80%] max-w-[40px] ${getOverlapClass()} z-10 relative`}>
                 <Checker
                     id={`checker-${index}-${i}`}
                     color={checkerColor}
@@ -59,6 +64,20 @@ export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted
             </div>
         );
     }
+
+    // Add count badge if there's overflow
+    const countBadge = hasOverflow ? (
+        <div
+            className={`absolute ${isTop ? 'bottom-1' : 'top-1'} left-1/2 -translate-x-1/2 z-20 
+                px-1.5 py-0.5 rounded-full text-[10px] font-bold shadow-lg
+                ${checkerColor === 'white'
+                    ? 'bg-slate-100 text-slate-800 border border-slate-300'
+                    : 'bg-slate-800 text-slate-100 border border-slate-600'
+                }`}
+        >
+            {absCount}
+        </div>
+    ) : null;
 
     return (
         <div
@@ -80,9 +99,12 @@ export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted
             />
 
             {/* Checkers Container */}
-            <div className={`z-10 w-full h-full flex ${isTop ? 'flex-col pt-2' : 'flex-col-reverse pb-2'} items-center`}>
+            <div className={`z-10 w-full h-full flex ${isTop ? 'flex-col pt-2' : 'flex-col-reverse pb-2'} items-center overflow-hidden`}>
                 {checkersList}
             </div>
+
+            {/* Count Badge for stacked checkers */}
+            {countBadge}
 
             {/* Hit Effect */}
             {/* Hit Effect - Shattering Checker */}
