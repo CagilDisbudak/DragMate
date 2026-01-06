@@ -46,7 +46,6 @@ interface OkeyBoardProps {
     // Multiplayer props
     playerInfo?: PlayerInfo[];
     mySlot?: number;
-    isOnline?: boolean;
 }
 
 interface PlayerPanelProps {
@@ -93,7 +92,8 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                     )}
                 </div>
 
-                {playerId !== 0 && (
+                {/* Only show tile count for other players, not for self */}
+                {!playerInfo.isYou && (
                     <div className={`absolute -bottom-5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-white text-[9px] font-bold shadow-md flex items-center gap-1 ${isActive ? 'bg-green-600' : 'bg-[#3d251e]'}`}>
                         {playerInfo.isAI && <Bot size={10} />}
                         TAŞ: {tileCount}
@@ -234,8 +234,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({
     onEndTie,
     onExit,
     playerInfo = DEFAULT_PLAYER_INFO,
-    mySlot = 0,
-    isOnline = false
+    mySlot = 0
 }) => {
     const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -368,18 +367,6 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({
                     </div>
                     <PlayerRack tiles={gameState.players[mySlot].tiles} playerId={mySlot} isCurrentPlayer okeyTile={gameState.okeyTile} />
                 </div>
-
-                {/* Turn indicator for online mode when it's not your turn */}
-                {isOnline && gameState.currentTurn !== mySlot && (
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
-                        <div className="bg-black/60 backdrop-blur-sm px-6 py-3 rounded-xl">
-                            <p className="text-white text-sm font-bold flex items-center gap-2">
-                                <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                                {playerInfo[gameState.currentTurn]?.name || `Player ${gameState.currentTurn + 1}`}'in sırası...
-                            </p>
-                        </div>
-                    </div>
-                )}
 
                 {gameState.phase === 'roundOver' && (
                     <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-500">

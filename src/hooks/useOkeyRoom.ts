@@ -11,7 +11,8 @@ import { getAuth, signInAnonymously } from 'firebase/auth';
 import { db, firebaseEnabled } from '../lib/firebase';
 import {
     initializeOkeyGame,
-    RACK_SIZE
+    RACK_SIZE,
+    isWinningHand
 } from '../logic/okeyLogic';
 import type { OkeyTile } from '../logic/okeyLogic';
 
@@ -560,13 +561,14 @@ export const useOkeyRoom = (roomId: string | null) => {
         }
     };
 
-    // Move tile within rack
+    // Move tile within rack - optimized for speed (no transaction needed for self-rearrangement)
     const moveTileInRack = async (fromIndex: number, toIndex: number) => {
-        if (!room || !roomId) return;
+        if (!firebaseEnabled || !db || !roomId || !room) return;
 
         const mySlot = getMySlot();
         if (mySlot === -1) return;
 
+        // Use local state for immediate update (faster)
         const newPlayers = [...room.players];
         const newRack = [...newPlayers[mySlot].tiles];
 
@@ -576,7 +578,11 @@ export const useOkeyRoom = (roomId: string | null) => {
 
         newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: newRack };
 
-        await updateGameState({ players: newPlayers });
+        // Fire-and-forget update to Firebase (no await for faster response)
+        const roomRef = doc(collection(db, 'okeyRooms'), roomId);
+        updateDoc(roomRef, { players: newPlayers }).catch(err => {
+            console.error('Error syncing tile move:', err);
+        });
     };
 
     // Reset game
@@ -616,13 +622,14 @@ export const useOkeyRoom = (roomId: string | null) => {
         await updateGameState({ phase: 'roundOver', winner: null });
     };
 
-    // Auto sort tiles for the current player
+    // Auto sort tiles for the current player - optimized (no transaction needed)
     const autoSortTiles = async () => {
-        if (!room || !roomId) return;
+        if (!firebaseEnabled || !db || !roomId || !room) return;
 
         const mySlot = getMySlot();
         if (mySlot === -1) return;
 
+        // Use local state for immediate sorting
         const newPlayers = [...room.players];
         const currentTiles = [...newPlayers[mySlot].tiles];
 
@@ -703,7 +710,67 @@ export const useOkeyRoom = (roomId: string | null) => {
 
         newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: sortedRack };
 
-        await updateGameState({ players: newPlayers });
+        // Fire-and-forget update to Firebase (no await for faster response)
+        const roomRef = doc(collection(db, 'okeyRooms'), roomId);
+        updateDoc(roomRef, { players: newPlayers }).catch(err => {
+            console.error('Error syncing sorted tiles:', err);
+        });
+    };
+
+    // Finish game - validate winning hand and end round
+    const finishGame = async (discardIndex: number): Promise<boolean> => {
+        if (!firebaseEnabled || !db || !roomId) return false;
+
+        const mySlot = getMySlot();
+        if (mySlot === -1) return false;
+
+        try {
+            const roomRef = doc(collection(db, 'okeyRooms'), roomId);
+            let isWinner = false;
+
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(roomRef);
+                if (!snap.exists()) return;
+
+                const data = snap.data() as OkeyRoom;
+
+                // Validate it's this player's turn
+                if (data.currentTurn !== mySlot) return;
+
+                // Validate player has 15 tiles (needs to discard one to finish)
+                const playerTiles = data.players[mySlot].tiles;
+                const tileCount = playerTiles.filter(t => t !== null).length;
+                if (tileCount !== 15) return;
+
+                // Get the tile being discarded
+                const winningTile = playerTiles[discardIndex];
+                if (!winningTile) return;
+
+                // Create validation tiles (all tiles except the one being discarded)
+                const validationTiles = [...playerTiles];
+                validationTiles[discardIndex] = null;
+
+                // Check if this is a winning hand
+                isWinner = isWinningHand(validationTiles, data.okeyTile);
+
+                if (isWinner) {
+                    transaction.update(roomRef, {
+                        phase: 'roundOver',
+                        winner: mySlot
+                    });
+                }
+            });
+
+            if (!isWinner) {
+                alert("Eliniz okey değil! Lütfen taşları per yapın.");
+            }
+
+            return isWinner;
+        } catch (error) {
+            console.error('Error finishing game:', error);
+            setError('Failed to finish game');
+            return false;
+        }
     };
 
     return {
@@ -724,6 +791,7 @@ export const useOkeyRoom = (roomId: string | null) => {
         discardTile,
         moveTileInRack,
         autoSortTiles,
+        finishGame,
         resetGame,
         reshuffleDiscards,
         endInTie

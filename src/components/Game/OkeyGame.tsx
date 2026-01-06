@@ -148,12 +148,12 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
     }, [isOnline, roomHook, localGame]);
 
     const handleFinish = useCallback((index: number) => {
-        // For now, finish only works in local mode
-        // Online mode would need server validation
-        if (!isOnline) {
+        if (isOnline) {
+            roomHook.finishGame(index);
+        } else {
             localGame.finishGame(index);
         }
-    }, [isOnline, localGame]);
+    }, [isOnline, roomHook, localGame]);
 
     const handleReset = useCallback(() => {
         if (isOnline) {
@@ -269,7 +269,6 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
                 // Pass multiplayer info
                 playerInfo={isOnline && room ? room.players.map((_, i) => getPlayerInfo(i)) : undefined}
                 mySlot={isOnline ? mySlot : 0}
-                isOnline={isOnline}
             />
 
             <footer className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[10px] pt-10 flex flex-col items-center gap-1">
