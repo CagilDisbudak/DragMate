@@ -292,20 +292,20 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                         COLLECT
                     </div>
 
-                    {/* Top Collection (White) - Left on Mobile, Top on Desktop */}
+                    {/* Top Collection - Opponent's color (farther from player) */}
                     <div className="flex-1 w-full p-2 flex flex-col gap-1 z-10 border-r md:border-r-0 md:border-b border-slate-800/50">
                         <OffTray
-                            playerColor="white"
-                            count={off.white}
+                            playerColor={playerColor === 'white' ? 'black' : 'white'}
+                            count={playerColor === 'white' ? off.black : off.white}
                             isTop={true}
                         />
                     </div>
 
-                    {/* Bottom Collection (Black) - Right on Mobile, Bottom on Desktop */}
+                    {/* Bottom Collection - Player's color (closer to player) */}
                     <div className="flex-1 w-full p-2 flex flex-col-reverse gap-1 z-10">
                         <OffTray
-                            playerColor="black"
-                            count={off.black}
+                            playerColor={playerColor === 'white' ? 'white' : 'black'}
+                            count={playerColor === 'white' ? off.white : off.black}
                             isTop={false}
                         />
                     </div>
