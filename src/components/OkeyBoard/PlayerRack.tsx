@@ -19,7 +19,7 @@ interface RackSlotProps {
     okeyTile: OkeyTileType | null;
 }
 
-const RackSlot: React.FC<RackSlotProps> = ({ tile, isJoker, index, okeyTile }) => {
+const RackSlot: React.FC<RackSlotProps> = React.memo(({ tile, isJoker, index, okeyTile }) => {
     const slotId = `slot-${index}`;
     const { setNodeRef: setDroppableRef, isOver } = useDroppable({ id: slotId });
 
@@ -37,8 +37,8 @@ const RackSlot: React.FC<RackSlotProps> = ({ tile, isJoker, index, okeyTile }) =
         <div
             ref={setDroppableRef}
             className={`
-                relative w-13 h-17 rounded-lg shadow-inner flex items-center justify-center transition-all duration-200
-                ${isOver ? 'bg-green-500/30 ring-4 ring-green-400 scale-110 z-20 shadow-2xl' : 'bg-black/15 border border-black/10'}
+                relative w-13 h-17 rounded-lg shadow-inner flex items-center justify-center
+                ${isOver ? 'bg-green-500/30 ring-4 ring-green-400 scale-110 z-20 shadow-2xl transition-transform duration-150' : 'bg-black/15 border border-black/10'}
             `}
         >
             {tile && (
@@ -46,7 +46,8 @@ const RackSlot: React.FC<RackSlotProps> = ({ tile, isJoker, index, okeyTile }) =
                     ref={setDraggableRef}
                     {...attributes}
                     {...listeners}
-                    className={`relative z-10 ${isDragging ? 'opacity-20' : ''}`}
+                    className={`relative z-10 touch-none ${isDragging ? 'opacity-20' : ''}`}
+                    style={{ willChange: isDragging ? 'transform' : 'auto' }}
                 >
                     <OkeyTile
                         tile={tile}
@@ -63,7 +64,7 @@ const RackSlot: React.FC<RackSlotProps> = ({ tile, isJoker, index, okeyTile }) =
             )}
         </div>
     );
-};
+});
 
 export const PlayerRack: React.FC<PlayerRackProps> = ({ tiles, isCurrentPlayer, okeyTile }) => {
 

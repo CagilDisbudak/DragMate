@@ -351,154 +351,213 @@ export const useOkeyRoom = (roomId: string | null) => {
 
     // Draw from center stack
     const drawFromCenter = async (targetSlot?: number) => {
-        if (!room || !roomId) return;
+        if (!firebaseEnabled || !db || !roomId) return;
 
         const mySlot = getMySlot();
-        if (mySlot === -1 || room.currentTurn !== mySlot) return;
+        if (mySlot === -1) return;
 
-        const currentTilesCount = room.players[mySlot].tiles.filter(t => t !== null).length;
-        if (currentTilesCount >= 15) return;
+        try {
+            const roomRef = doc(collection(db, 'okeyRooms'), roomId);
 
-        const newStack = [...room.centerStack];
-        const drawnTile = newStack.pop();
-        if (!drawnTile) return;
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(roomRef);
+                if (!snap.exists()) return;
 
-        const newPlayers = [...room.players];
-        const newRack = [...newPlayers[mySlot].tiles];
+                const data = snap.data() as OkeyRoom;
 
-        let finalSlot = -1;
-        if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
-            if (newRack[targetSlot] === null) {
-                finalSlot = targetSlot;
-            } else {
-                for (let dist = 1; dist < newRack.length; dist++) {
-                    const right = targetSlot + dist;
-                    const left = targetSlot - dist;
-                    if (right < newRack.length && newRack[right] === null) {
-                        finalSlot = right;
-                        break;
-                    }
-                    if (left >= 0 && newRack[left] === null) {
-                        finalSlot = left;
-                        break;
+                // Validate it's this player's turn
+                if (data.currentTurn !== mySlot) return;
+
+                // Validate player has less than 15 tiles
+                const currentTilesCount = data.players[mySlot].tiles.filter(t => t !== null).length;
+                if (currentTilesCount >= 15) return;
+
+                // Draw from stack
+                const newStack = [...data.centerStack];
+                const drawnTile = newStack.pop();
+                if (!drawnTile) return;
+
+                // Find slot for the tile
+                const newPlayers = [...data.players];
+                const newRack = [...newPlayers[mySlot].tiles];
+
+                let finalSlot = -1;
+                if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
+                    if (newRack[targetSlot] === null) {
+                        finalSlot = targetSlot;
+                    } else {
+                        for (let dist = 1; dist < newRack.length; dist++) {
+                            const right = targetSlot + dist;
+                            const left = targetSlot - dist;
+                            if (right < newRack.length && newRack[right] === null) {
+                                finalSlot = right;
+                                break;
+                            }
+                            if (left >= 0 && newRack[left] === null) {
+                                finalSlot = left;
+                                break;
+                            }
+                        }
                     }
                 }
-            }
+
+                if (finalSlot === -1) {
+                    finalSlot = newRack.findIndex(s => s === null);
+                }
+
+                if (finalSlot !== -1) {
+                    newRack[finalSlot] = drawnTile;
+                }
+
+                newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: newRack };
+
+                const newPhase = newStack.length === 0 ? 'stackEmpty' : data.phase;
+
+                transaction.update(roomRef, {
+                    players: newPlayers,
+                    centerStack: newStack,
+                    phase: newPhase
+                });
+            });
+        } catch (error) {
+            console.error('Error drawing from center:', error);
+            setError('Failed to draw tile');
         }
-
-        if (finalSlot === -1) {
-            finalSlot = newRack.findIndex(s => s === null);
-        }
-
-        if (finalSlot !== -1) {
-            newRack[finalSlot] = drawnTile;
-        }
-
-        newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: newRack };
-
-        const newPhase = newStack.length === 0 ? 'stackEmpty' : room.phase;
-
-        await updateGameState({
-            players: newPlayers,
-            centerStack: newStack,
-            phase: newPhase as OkeyRoomPhase
-        });
     };
 
     // Draw from discard pile
     const drawFromDiscard = async (targetSlot?: number) => {
-        if (!room || !roomId) return;
+        if (!firebaseEnabled || !db || !roomId) return;
 
         const mySlot = getMySlot();
-        if (mySlot === -1 || room.currentTurn !== mySlot) return;
+        if (mySlot === -1) return;
 
-        const currentTilesCount = room.players[mySlot].tiles.filter(t => t !== null).length;
-        if (currentTilesCount >= 15) return;
+        try {
+            const roomRef = doc(collection(db, 'okeyRooms'), roomId);
 
-        // Previous player's discard pile
-        const prevPlayerIdx = (mySlot + 3) % 4;
-        const pileKey = `pile${prevPlayerIdx}` as keyof DiscardPilesMap;
-        const discardPile = room.discardPiles[pileKey];
-        if (!discardPile || discardPile.length === 0) return;
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(roomRef);
+                if (!snap.exists()) return;
 
-        const drawnTile = discardPile[discardPile.length - 1];
-        const newDiscardPiles: DiscardPilesMap = {
-            ...room.discardPiles,
-            [pileKey]: discardPile.slice(0, -1)
-        };
+                const data = snap.data() as OkeyRoom;
 
-        const newPlayers = [...room.players];
-        const newRack = [...newPlayers[mySlot].tiles];
+                // Validate it's this player's turn
+                if (data.currentTurn !== mySlot) return;
 
-        let finalSlot = -1;
-        if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
-            if (newRack[targetSlot] === null) {
-                finalSlot = targetSlot;
-            } else {
-                for (let dist = 1; dist < newRack.length; dist++) {
-                    const right = targetSlot + dist;
-                    const left = targetSlot - dist;
-                    if (right < newRack.length && newRack[right] === null) {
-                        finalSlot = right;
-                        break;
-                    }
-                    if (left >= 0 && newRack[left] === null) {
-                        finalSlot = left;
-                        break;
+                // Validate player has less than 15 tiles
+                const currentTilesCount = data.players[mySlot].tiles.filter(t => t !== null).length;
+                if (currentTilesCount >= 15) return;
+
+                // Previous player's discard pile
+                const prevPlayerIdx = (mySlot + 3) % 4;
+                const pileKey = `pile${prevPlayerIdx}` as keyof DiscardPilesMap;
+                const discardPile = data.discardPiles[pileKey];
+                if (!discardPile || discardPile.length === 0) return;
+
+                const drawnTile = discardPile[discardPile.length - 1];
+                const newDiscardPiles: DiscardPilesMap = {
+                    ...data.discardPiles,
+                    [pileKey]: discardPile.slice(0, -1)
+                };
+
+                const newPlayers = [...data.players];
+                const newRack = [...newPlayers[mySlot].tiles];
+
+                let finalSlot = -1;
+                if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
+                    if (newRack[targetSlot] === null) {
+                        finalSlot = targetSlot;
+                    } else {
+                        for (let dist = 1; dist < newRack.length; dist++) {
+                            const right = targetSlot + dist;
+                            const left = targetSlot - dist;
+                            if (right < newRack.length && newRack[right] === null) {
+                                finalSlot = right;
+                                break;
+                            }
+                            if (left >= 0 && newRack[left] === null) {
+                                finalSlot = left;
+                                break;
+                            }
+                        }
                     }
                 }
-            }
+
+                if (finalSlot === -1) {
+                    finalSlot = newRack.findIndex(s => s === null);
+                }
+
+                if (finalSlot !== -1) {
+                    newRack[finalSlot] = drawnTile;
+                }
+
+                newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: newRack };
+
+                transaction.update(roomRef, {
+                    players: newPlayers,
+                    discardPiles: newDiscardPiles
+                });
+            });
+        } catch (error) {
+            console.error('Error drawing from discard:', error);
+            setError('Failed to draw from discard');
         }
-
-        if (finalSlot === -1) {
-            finalSlot = newRack.findIndex(s => s === null);
-        }
-
-        if (finalSlot !== -1) {
-            newRack[finalSlot] = drawnTile;
-        }
-
-        newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: newRack };
-
-        await updateGameState({
-            players: newPlayers,
-            discardPiles: newDiscardPiles
-        });
     };
 
     // Discard a tile
     const discardTile = async (index: number) => {
-        if (!room || !roomId) return;
+        if (!firebaseEnabled || !db || !roomId) return;
 
         const mySlot = getMySlot();
-        if (mySlot === -1 || room.currentTurn !== mySlot) return;
+        if (mySlot === -1) return;
 
-        const playerTiles = room.players[mySlot].tiles.filter(t => t !== null);
-        if (playerTiles.length !== 15) return;
+        try {
+            const roomRef = doc(collection(db, 'okeyRooms'), roomId);
 
-        const newPlayers = [...room.players];
-        const newRack = [...newPlayers[mySlot].tiles];
-        const discardedTile = newRack[index];
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(roomRef);
+                if (!snap.exists()) return;
 
-        if (!discardedTile) return;
+                const data = snap.data() as OkeyRoom;
 
-        newRack[index] = null;
-        newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: newRack };
+                // Validate it's this player's turn
+                if (data.currentTurn !== mySlot) return;
 
-        const pileKey = `pile${mySlot}` as keyof DiscardPilesMap;
-        const currentPile = room.discardPiles[pileKey] || [];
-        const newDiscardPiles: DiscardPilesMap = {
-            ...room.discardPiles,
-            [pileKey]: [...currentPile, discardedTile]
-        };
+                // Validate player has 15 tiles
+                const playerTiles = data.players[mySlot].tiles.filter(t => t !== null);
+                if (playerTiles.length !== 15) return;
 
-        const nextTurn = (room.currentTurn + 1) % 4;
+                // Get the tile to discard
+                const discardedTile = data.players[mySlot].tiles[index];
+                if (!discardedTile) return;
 
-        await updateGameState({
-            players: newPlayers,
-            discardPiles: newDiscardPiles,
-            currentTurn: nextTurn
-        });
+                // Create new players array with the tile removed
+                const newPlayers = [...data.players];
+                const newRack = [...newPlayers[mySlot].tiles];
+                newRack[index] = null;
+                newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: newRack };
+
+                // Update discard pile
+                const pileKey = `pile${mySlot}` as keyof DiscardPilesMap;
+                const currentPile = data.discardPiles[pileKey] || [];
+                const newDiscardPiles: DiscardPilesMap = {
+                    ...data.discardPiles,
+                    [pileKey]: [...currentPile, discardedTile]
+                };
+
+                // Advance turn
+                const nextTurn = (data.currentTurn + 1) % 4;
+
+                transaction.update(roomRef, {
+                    players: newPlayers,
+                    discardPiles: newDiscardPiles,
+                    currentTurn: nextTurn
+                });
+            });
+        } catch (error) {
+            console.error('Error discarding tile:', error);
+            setError('Failed to discard tile');
+        }
     };
 
     // Move tile within rack

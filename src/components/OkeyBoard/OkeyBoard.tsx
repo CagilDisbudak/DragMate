@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import type { OkeyGameState } from '../../logic/okeyLogic';
 import { PlayerRack } from './PlayerRack';
 import { OkeyTile } from './OkeyTile';
@@ -14,7 +14,7 @@ import {
     useDraggable,
     DragOverlay,
 } from '@dnd-kit/core';
-import type { DragEndEvent } from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 
 // Default player info for local mode
@@ -58,11 +58,11 @@ interface PlayerPanelProps {
     tileCount?: number;
 }
 
-const PlayerPanel: React.FC<PlayerPanelProps> = ({ 
-    playerId, 
-    currentTurn, 
-    className = '', 
-    isDragging = false, 
+const PlayerPanel: React.FC<PlayerPanelProps> = ({
+    playerId,
+    currentTurn,
+    className = '',
+    isDragging = false,
     playerInfo,
     tileCount = 14
 }) => {
@@ -84,7 +84,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                         <User size={14} />
                     )}
                 </div>
-                
+
                 <div className={`flex-1 font-bold text-xs text-center uppercase tracking-tight ${isActive ? 'text-green-700' : 'text-[#3d251e]'}`}>
                     {isActive && <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2 animate-ping" />}
                     {playerInfo.name}
@@ -92,7 +92,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
                         <span className="ml-1 text-[9px] text-amber-600">(Sen)</span>
                     )}
                 </div>
-                
+
                 {playerId !== 0 && (
                     <div className={`absolute -bottom-5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-white text-[9px] font-bold shadow-md flex items-center gap-1 ${isActive ? 'bg-green-600' : 'bg-[#3d251e]'}`}>
                         {playerInfo.isAI && <Bot size={10} />}
@@ -123,7 +123,7 @@ const DiscardZone = ({ playerId, position, discardPiles, currentTurn, userTileCo
 
     const posStyle: any = {
         top: "absolute top-[22%] left-1/2 -translate-x-1/2",
-        bottom: "absolute bottom-[35%] right-[10%] -translate-x-1/2",
+        bottom: "absolute bottom-[36%] right-[12%]",
         left: "absolute left-[12%] top-[35%]",
         right: "absolute right-[12%] top-[35%]",
     };
@@ -133,9 +133,10 @@ const DiscardZone = ({ playerId, position, discardPiles, currentTurn, userTileCo
             ref={setNodeRef}
             onClick={() => canDrawHere && onDrawDiscard()}
             className={`
-                ${posStyle[position]} w-20 h-28 rounded-lg transition-all duration-300 flex items-center justify-center
-                ${isOver ? 'bg-green-400/20 scale-110 ring-4 ring-green-400 shadow-2xl' : ''}
-                ${canDrawHere ? 'cursor-grab active:cursor-grabbing hover:ring-4 hover:ring-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.3)] bg-amber-400/10' : ''}
+                ${posStyle[position]} w-16 h-24 rounded-lg transition-all duration-200 flex items-center justify-center z-20
+                ${isOver ? 'bg-green-400/30 scale-110 ring-4 ring-green-400 shadow-xl' : ''}
+                ${canDropHere && !isOver ? 'bg-green-500/10 ring-2 ring-green-400/50' : ''}
+                ${canDrawHere ? 'cursor-grab active:cursor-grabbing hover:ring-2 hover:ring-amber-400 bg-amber-400/10' : ''}
             `}
         >
             {lastTile ? (
@@ -143,25 +144,25 @@ const DiscardZone = ({ playerId, position, discardPiles, currentTurn, userTileCo
                     ref={setDraggableRef}
                     {...attributes}
                     {...listeners}
-                    className={`rotate-3 shadow-xl transform transition-transform ${canDrawHere && !isDragging ? 'hover:scale-110 -translate-y-2' : ''} ${isDragging ? 'opacity-20' : ''}`}
+                    className={`rotate-2 shadow-lg transform ${canDrawHere && !isDragging ? 'hover:scale-105' : ''} ${isDragging ? 'opacity-20' : ''}`}
                 >
                     <OkeyTile tile={lastTile} size="sm" />
                 </div>
             ) : (
-                <div className="w-16 h-24 border-2 border-white/5 border-dashed rounded-lg flex items-center justify-center">
-                    <div className="w-2 h-2 rounded-full bg-white/5" />
+                <div className="w-12 h-18 border-2 border-white/10 border-dashed rounded-lg flex items-center justify-center">
+                    <div className="w-2 h-2 rounded-full bg-white/10" />
                 </div>
             )}
 
             {canDropHere && (
-                <div className="absolute -inset-2 border-2 border-dashed border-green-400 rounded-xl animate-pulse flex items-center justify-center">
-                    <div className="text-[8px] font-black text-green-400 mb-20 uppercase tracking-widest whitespace-nowrap">Buraya At</div>
+                <div className="absolute -inset-2 border-2 border-dashed border-green-400 rounded-xl animate-pulse pointer-events-none">
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black text-green-400 uppercase tracking-wider whitespace-nowrap bg-black/70 px-2 py-1 rounded">BURAYA AT</div>
                 </div>
             )}
 
             {canDrawHere && lastTile && !isDragging && (
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[8px] font-black px-2 py-1 rounded animate-bounce whitespace-nowrap z-50">
-                    SÜRÜKLE VEYA TIKLA
+                <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[8px] font-black px-2 py-1 rounded animate-bounce whitespace-nowrap z-50">
+                    ÇEK
                 </div>
             )}
         </div>
@@ -220,17 +221,17 @@ const FinishZone = ({ isDraggingRackTile, canFinish }: { isDraggingRackTile: boo
     );
 };
 
-export const OkeyBoard: React.FC<OkeyBoardProps> = ({ 
-    gameState, 
-    onDraw, 
-    onDrawDiscard, 
-    onMoveTile, 
-    onDiscard, 
-    onAutoSort, 
-    onFinish, 
-    onReset, 
-    onReshuffle, 
-    onEndTie, 
+export const OkeyBoard: React.FC<OkeyBoardProps> = ({
+    gameState,
+    onDraw,
+    onDrawDiscard,
+    onMoveTile,
+    onDiscard,
+    onAutoSort,
+    onFinish,
+    onReset,
+    onReshuffle,
+    onEndTie,
     onExit,
     playerInfo = DEFAULT_PLAYER_INFO,
     mySlot = 0,
@@ -239,14 +240,15 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({
     const [activeId, setActiveId] = useState<string | null>(null);
 
     const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 3 }
+        }),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
-    if (!gameState) return <div className="text-white text-center p-10 font-bold">YÜKLENİYOR...</div>;
-
-    const handleDragStart = (event: any) => setActiveId(event.active.id);
-    const handleDragEnd = (event: DragEndEvent) => {
+    // All hooks must be called before any conditional returns
+    const handleDragStart = useCallback((event: DragStartEvent) => setActiveId(event.active.id as string), []);
+    const handleDragEnd = useCallback((event: DragEndEvent) => {
         setActiveId(null);
         const { active, over } = event;
         if (!over) return;
@@ -266,7 +268,10 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({
         } else if (draggingId !== dropId && draggingId.startsWith('slot-') && dropId.startsWith('slot-')) {
             onMoveTile(parseInt(draggingId.split('-')[1]), parseInt(dropId.split('-')[1]));
         }
-    };
+    }, [mySlot, onDiscard, onFinish, onDraw, onDrawDiscard, onMoveTile]);
+
+    // Early return AFTER all hooks
+    if (!gameState) return <div className="text-white text-center p-10 font-bold">YÜKLENİYOR...</div>;
 
     const renderDragOverlay = () => {
         if (!activeId) return null;
@@ -308,30 +313,30 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-30 pointer-events-none" />
 
                 {/* Top player (display position 2) */}
-                <PlayerPanel 
-                    playerId={getActualSlot(2)} 
-                    currentTurn={gameState.currentTurn} 
-                    isDragging={!!activeId} 
+                <PlayerPanel
+                    playerId={getActualSlot(2)}
+                    currentTurn={gameState.currentTurn}
+                    isDragging={!!activeId}
                     className="absolute top-4 left-1/2 -translate-x-1/2 z-30"
                     playerInfo={getPlayerInfoForDisplay(2)}
                     tileCount={getTileCount(getActualSlot(2))}
                 />
-                
+
                 {/* Left player (display position 3) */}
-                <PlayerPanel 
-                    playerId={getActualSlot(3)} 
-                    currentTurn={gameState.currentTurn} 
-                    isDragging={!!activeId} 
+                <PlayerPanel
+                    playerId={getActualSlot(3)}
+                    currentTurn={gameState.currentTurn}
+                    isDragging={!!activeId}
                     className="absolute left-4 top-1/2 -translate-y-1/2 -rotate-90 origin-center z-30"
                     playerInfo={getPlayerInfoForDisplay(3)}
                     tileCount={getTileCount(getActualSlot(3))}
                 />
-                
+
                 {/* Right player (display position 1) */}
-                <PlayerPanel 
-                    playerId={getActualSlot(1)} 
-                    currentTurn={gameState.currentTurn} 
-                    isDragging={!!activeId} 
+                <PlayerPanel
+                    playerId={getActualSlot(1)}
+                    currentTurn={gameState.currentTurn}
+                    isDragging={!!activeId}
                     className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 origin-center z-30"
                     playerInfo={getPlayerInfoForDisplay(1)}
                     tileCount={getTileCount(getActualSlot(1))}
@@ -353,9 +358,9 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({
 
                 <div className="absolute bottom-0 left-0 right-0 z-40 p-2 flex flex-col items-center gap-3">
                     <div className="flex items-center gap-6">
-                        <PlayerPanel 
-                            playerId={mySlot} 
-                            currentTurn={gameState.currentTurn} 
+                        <PlayerPanel
+                            playerId={mySlot}
+                            currentTurn={gameState.currentTurn}
                             isDragging={!!activeId}
                             playerInfo={playerInfo[mySlot] || DEFAULT_PLAYER_INFO[0]}
                         />
@@ -377,23 +382,74 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({
                 )}
 
                 {gameState.phase === 'roundOver' && (
-                    <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                        <div className="bg-[#ede0d4] p-10 rounded-2xl shadow-2xl flex flex-col items-center gap-6 text-[#3d251e]">
-                            <h2 className="text-4xl font-black uppercase">
-                                {gameState.winner === null ? 'DOSTLUK KAZANDI' : (gameState.winner === mySlot ? 'TEBRİKLER!' : 'OYUN BİTTİ')}
+                    <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-500">
+                        {/* Confetti animation for winner */}
+                        {gameState.winner === mySlot && (
+                            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                                {[...Array(30)].map((_, i) => (
+                                    <div
+                                        key={i}
+                                        className="absolute w-3 h-3 rounded-sm animate-bounce"
+                                        style={{
+                                            left: `${Math.random() * 100}%`,
+                                            top: `-${Math.random() * 20}%`,
+                                            backgroundColor: ['#ffd700', '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7'][i % 6],
+                                            animationDelay: `${Math.random() * 2}s`,
+                                            animationDuration: `${2 + Math.random() * 2}s`,
+                                            transform: `rotate(${Math.random() * 360}deg)`
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        )}
+
+                        <div className={`
+                            relative p-10 rounded-3xl shadow-2xl flex flex-col items-center gap-6 
+                            transform transition-all duration-500 animate-in zoom-in-95
+                            ${gameState.winner === null
+                                ? 'bg-gradient-to-br from-slate-100 to-slate-200 border-4 border-slate-400'
+                                : gameState.winner === mySlot
+                                    ? 'bg-gradient-to-br from-amber-100 via-yellow-100 to-amber-200 border-4 border-amber-400 ring-8 ring-amber-300/50'
+                                    : 'bg-gradient-to-br from-slate-100 to-red-100 border-4 border-red-300'
+                            }
+                        `}>
+                            {/* Trophy/Icon */}
+                            <div className={`text-7xl ${gameState.winner === mySlot ? 'animate-bounce' : ''}`}>
+                                {gameState.winner === null ? '🤝' : gameState.winner === mySlot ? '🏆' : '😢'}
+                            </div>
+
+                            <h2 className={`text-4xl font-black uppercase tracking-tight ${gameState.winner === null
+                                ? 'text-slate-700'
+                                : gameState.winner === mySlot
+                                    ? 'text-amber-600'
+                                    : 'text-slate-700'
+                                }`}>
+                                {gameState.winner === null ? 'BERABERE!' : (gameState.winner === mySlot ? 'KAZANDINIZ!' : 'KAYBETTİNİZ')}
                             </h2>
-                            <p className="text-xl font-bold">
-                                {gameState.winner === null 
-                                    ? 'Berabere! Taşlar bitti.' 
-                                    : (gameState.winner === mySlot 
-                                        ? 'Kazandınız!' 
-                                        : `${playerInfo[gameState.winner]?.name || `Player ${gameState.winner + 1}`} Kazandı!`
+
+                            <p className="text-lg font-bold text-slate-600 text-center max-w-xs">
+                                {gameState.winner === null
+                                    ? 'Kimse kazanamadı. Taşlar tükendi!'
+                                    : (gameState.winner === mySlot
+                                        ? 'Tebrikler! Harika bir oyun oynadınız! 🎉'
+                                        : `${playerInfo[gameState.winner]?.name || `Player ${gameState.winner + 1}`} oyunu kazandı.`
                                     )
                                 }
                             </p>
-                            <div className="flex gap-4">
-                                <button onClick={onReset} className="px-10 py-4 bg-emerald-600 text-white font-black rounded-xl">Tekrar Oyna</button>
-                                <button onClick={onExit} className="px-10 py-4 bg-slate-800 text-white font-black rounded-xl">Çıkış</button>
+
+                            <div className="flex gap-4 mt-4">
+                                <button
+                                    onClick={onReset}
+                                    className="px-10 py-4 bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 uppercase tracking-wide"
+                                >
+                                    🔄 Tekrar Oyna
+                                </button>
+                                <button
+                                    onClick={onExit}
+                                    className="px-10 py-4 bg-gradient-to-br from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 text-white font-black rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 uppercase tracking-wide"
+                                >
+                                    🚪 Çıkış
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -426,7 +482,25 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({
                     </div>
                 )}
 
-                <DragOverlay dropAnimation={null}>{renderDragOverlay()}</DragOverlay>
+                <DragOverlay
+                    dropAnimation={null}
+                    style={{
+                        cursor: 'grabbing',
+                        touchAction: 'none',
+                    }}
+                    modifiers={[]}
+                >
+                    <div
+                        style={{
+                            willChange: 'transform',
+                            transform: 'translateZ(0)',
+                            pointerEvents: 'none',
+                            filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.25))',
+                        }}
+                    >
+                        {renderDragOverlay()}
+                    </div>
+                </DragOverlay>
             </div>
         </DndContext>
     );

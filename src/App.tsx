@@ -20,7 +20,7 @@ function App() {
 
   const chessRoom = useGameRoom(null);
   const backgammonRoom = useBackgammonGame(null);
-  
+
   // Okey room with roomId for real-time sync
   const okeyRoomHook = useOkeyRoom(currentRoomId);
 
@@ -81,12 +81,15 @@ function App() {
   // Okey specific handlers
   const handleCreateOkeyRoom = async (playerName: string): Promise<string | null> => {
     try {
+      console.log('Creating Okey room for player:', playerName);
       const id = await okeyRoomHook.createRoom(playerName);
+      console.log('Okey room created with ID:', id);
       setCurrentRoomId(id);
       setGameMode('okey-lobby');
       return id;
     } catch (error) {
       console.error('Failed to create Okey room:', error);
+      alert('Oda oluşturulamadı: ' + (error instanceof Error ? error.message : 'Bilinmeyen hata'));
       return null;
     }
   };

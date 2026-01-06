@@ -10,7 +10,7 @@ interface OkeyTileProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-export const OkeyTile: React.FC<OkeyTileProps> = ({ tile, okeyTile, isJoker, className = '', dragging = false, size = 'md' }) => {
+export const OkeyTile: React.FC<OkeyTileProps> = React.memo(({ tile, okeyTile, isJoker, className = '', dragging = false, size = 'md' }) => {
   const getTextColor = (color: string | null) => {
     switch (color) {
       case 'red': return 'text-[#d32f2f]';
@@ -54,21 +54,30 @@ export const OkeyTile: React.FC<OkeyTileProps> = ({ tile, okeyTile, isJoker, cla
     );
   };
 
+  // Use inline styles for dragging state for better performance
+  const tileStyle: React.CSSProperties = dragging ? {
+    opacity: 0.95,
+    transform: 'scale(1.1) rotate(-2deg)',
+    zIndex: 50,
+    willChange: 'transform',
+    cursor: 'grabbing',
+    boxShadow: '0 8px 20px rgba(0,0,0,0.3)',
+  } : {};
+
   return (
     <div
       className={`
         relative ${dims}
         bg-[#fffdfa]
         rounded-md
-        shadow-[0_2px_0_#d1cfca,0_4px_8px_rgba(0,0,0,0.2)]
         flex items-center justify-center
         select-none
         border border-[#e5e3de]
-        ${dragging ? 'opacity-90 cursor-grabbing scale-110 -rotate-2 z-50' : 'cursor-grab hover:-translate-y-1'}
+        ${!dragging ? 'shadow-[0_2px_0_#d1cfca,0_4px_8px_rgba(0,0,0,0.2)] cursor-grab hover:-translate-y-1 transition-transform duration-150' : ''}
         ${isJoker ? 'ring-4 ring-green-400/80 ring-offset-2' : ''}
-        transition-all duration-200
         ${className}
       `}
+      style={tileStyle}
     >
       {/* Tile Surface Polish */}
       <div className="absolute inset-[2px] rounded-[3px] bg-gradient-to-br from-white to-transparent opacity-50 pointer-events-none" />
@@ -78,4 +87,4 @@ export const OkeyTile: React.FC<OkeyTileProps> = ({ tile, okeyTile, isJoker, cla
       </div>
     </div>
   );
-};
+});

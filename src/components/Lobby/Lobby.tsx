@@ -52,13 +52,21 @@ export const Lobby: React.FC<LobbyProps> = ({
     };
 
     const handleCreateOkeyRoom = async () => {
-        if (!playerName.trim() || !onCreateOkeyRoom) return;
+        console.log('handleCreateOkeyRoom called, playerName:', playerName, 'onCreateOkeyRoom:', !!onCreateOkeyRoom);
+        if (!playerName.trim() || !onCreateOkeyRoom) {
+            console.log('Early return - playerName empty or onCreateOkeyRoom missing');
+            return;
+        }
         setIsCreating(true);
         try {
+            console.log('Calling onCreateOkeyRoom...');
             const roomId = await onCreateOkeyRoom(playerName.trim());
+            console.log('Room created, roomId:', roomId);
             if (roomId) {
                 setStep('okey-waiting');
             }
+        } catch (error) {
+            console.error('Error in handleCreateOkeyRoom:', error);
         } finally {
             setIsCreating(false);
         }
@@ -416,18 +424,16 @@ export const Lobby: React.FC<LobbyProps> = ({
                             return (
                                 <div
                                     key={index}
-                                    className={`p-4 rounded-xl border transition-all ${
-                                        isEmpty
+                                    className={`p-4 rounded-xl border transition-all ${isEmpty
                                             ? 'bg-slate-900/30 border-slate-800 border-dashed'
                                             : isCurrentUser
                                                 ? 'bg-amber-500/10 border-amber-500/50'
                                                 : 'bg-slate-800/50 border-slate-700'
-                                    }`}
+                                        }`}
                                 >
                                     <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-full ${
-                                            isEmpty ? 'bg-slate-800' : isCurrentUser ? 'bg-amber-500/20' : 'bg-slate-700'
-                                        }`}>
+                                        <div className={`p-2 rounded-full ${isEmpty ? 'bg-slate-800' : isCurrentUser ? 'bg-amber-500/20' : 'bg-slate-700'
+                                            }`}>
                                             {isEmpty ? (
                                                 <Bot size={18} className="text-slate-600" />
                                             ) : (
@@ -435,9 +441,8 @@ export const Lobby: React.FC<LobbyProps> = ({
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className={`font-bold truncate ${
-                                                isEmpty ? 'text-slate-600' : isCurrentUser ? 'text-amber-400' : 'text-white'
-                                            }`}>
+                                            <p className={`font-bold truncate ${isEmpty ? 'text-slate-600' : isCurrentUser ? 'text-amber-400' : 'text-white'
+                                                }`}>
                                                 {isEmpty ? 'Waiting...' : player.adPlayerName}
                                             </p>
                                             <p className="text-xs text-slate-500">
