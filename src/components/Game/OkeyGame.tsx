@@ -58,6 +58,11 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
                 onEndTie={endInTie}
                 onExit={onExit}
             />
+
+            <footer className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[10px] pt-10 flex flex-col items-center gap-1">
+                <span>Transparent Strategy Arena</span>
+                <span className="text-slate-700 text-[8px]">v0.1.0</span>
+            </footer>
         </div>
     );
 };

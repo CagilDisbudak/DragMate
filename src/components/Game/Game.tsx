@@ -341,8 +341,9 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                 </div>
             </div>
 
-            <footer className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[10px] pt-10">
-                Transparent Strategy Arena
+            <footer className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[10px] pt-10 flex flex-col items-center gap-1">
+                <span>Transparent Strategy Arena</span>
+                <span className="text-slate-700 text-[8px]">v1.2.0</span>
             </footer>
         </div>
     );
