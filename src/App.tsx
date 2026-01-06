@@ -1,43 +1,58 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Background } from './components/Background';
 import { Lobby } from './components/Lobby/Lobby';
 import { Game } from './components/Game/Game';
 import { useGameRoom } from './hooks/useGameRoom';
 import { useBackgammonGame } from './hooks/useBackgammonGame';
+import { useOkeyRoom } from './hooks/useOkeyRoom';
 
 import { BackgammonGame } from './components/Game/BackgammonGame';
 import { OkeyGame } from './components/Game/OkeyGame';
-import { useOkeyGame } from './hooks/useOkeyGame';
 
-type GameMode = 'menu' | 'local' | 'online';
+type GameMode = 'menu' | 'local' | 'online' | 'okey-lobby';
 type GameType = 'chess' | 'backgammon' | 'okey';
 
 function App() {
   const [gameMode, setGameMode] = useState<GameMode>('menu');
   const [selectedGame, setSelectedGame] = useState<GameType>('chess');
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
-  const [aiDifficulty, setAiDifficulty] = useState<'Easy' | 'Normal' | 'Hard'>('Normal'); // Default Normal
+  const [aiDifficulty, setAiDifficulty] = useState<'Easy' | 'Normal' | 'Hard'>('Normal');
+
   const chessRoom = useGameRoom(null);
   const backgammonRoom = useBackgammonGame(null);
-  const okeyRoom = useOkeyGame(null);
+  
+  // Okey room with roomId for real-time sync
+  const okeyRoomHook = useOkeyRoom(currentRoomId);
 
   // Use the appropriate hook's auth loading state
   const isAuthLoading =
     selectedGame === 'chess' ? chessRoom.isAuthLoading :
       selectedGame === 'backgammon' ? backgammonRoom.isAuthLoading :
-        okeyRoom.isAuthLoading;
+        okeyRoomHook.isAuthLoading;
+
+  // Watch for Okey game start
+  useEffect(() => {
+    if (okeyRoomHook.room?.phase === 'playing' && gameMode === 'okey-lobby') {
+      setGameMode('online');
+    }
+  }, [okeyRoomHook.room?.phase, gameMode]);
 
   const handleCreateRoom = async () => {
     try {
-      const id = selectedGame === 'chess'
-        ? await chessRoom.createRoom()
-        : selectedGame === 'backgammon'
-          ? await backgammonRoom.createRoom()
-          : await okeyRoom.createRoom();
-      if (id) {
-        setCurrentRoomId(id);
-        setGameMode('online');
+      if (selectedGame === 'chess') {
+        const id = await chessRoom.createRoom();
+        if (id) {
+          setCurrentRoomId(id);
+          setGameMode('online');
+        }
+      } else if (selectedGame === 'backgammon') {
+        const id = await backgammonRoom.createRoom();
+        if (id) {
+          setCurrentRoomId(id);
+          setGameMode('online');
+        }
       }
+      // Okey uses different flow (handleCreateOkeyRoom)
     } catch (error) {
       console.error('Failed to create room:', error);
     }
@@ -48,17 +63,53 @@ function App() {
       try {
         if (selectedGame === 'chess') {
           await chessRoom.joinRoom(id);
+          setCurrentRoomId(id);
+          setGameMode('online');
         } else if (selectedGame === 'backgammon') {
           await backgammonRoom.joinRoom(id);
-        } else {
-          await okeyRoom.joinRoom(id);
+          setCurrentRoomId(id);
+          setGameMode('online');
         }
-        setCurrentRoomId(id);
-        setGameMode('online');
+        // Okey uses different flow (handleJoinOkeyRoom)
       } catch (error) {
         console.error('Failed to join room:', error);
         alert('Room not found or could not join');
       }
+    }
+  };
+
+  // Okey specific handlers
+  const handleCreateOkeyRoom = async (playerName: string): Promise<string | null> => {
+    try {
+      const id = await okeyRoomHook.createRoom(playerName);
+      setCurrentRoomId(id);
+      setGameMode('okey-lobby');
+      return id;
+    } catch (error) {
+      console.error('Failed to create Okey room:', error);
+      return null;
+    }
+  };
+
+  const handleJoinOkeyRoom = async (roomId: string, playerName: string): Promise<boolean> => {
+    try {
+      const success = await okeyRoomHook.joinRoom(roomId, playerName);
+      if (success) {
+        setCurrentRoomId(roomId);
+        setGameMode('okey-lobby');
+      }
+      return success;
+    } catch (error) {
+      console.error('Failed to join Okey room:', error);
+      return false;
+    }
+  };
+
+  const handleStartOkeyGame = async () => {
+    try {
+      await okeyRoomHook.startGame();
+    } catch (error) {
+      console.error('Failed to start Okey game:', error);
     }
   };
 
@@ -72,18 +123,23 @@ function App() {
     setCurrentRoomId(null);
   };
 
-  const handleExitGame = () => {
+  const handleExitGame = async () => {
+    if (selectedGame === 'okey' && currentRoomId) {
+      await okeyRoomHook.leaveRoom();
+    }
     setCurrentRoomId(null);
     setGameMode('menu');
   };
+
+  // Determine if we should show lobby or game
+  const showLobby = gameMode === 'menu' || gameMode === 'okey-lobby';
 
   return (
     <main className="relative min-h-screen w-full flex flex-col items-center overflow-x-hidden">
       <Background />
 
       <div className="container mx-auto px-4 py-8 max-w-7xl w-full overflow-visible">
-        {gameMode !== 'menu' ? (
-
+        {!showLobby ? (
           selectedGame === 'chess' ? (
             <Game
               roomId={currentRoomId || ''}
@@ -113,6 +169,13 @@ function App() {
             onStartLocal={handleStartLocal}
             isAuthLoading={isAuthLoading}
             onSelectGame={handleSelectGame}
+            // Okey multiplayer props
+            selectedGame={selectedGame}
+            onCreateOkeyRoom={handleCreateOkeyRoom}
+            onJoinOkeyRoom={handleJoinOkeyRoom}
+            onStartOkeyGame={handleStartOkeyGame}
+            okeyRoom={okeyRoomHook.room}
+            okeyUserId={okeyRoomHook.userId}
           />
         )}
       </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, LogIn, Users, User, Trophy, ArrowLeft, Dices, LayoutGrid } from 'lucide-react';
+import { Plus, LogIn, Users, User, Trophy, ArrowLeft, Dices, LayoutGrid, Bot, Play, Copy, Check } from 'lucide-react';
 import { useGlobalActivePlayers } from '../../hooks/useGlobalActivePlayers';
+import type { OkeyRoom } from '../../hooks/useOkeyRoom';
 
 interface LobbyProps {
     onCreateRoom: () => void;
@@ -8,14 +9,37 @@ interface LobbyProps {
     onStartLocal: (difficulty: 'Easy' | 'Normal' | 'Hard') => void;
     isAuthLoading: boolean;
     onSelectGame: (game: 'chess' | 'backgammon' | 'okey') => void;
+    // Okey multiplayer props
+    selectedGame?: 'chess' | 'backgammon' | 'okey';
+    onCreateOkeyRoom?: (playerName: string) => Promise<string | null>;
+    onJoinOkeyRoom?: (roomId: string, playerName: string) => Promise<boolean>;
+    onStartOkeyGame?: () => void;
+    okeyRoom?: OkeyRoom | null;
+    okeyUserId?: string | null;
 }
 
-type LobbyStep = 'game-select' | 'mode-select' | 'difficulty-select' | 'connection';
+type LobbyStep = 'game-select' | 'mode-select' | 'difficulty-select' | 'connection' | 'okey-name' | 'okey-waiting';
 
-export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartLocal, isAuthLoading, onSelectGame }) => {
+export const Lobby: React.FC<LobbyProps> = ({
+    onCreateRoom,
+    onJoinRoom,
+    onStartLocal,
+    isAuthLoading,
+    onSelectGame,
+    selectedGame,
+    onCreateOkeyRoom,
+    onJoinOkeyRoom,
+    onStartOkeyGame,
+    okeyRoom,
+    okeyUserId
+}) => {
     const [step, setStep] = useState<LobbyStep>('game-select');
     const [roomIdInput, setRoomIdInput] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+    const [playerName, setPlayerName] = useState('');
+    const [isJoining, setIsJoining] = useState(false);
+    const [joinRoomId, setJoinRoomId] = useState('');
+    const [copied, setCopied] = useState(false);
     const { count: activeCount, loading: activeLoading, isSupported } = useGlobalActivePlayers();
 
     const handleCreate = async () => {
@@ -26,6 +50,42 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
             setIsCreating(false);
         }
     };
+
+    const handleCreateOkeyRoom = async () => {
+        if (!playerName.trim() || !onCreateOkeyRoom) return;
+        setIsCreating(true);
+        try {
+            const roomId = await onCreateOkeyRoom(playerName.trim());
+            if (roomId) {
+                setStep('okey-waiting');
+            }
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    const handleJoinOkeyRoom = async () => {
+        if (!playerName.trim() || !joinRoomId.trim() || !onJoinOkeyRoom) return;
+        setIsJoining(true);
+        try {
+            const success = await onJoinOkeyRoom(joinRoomId.trim().toUpperCase(), playerName.trim());
+            if (success) {
+                setStep('okey-waiting');
+            }
+        } finally {
+            setIsJoining(false);
+        }
+    };
+
+    const copyRoomId = () => {
+        if (okeyRoom?.roomId) {
+            navigator.clipboard.writeText(okeyRoom.roomId);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
+    const isOkeyHost = okeyRoom?.hostUserId === okeyUserId;
 
     const renderGameSelect = () => (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
@@ -161,7 +221,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
                 </button>
 
                 <button
-                    onClick={() => setStep('connection')}
+                    onClick={() => selectedGame === 'okey' ? setStep('okey-name') : setStep('connection')}
                     className="group flex flex-col items-center justify-center gap-4 p-8 bg-slate-800/50 rounded-2xl border border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800 transition-all"
                 >
                     <div className="p-4 rounded-full bg-indigo-500/10 text-indigo-400 group-hover:scale-110 transition-transform">
@@ -169,7 +229,7 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
                     </div>
                     <div className="text-center">
                         <div className="text-xl font-bold text-white">Multiplayer</div>
-                        <div className="text-sm text-slate-500 mt-1">Online PvP</div>
+                        <div className="text-sm text-slate-500 mt-1">{selectedGame === 'okey' ? '1-4 Players' : 'Online PvP'}</div>
                     </div>
                 </button>
             </div>
@@ -228,6 +288,196 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
         </div>
     );
 
+    // Okey specific screens
+    const renderOkeyNameInput = () => (
+        <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+            <div className="flex items-center gap-4 mb-2">
+                <button
+                    onClick={() => setStep('mode-select')}
+                    className="p-2 -ml-2 text-slate-500 hover:text-white transition-colors"
+                >
+                    <ArrowLeft size={20} />
+                </button>
+                <h2 className="text-2xl font-bold text-white">Okey Multiplayer</h2>
+            </div>
+
+            <div className="space-y-6">
+                {/* Name input */}
+                <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-400">Your Name</label>
+                    <input
+                        type="text"
+                        placeholder="Enter your name..."
+                        value={playerName}
+                        onChange={(e) => setPlayerName(e.target.value)}
+                        maxLength={20}
+                        className="w-full bg-slate-900/40 border border-slate-800/50 rounded-xl px-4 py-4 text-lg placeholder:text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition-all"
+                    />
+                </div>
+
+                {/* Create room button */}
+                <button
+                    onClick={handleCreateOkeyRoom}
+                    disabled={!playerName.trim() || isCreating || isAuthLoading}
+                    className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold flex items-center justify-center gap-3 text-lg py-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-500/20"
+                >
+                    {isCreating ? (
+                        <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    ) : (
+                        <Plus size={24} />
+                    )}
+                    <span>{isCreating ? 'Creating Room...' : 'Create New Room'}</span>
+                </button>
+
+                <div className="relative flex items-center gap-6">
+                    <div className="flex-1 h-px bg-slate-800"></div>
+                    <span className="text-slate-600 text-xs font-black uppercase tracking-[0.2em]">OR JOIN</span>
+                    <div className="flex-1 h-px bg-slate-800"></div>
+                </div>
+
+                {/* Join room */}
+                <div className="flex gap-3">
+                    <input
+                        type="text"
+                        placeholder="Room ID"
+                        value={joinRoomId}
+                        onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
+                        maxLength={10}
+                        className="flex-1 bg-slate-900/40 border border-slate-800/50 rounded-xl px-4 py-4 text-lg placeholder:text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition-all uppercase"
+                    />
+                    <button
+                        onClick={handleJoinOkeyRoom}
+                        disabled={!playerName.trim() || !joinRoomId.trim() || isJoining || isAuthLoading}
+                        className="bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-50 px-6 rounded-xl transition-all font-bold shadow-lg"
+                    >
+                        {isJoining ? (
+                            <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                        ) : (
+                            <LogIn size={24} />
+                        )}
+                    </button>
+                </div>
+
+                <p className="text-xs text-slate-600 text-center">
+                    Create a room and share the ID with friends. Empty slots will be filled with AI.
+                </p>
+            </div>
+        </div>
+    );
+
+    const renderOkeyWaitingRoom = () => {
+        if (!okeyRoom) {
+            return (
+                <div className="flex items-center justify-center py-20">
+                    <div className="w-8 h-8 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+                </div>
+            );
+        }
+
+        const playerCount = okeyRoom.players.filter(p => p.odaUserId && !p.adIsAI).length;
+
+        return (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+                <div className="flex items-center gap-4 mb-2">
+                    <button
+                        onClick={() => setStep('okey-name')}
+                        className="p-2 -ml-2 text-slate-500 hover:text-white transition-colors"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                    <h2 className="text-2xl font-bold text-white">Waiting Room</h2>
+                </div>
+
+                {/* Room ID display */}
+                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs text-slate-500 uppercase tracking-wider font-bold">Room ID</p>
+                            <p className="text-2xl font-black text-amber-400 tracking-widest">{okeyRoom.roomId}</p>
+                        </div>
+                        <button
+                            onClick={copyRoomId}
+                            className="p-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors"
+                        >
+                            {copied ? <Check size={20} className="text-green-400" /> : <Copy size={20} className="text-slate-400" />}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Players list */}
+                <div className="space-y-3">
+                    <p className="text-sm font-medium text-slate-400">Players ({playerCount}/4)</p>
+                    <div className="grid grid-cols-2 gap-3">
+                        {okeyRoom.players.map((player, index) => {
+                            const isCurrentUser = player.odaUserId === okeyUserId;
+                            const isEmpty = !player.odaUserId;
+                            const isHost = player.odaUserId === okeyRoom.hostUserId;
+
+                            return (
+                                <div
+                                    key={index}
+                                    className={`p-4 rounded-xl border transition-all ${
+                                        isEmpty
+                                            ? 'bg-slate-900/30 border-slate-800 border-dashed'
+                                            : isCurrentUser
+                                                ? 'bg-amber-500/10 border-amber-500/50'
+                                                : 'bg-slate-800/50 border-slate-700'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-full ${
+                                            isEmpty ? 'bg-slate-800' : isCurrentUser ? 'bg-amber-500/20' : 'bg-slate-700'
+                                        }`}>
+                                            {isEmpty ? (
+                                                <Bot size={18} className="text-slate-600" />
+                                            ) : (
+                                                <User size={18} className={isCurrentUser ? 'text-amber-400' : 'text-slate-400'} />
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`font-bold truncate ${
+                                                isEmpty ? 'text-slate-600' : isCurrentUser ? 'text-amber-400' : 'text-white'
+                                            }`}>
+                                                {isEmpty ? 'Waiting...' : player.adPlayerName}
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                                {isHost ? '👑 Host' : isEmpty ? 'Will be AI' : `Seat ${index + 1}`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Start game button (host only) */}
+                {isOkeyHost && (
+                    <button
+                        onClick={onStartOkeyGame}
+                        className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold flex items-center justify-center gap-3 text-lg py-4 rounded-xl transition-all shadow-lg shadow-green-500/20"
+                    >
+                        <Play size={24} />
+                        <span>Start Game</span>
+                    </button>
+                )}
+
+                {!isOkeyHost && (
+                    <div className="text-center py-4">
+                        <div className="flex items-center justify-center gap-2 text-slate-500">
+                            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                            <span className="text-sm">Waiting for host to start...</span>
+                        </div>
+                    </div>
+                )}
+
+                <p className="text-xs text-slate-600 text-center">
+                    Share the Room ID with friends. Empty seats will be filled with AI players.
+                </p>
+            </div>
+        );
+    };
+
     return (
         <div className="flex flex-col items-center justify-center min-h-[85vh] gap-8 lg:gap-12 relative overflow-hidden px-4">
             <div className="text-center space-y-4 lg:space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
@@ -241,6 +491,8 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
                 {step === 'mode-select' && renderModeSelect()}
                 {step === 'difficulty-select' && renderDifficultySelect()}
                 {step === 'connection' && renderConnection()}
+                {step === 'okey-name' && renderOkeyNameInput()}
+                {step === 'okey-waiting' && renderOkeyWaitingRoom()}
             </div>
 
             <div className="flex items-center gap-10 text-slate-600 font-bold uppercase tracking-widest text-[10px] animate-in fade-in duration-1000 delay-500">

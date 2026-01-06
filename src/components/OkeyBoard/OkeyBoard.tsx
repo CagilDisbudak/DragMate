@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { OkeyGameState } from '../../logic/okeyLogic';
 import { PlayerRack } from './PlayerRack';
 import { OkeyTile } from './OkeyTile';
+import { Bot, User } from 'lucide-react';
 import {
     DndContext,
     closestCenter,
@@ -16,12 +17,19 @@ import {
 import type { DragEndEvent } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 
-const PLAYER_INFO = [
-    { name: 'Siz', color: 'from-blue-400 to-indigo-600', avatar: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Felix&backgroundColor=b6e3f4' },
-    { name: 'Esat', color: 'from-emerald-400 to-teal-600', avatar: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Cuddles&backgroundColor=c0aede' },
-    { name: 'Zeynep', color: 'from-amber-400 to-orange-600', avatar: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Shadow&backgroundColor=ffdfbf' },
-    { name: 'Emirhan', color: 'from-rose-400 to-pink-600', avatar: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Fluffy&backgroundColor=ffd5dc' },
+// Default player info for local mode
+const DEFAULT_PLAYER_INFO = [
+    { name: 'Siz', isAI: false, isYou: true },
+    { name: 'Bot 1', isAI: true, isYou: false },
+    { name: 'Bot 2', isAI: true, isYou: false },
+    { name: 'Bot 3', isAI: true, isYou: false },
 ];
+
+interface PlayerInfo {
+    name: string;
+    isAI: boolean;
+    isYou: boolean;
+}
 
 interface OkeyBoardProps {
     gameState: OkeyGameState | null;
@@ -35,11 +43,30 @@ interface OkeyBoardProps {
     onReshuffle: () => void;
     onEndTie: () => void;
     onExit: () => void;
+    // Multiplayer props
+    playerInfo?: PlayerInfo[];
+    mySlot?: number;
+    isOnline?: boolean;
 }
 
-const PlayerPanel = ({ playerId, currentTurn, className = '', isDragging = false }: { playerId: number, currentTurn: number, className?: string, isDragging?: boolean }) => {
+interface PlayerPanelProps {
+    playerId: number;
+    currentTurn: number;
+    className?: string;
+    isDragging?: boolean;
+    playerInfo: PlayerInfo;
+    tileCount?: number;
+}
+
+const PlayerPanel: React.FC<PlayerPanelProps> = ({ 
+    playerId, 
+    currentTurn, 
+    className = '', 
+    isDragging = false, 
+    playerInfo,
+    tileCount = 14
+}) => {
     const isActive = currentTurn === playerId;
-    const info = PLAYER_INFO[playerId];
 
     return (
         <div className={`transition-all duration-300 ${isActive && !isDragging ? 'scale-110' : 'opacity-90'} ${className}`}>
@@ -47,13 +74,29 @@ const PlayerPanel = ({ playerId, currentTurn, className = '', isDragging = false
                 relative flex items-center min-w-[160px] h-9 px-4 bg-[#ede0d4] rounded-sm border-2 shadow-xl transition-all
                 ${isActive ? (isDragging ? 'border-green-500 bg-white shadow-green-500/20' : 'border-green-500 bg-white ring-8 ring-green-500/20') : 'border-[#8d5b3e]'}
             `}>
+                {/* Player icon */}
+                <div className={`mr-2 ${isActive ? 'text-green-600' : 'text-[#8d5b3e]'}`}>
+                    {playerInfo.isAI ? (
+                        <Bot size={14} />
+                    ) : playerInfo.isYou ? (
+                        <User size={14} className="text-amber-600" />
+                    ) : (
+                        <User size={14} />
+                    )}
+                </div>
+                
                 <div className={`flex-1 font-bold text-xs text-center uppercase tracking-tight ${isActive ? 'text-green-700' : 'text-[#3d251e]'}`}>
                     {isActive && <span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2 animate-ping" />}
-                    {info.name}
+                    {playerInfo.name}
+                    {playerInfo.isYou && !playerInfo.isAI && (
+                        <span className="ml-1 text-[9px] text-amber-600">(Sen)</span>
+                    )}
                 </div>
+                
                 {playerId !== 0 && (
-                    <div className={`absolute -bottom-5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-white text-[9px] font-bold shadow-md ${isActive ? 'bg-green-600' : 'bg-[#3d251e]'}`}>
-                        TAŞ: 14
+                    <div className={`absolute -bottom-5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-white text-[9px] font-bold shadow-md flex items-center gap-1 ${isActive ? 'bg-green-600' : 'bg-[#3d251e]'}`}>
+                        {playerInfo.isAI && <Bot size={10} />}
+                        TAŞ: {tileCount}
                     </div>
                 )}
             </div>
@@ -61,9 +104,11 @@ const PlayerPanel = ({ playerId, currentTurn, className = '', isDragging = false
     );
 };
 
-const DiscardZone = ({ playerId, position, discardPiles, currentTurn, userTileCount, onDrawDiscard, isDraggingRackTile }: any) => {
-    const canDropHere = (playerId === 0 && currentTurn === 0 && userTileCount === 15 && isDraggingRackTile);
-    const canDrawHere = (playerId === 3 && currentTurn === 0 && userTileCount === 14);
+const DiscardZone = ({ playerId, position, discardPiles, currentTurn, userTileCount, onDrawDiscard, isDraggingRackTile, mySlot = 0 }: any) => {
+    // Adjust logic for multiplayer - "user" is whoever's turn it is at mySlot
+    const canDropHere = (playerId === mySlot && currentTurn === mySlot && userTileCount === 15 && isDraggingRackTile);
+    const prevPlayerIdx = (mySlot + 3) % 4;
+    const canDrawHere = (playerId === prevPlayerIdx && currentTurn === mySlot && userTileCount === 14);
 
     const { setNodeRef, isOver } = useDroppable({
         id: `discard-${playerId}`,
@@ -123,8 +168,8 @@ const DiscardZone = ({ playerId, position, discardPiles, currentTurn, userTileCo
     );
 };
 
-const DraggableDrawPile = ({ currentTurn, userTileCount, centerStackCount, onDraw }: any) => {
-    const canDraw = currentTurn === 0 && userTileCount < 15;
+const DraggableDrawPile = ({ currentTurn, userTileCount, centerStackCount, onDraw, mySlot = 0 }: any) => {
+    const canDraw = currentTurn === mySlot && userTileCount < 15;
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: 'draw-pile',
         disabled: !canDraw
@@ -175,7 +220,22 @@ const FinishZone = ({ isDraggingRackTile, canFinish }: { isDraggingRackTile: boo
     );
 };
 
-export const OkeyBoard: React.FC<OkeyBoardProps> = ({ gameState, onDraw, onDrawDiscard, onMoveTile, onDiscard, onAutoSort, onFinish, onReset, onReshuffle, onEndTie, onExit }) => {
+export const OkeyBoard: React.FC<OkeyBoardProps> = ({ 
+    gameState, 
+    onDraw, 
+    onDrawDiscard, 
+    onMoveTile, 
+    onDiscard, 
+    onAutoSort, 
+    onFinish, 
+    onReset, 
+    onReshuffle, 
+    onEndTie, 
+    onExit,
+    playerInfo = DEFAULT_PLAYER_INFO,
+    mySlot = 0,
+    isOnline = false
+}) => {
     const [activeId, setActiveId] = useState<string | null>(null);
 
     const sensors = useSensors(
@@ -194,13 +254,14 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({ gameState, onDraw, onDrawD
         const draggingId = active.id as string;
         const dropId = over.id as string;
 
-        if (dropId === 'discard-0' && draggingId.startsWith('slot-')) {
+        // Adjust for mySlot in multiplayer
+        if (dropId === `discard-${mySlot}` && draggingId.startsWith('slot-')) {
             onDiscard(parseInt(draggingId.split('-')[1]));
         } else if (dropId === 'finish-zone' && draggingId.startsWith('slot-')) {
             onFinish(parseInt(draggingId.split('-')[1]));
         } else if (draggingId === 'draw-pile' && dropId.startsWith('slot-')) {
             onDraw(parseInt(dropId.split('-')[1]));
-        } else if (draggingId === 'pick-discard-3' && dropId.startsWith('slot-')) {
+        } else if (draggingId.startsWith('pick-discard-') && dropId.startsWith('slot-')) {
             onDrawDiscard(parseInt(dropId.split('-')[1]));
         } else if (draggingId !== dropId && draggingId.startsWith('slot-') && dropId.startsWith('slot-')) {
             onMoveTile(parseInt(draggingId.split('-')[1]), parseInt(dropId.split('-')[1]));
@@ -210,57 +271,125 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({ gameState, onDraw, onDrawD
     const renderDragOverlay = () => {
         if (!activeId) return null;
         if (activeId === 'draw-pile') return <div className="w-16 h-20 bg-white rounded shadow-2xl opacity-80" />;
-        if (activeId === 'pick-discard-3') {
-            const lastTile = gameState.discardPiles[3][gameState.discardPiles[3].length - 1];
+        if (activeId.startsWith('pick-discard-')) {
+            const prevPlayerIdx = (mySlot + 3) % 4;
+            const lastTile = gameState.discardPiles[prevPlayerIdx][gameState.discardPiles[prevPlayerIdx].length - 1];
             return lastTile ? <OkeyTile tile={lastTile} size="sm" okeyTile={gameState.okeyTile} /> : null;
         }
         if (activeId.startsWith('slot-')) {
-            const tile = gameState.players[0].tiles[parseInt(activeId.split('-')[1])];
+            const tile = gameState.players[mySlot].tiles[parseInt(activeId.split('-')[1])];
             return tile ? <OkeyTile tile={tile} okeyTile={gameState.okeyTile} /> : null;
         }
         return null;
     };
 
-    const userTileCount = gameState.players[0].tiles.filter(t => t !== null).length;
+    // Get tile counts for each player
+    const getTileCount = (playerIdx: number) => {
+        return gameState.players[playerIdx].tiles.filter(t => t !== null).length;
+    };
+
+    // Map display positions based on mySlot
+    // In multiplayer, the current user (mySlot) should always appear at the bottom
+    const getActualSlot = (displayPosition: number): number => {
+        return (displayPosition + mySlot) % 4;
+    };
+
+    const userTileCount = getTileCount(mySlot);
+
+    // Get player info in display order
+    const getPlayerInfoForDisplay = (displayPos: number) => {
+        const actualSlot = getActualSlot(displayPos);
+        return playerInfo[actualSlot] || DEFAULT_PLAYER_INFO[actualSlot];
+    };
 
     return (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="relative w-full aspect-[16/10] bg-[#357a38] overflow-hidden mx-auto font-sans shadow-2xl rounded-lg border-x-[12px] border-y-[6px] border-[#3d251e]">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-30 pointer-events-none" />
 
-                <PlayerPanel playerId={2} currentTurn={gameState.currentTurn} isDragging={!!activeId} className="absolute top-4 left-1/2 -translate-x-1/2 z-30" />
-                <PlayerPanel playerId={3} currentTurn={gameState.currentTurn} isDragging={!!activeId} className="absolute left-4 top-1/2 -translate-y-1/2 -rotate-90 origin-center z-30" />
-                <PlayerPanel playerId={1} currentTurn={gameState.currentTurn} isDragging={!!activeId} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 origin-center z-30" />
+                {/* Top player (display position 2) */}
+                <PlayerPanel 
+                    playerId={getActualSlot(2)} 
+                    currentTurn={gameState.currentTurn} 
+                    isDragging={!!activeId} 
+                    className="absolute top-4 left-1/2 -translate-x-1/2 z-30"
+                    playerInfo={getPlayerInfoForDisplay(2)}
+                    tileCount={getTileCount(getActualSlot(2))}
+                />
+                
+                {/* Left player (display position 3) */}
+                <PlayerPanel 
+                    playerId={getActualSlot(3)} 
+                    currentTurn={gameState.currentTurn} 
+                    isDragging={!!activeId} 
+                    className="absolute left-4 top-1/2 -translate-y-1/2 -rotate-90 origin-center z-30"
+                    playerInfo={getPlayerInfoForDisplay(3)}
+                    tileCount={getTileCount(getActualSlot(3))}
+                />
+                
+                {/* Right player (display position 1) */}
+                <PlayerPanel 
+                    playerId={getActualSlot(1)} 
+                    currentTurn={gameState.currentTurn} 
+                    isDragging={!!activeId} 
+                    className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 origin-center z-30"
+                    playerInfo={getPlayerInfoForDisplay(1)}
+                    tileCount={getTileCount(getActualSlot(1))}
+                />
 
-                <DiscardZone playerId={2} position="top" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} />
-                <DiscardZone playerId={3} position="left" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} />
-                <DiscardZone playerId={1} position="right" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} />
-                <DiscardZone playerId={0} position="bottom" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} />
+                {/* Discard zones */}
+                <DiscardZone playerId={getActualSlot(2)} position="top" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
+                <DiscardZone playerId={getActualSlot(3)} position="left" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
+                <DiscardZone playerId={getActualSlot(1)} position="right" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
+                <DiscardZone playerId={mySlot} position="bottom" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
 
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-12">
                     <div className="relative">
                         <OkeyTile tile={gameState.indicatorTile!} size="md" okeyTile={gameState.okeyTile} />
-                        <FinishZone isDraggingRackTile={activeId?.startsWith('slot-') || false} canFinish={gameState.currentTurn === 0 && userTileCount === 15} />
+                        <FinishZone isDraggingRackTile={activeId?.startsWith('slot-') || false} canFinish={gameState.currentTurn === mySlot && userTileCount === 15} />
                     </div>
-                    <DraggableDrawPile {...gameState} userTileCount={userTileCount} centerStackCount={gameState.centerStack.length} onDraw={onDraw} />
+                    <DraggableDrawPile {...gameState} userTileCount={userTileCount} centerStackCount={gameState.centerStack.length} onDraw={onDraw} mySlot={mySlot} />
                 </div>
 
                 <div className="absolute bottom-0 left-0 right-0 z-40 p-2 flex flex-col items-center gap-3">
                     <div className="flex items-center gap-6">
-                        <PlayerPanel playerId={0} currentTurn={gameState.currentTurn} isDragging={!!activeId} />
+                        <PlayerPanel 
+                            playerId={mySlot} 
+                            currentTurn={gameState.currentTurn} 
+                            isDragging={!!activeId}
+                            playerInfo={playerInfo[mySlot] || DEFAULT_PLAYER_INFO[0]}
+                        />
                         <button onClick={onAutoSort} className="px-8 py-2 bg-[#ede0d4] text-[#3d251e] border-2 border-[#8d5b3e] rounded shadow-lg text-[11px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95">Düzenle</button>
                     </div>
-                    <PlayerRack tiles={gameState.players[0].tiles} playerId={0} isCurrentPlayer okeyTile={gameState.okeyTile} />
+                    <PlayerRack tiles={gameState.players[mySlot].tiles} playerId={mySlot} isCurrentPlayer okeyTile={gameState.okeyTile} />
                 </div>
+
+                {/* Turn indicator for online mode when it's not your turn */}
+                {isOnline && gameState.currentTurn !== mySlot && (
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
+                        <div className="bg-black/60 backdrop-blur-sm px-6 py-3 rounded-xl">
+                            <p className="text-white text-sm font-bold flex items-center gap-2">
+                                <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                                {playerInfo[gameState.currentTurn]?.name || `Player ${gameState.currentTurn + 1}`}'in sırası...
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {gameState.phase === 'roundOver' && (
                     <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
                         <div className="bg-[#ede0d4] p-10 rounded-2xl shadow-2xl flex flex-col items-center gap-6 text-[#3d251e]">
                             <h2 className="text-4xl font-black uppercase">
-                                {gameState.winner === null ? 'DOSTLUK KAZANDI' : (gameState.winner === 0 ? 'TEBRİKLER!' : 'OYUN BİTTİ')}
+                                {gameState.winner === null ? 'DOSTLUK KAZANDI' : (gameState.winner === mySlot ? 'TEBRİKLER!' : 'OYUN BİTTİ')}
                             </h2>
                             <p className="text-xl font-bold">
-                                {gameState.winner === null ? 'Berabere! Taşlar bitti.' : (gameState.winner === 0 ? 'Kazandınız!' : `${PLAYER_INFO[gameState.winner!].name} Kazandı!`)}
+                                {gameState.winner === null 
+                                    ? 'Berabere! Taşlar bitti.' 
+                                    : (gameState.winner === mySlot 
+                                        ? 'Kazandınız!' 
+                                        : `${playerInfo[gameState.winner]?.name || `Player ${gameState.winner + 1}`} Kazandı!`
+                                    )
+                                }
                             </p>
                             <div className="flex gap-4">
                                 <button onClick={onReset} className="px-10 py-4 bg-emerald-600 text-white font-black rounded-xl">Tekrar Oyna</button>
