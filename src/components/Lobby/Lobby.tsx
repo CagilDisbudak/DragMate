@@ -231,9 +231,6 @@ export const Lobby: React.FC<LobbyProps> = ({ onCreateRoom, onJoinRoom, onStartL
     return (
         <div className="flex flex-col items-center justify-center min-h-[85vh] gap-8 lg:gap-12 relative overflow-hidden px-4">
             <div className="text-center space-y-4 lg:space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                <div className="inline-flex items-center px-3 sm:px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs sm:text-sm font-semibold tracking-wide">
-                    PREMIUM MULTIPLAYER CHESS
-                </div>
                 <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-8xl font-black tracking-normal pb-4 bg-clip-text text-transparent bg-linear-to-b from-white via-indigo-100 to-indigo-400">
                     DragMate
                 </h1>
