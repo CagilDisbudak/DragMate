@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { useOkeyGame } from '../../hooks/useOkeyGame';
 import { useOkeyRoom } from '../../hooks/useOkeyRoom';
 import type { OkeyRoom, DiscardPilesMap } from '../../hooks/useOkeyRoom';
@@ -21,7 +21,7 @@ const discardPilesToArray = (map: DiscardPilesMap): any[][] => [
     map.pile3 || []
 ];
 
-// Convert OkeyRoom to OkeyGameState for the board
+// Convert OkeyRoom to OkeyGameState for the board - memoized
 const roomToGameState = (room: OkeyRoom): OkeyGameState => {
     return {
         phase: room.phase === 'waiting' ? 'dealing' : room.phase as any,
@@ -48,10 +48,12 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
     const mySlot = roomHook.getMySlot();
     const isHost = roomHook.isHost();
 
-    // Get game state - either from local or room
-    const gameState: OkeyGameState | null = isOnline 
-        ? (room ? roomToGameState(room) : null)
-        : localGame.gameState;
+    // Get game state - either from local or room - memoized
+    const gameState: OkeyGameState | null = useMemo(() => {
+        return isOnline 
+            ? (room ? roomToGameState(room) : null)
+            : localGame.gameState;
+    }, [isOnline, room, localGame.gameState]);
 
     // AI turn handler for online mode
     const handleAITurn = useCallback(async () => {
@@ -187,8 +189,8 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
         }
     }, [isOnline, roomHook, localGame]);
 
-    // Get player info for display
-    const getPlayerInfo = (index: number) => {
+    // Get player info for display - memoized
+    const getPlayerInfo = useCallback((index: number) => {
         if (isOnline && room) {
             const player = room.players[index];
             return {
@@ -204,7 +206,7 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
             isAI: index !== 0,
             isYou: index === 0
         };
-    };
+    }, [isOnline, room, roomHook.userId]);
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[85vh] fade-in animate-in duration-700">
@@ -266,8 +268,11 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
                 onReshuffle={handleReshuffle}
                 onEndTie={handleEndTie}
                 onExit={onExit}
-                // Pass multiplayer info
-                playerInfo={isOnline && room ? room.players.map((_, i) => getPlayerInfo(i)) : undefined}
+                // Pass multiplayer info - memoized
+                playerInfo={useMemo(() => 
+                    isOnline && room ? room.players.map((_, i) => getPlayerInfo(i)) : undefined,
+                    [isOnline, room, getPlayerInfo]
+                )}
                 mySlot={isOnline ? mySlot : 0}
             />
 

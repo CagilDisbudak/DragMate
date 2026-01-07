@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
     collection,
     doc,
@@ -14,7 +14,7 @@ import {
     RACK_SIZE,
     isWinningHand
 } from '../logic/okeyLogic';
-import type { OkeyTile } from '../logic/okeyLogic';
+import type { OkeyTile, OkeyColor } from '../logic/okeyLogic';
 
 // ============ TYPES ============
 
@@ -68,6 +68,10 @@ export const useOkeyRoom = (roomId: string | null) => {
     const [loading, setLoading] = useState(true);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    
+    // Debounce refs for tile moves
+    const moveTileDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingMoveState = useRef<{ players: OkeyPlayer[] } | null>(null);
 
     // Firebase auth: anonymous sign-in
     useEffect(() => {
@@ -128,20 +132,34 @@ export const useOkeyRoom = (roomId: string | null) => {
             }
         );
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            // Cleanup debounce timer on unmount
+            if (moveTileDebounceTimer.current) {
+                clearTimeout(moveTileDebounceTimer.current);
+            }
+        };
     }, [roomId]);
 
-    // Get current player's slot index
-    const getMySlot = useCallback((): number => {
+    // Get current player's slot index - memoized
+    const mySlotMemo = useMemo((): number => {
         if (!room || !userId) return -1;
         return room.players.findIndex(p => p.odaUserId === userId);
-    }, [room, userId]);
+    }, [room?.players, userId]);
 
-    // Check if current user is the host
-    const isHost = useCallback((): boolean => {
+    const getMySlot = useCallback((): number => {
+        return mySlotMemo;
+    }, [mySlotMemo]);
+
+    // Check if current user is the host - memoized
+    const isHostMemo = useMemo((): boolean => {
         if (!room || !userId) return false;
         return room.hostUserId === userId;
-    }, [room, userId]);
+    }, [room?.hostUserId, userId]);
+
+    const isHost = useCallback((): boolean => {
+        return isHostMemo;
+    }, [isHostMemo]);
 
     // Create a new room
     const createRoom = async (playerName: string): Promise<string> => {
@@ -350,8 +368,8 @@ export const useOkeyRoom = (roomId: string | null) => {
         }
     };
 
-    // Draw from center stack
-    const drawFromCenter = async (targetSlot?: number) => {
+    // Draw from center stack - optimized with useCallback
+    const drawFromCenter = useCallback(async (targetSlot?: number) => {
         if (!firebaseEnabled || !db || !roomId) return;
 
         const mySlot = getMySlot();
@@ -424,10 +442,10 @@ export const useOkeyRoom = (roomId: string | null) => {
             console.error('Error drawing from center:', error);
             setError('Failed to draw tile');
         }
-    };
+    }, [firebaseEnabled, db, roomId, getMySlot]);
 
-    // Draw from discard pile
-    const drawFromDiscard = async (targetSlot?: number) => {
+    // Draw from discard pile - optimized with useCallback
+    const drawFromDiscard = useCallback(async (targetSlot?: number) => {
         if (!firebaseEnabled || !db || !roomId) return;
 
         const mySlot = getMySlot();
@@ -503,10 +521,10 @@ export const useOkeyRoom = (roomId: string | null) => {
             console.error('Error drawing from discard:', error);
             setError('Failed to draw from discard');
         }
-    };
+    }, [firebaseEnabled, db, roomId, getMySlot]);
 
-    // Discard a tile
-    const discardTile = async (index: number) => {
+    // Discard a tile - optimized with useCallback
+    const discardTile = useCallback(async (index: number) => {
         if (!firebaseEnabled || !db || !roomId) return;
 
         const mySlot = getMySlot();
@@ -559,10 +577,10 @@ export const useOkeyRoom = (roomId: string | null) => {
             console.error('Error discarding tile:', error);
             setError('Failed to discard tile');
         }
-    };
+    }, [firebaseEnabled, db, roomId, getMySlot]);
 
-    // Move tile within rack - optimized for speed (no transaction needed for self-rearrangement)
-    const moveTileInRack = async (fromIndex: number, toIndex: number) => {
+    // Move tile within rack - optimized with debouncing for rapid drag operations
+    const moveTileInRack = useCallback(async (fromIndex: number, toIndex: number) => {
         if (!firebaseEnabled || !db || !roomId || !room) return;
 
         const mySlot = getMySlot();
@@ -578,12 +596,25 @@ export const useOkeyRoom = (roomId: string | null) => {
 
         newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: newRack };
 
-        // Fire-and-forget update to Firebase (no await for faster response)
-        const roomRef = doc(collection(db, 'okeyRooms'), roomId);
-        updateDoc(roomRef, { players: newPlayers }).catch(err => {
-            console.error('Error syncing tile move:', err);
-        });
-    };
+        // Store pending state
+        pendingMoveState.current = { players: newPlayers };
+
+        // Clear existing timer
+        if (moveTileDebounceTimer.current) {
+            clearTimeout(moveTileDebounceTimer.current);
+        }
+
+        // Debounce Firebase update (100ms)
+        moveTileDebounceTimer.current = setTimeout(() => {
+            if (pendingMoveState.current && db) {
+                const roomRef = doc(collection(db, 'okeyRooms'), roomId);
+                updateDoc(roomRef, { players: pendingMoveState.current.players }).catch(err => {
+                    console.error('Error syncing tile move:', err);
+                });
+                pendingMoveState.current = null;
+            }
+        }, 100);
+    }, [firebaseEnabled, db, roomId, room, getMySlot]);
 
     // Reset game
     const resetGame = async () => {
@@ -622,8 +653,8 @@ export const useOkeyRoom = (roomId: string | null) => {
         await updateGameState({ phase: 'roundOver', winner: null });
     };
 
-    // Auto sort tiles for the current player - optimized (no transaction needed)
-    const autoSortTiles = async () => {
+    // Auto sort tiles for the current player - SMART PER SORTING
+    const autoSortTiles = useCallback(async () => {
         if (!firebaseEnabled || !db || !roomId || !room) return;
 
         const mySlot = getMySlot();
@@ -638,75 +669,138 @@ export const useOkeyRoom = (roomId: string | null) => {
 
         // Separate jokers and normal tiles
         const jokers = nonNullTiles.filter(t => t.isFakeOkey || !t.color);
-        const normalTiles = nonNullTiles.filter(t => !t.isFakeOkey && t.color);
+        let remainingTiles = nonNullTiles.filter(t => !t.isFakeOkey && t.color);
 
-        // Group tiles by color
-        const colorOrder = ['red', 'blue', 'black', 'yellow'];
-        const colorGroups: { [key: string]: OkeyTile[] } = {
-            red: [],
-            blue: [],
-            black: [],
-            yellow: []
-        };
+        const completedPers: OkeyTile[][] = [];
 
-        normalTiles.forEach(tile => {
-            if (tile.color) {
-                colorGroups[tile.color].push(tile);
+        // ===== STEP 1: Find GROUPS (same value, different colors) =====
+        const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
+        
+        for (let value = 1; value <= 13; value++) {
+            const tilesWithValue = remainingTiles.filter(t => t.value === value);
+            const uniqueColors = new Set(tilesWithValue.map(t => t.color));
+            
+            // If we have 3 or 4 different colors, it's a valid group
+            if (uniqueColors.size >= 3) {
+                const group: OkeyTile[] = [];
+                const usedColors = new Set<string>();
+                
+                // Pick one tile from each color (in order)
+                for (const color of colorOrder) {
+                    if (uniqueColors.has(color) && !usedColors.has(color)) {
+                        const tile = tilesWithValue.find(t => t.color === color && !group.includes(t));
+                        if (tile) {
+                            group.push(tile);
+                            usedColors.add(color);
+                        }
+                    }
+                }
+                
+                if (group.length >= 3) {
+                    completedPers.push(group);
+                    // Remove used tiles from remaining
+                    const usedIds = new Set(group.map(t => t.id));
+                    remainingTiles = remainingTiles.filter(t => !usedIds.has(t.id));
+                }
             }
-        });
+        }
 
-        // Sort each color group by value
-        colorOrder.forEach(color => {
-            colorGroups[color].sort((a, b) => a.value - b.value);
-        });
+        // ===== STEP 2: Find RUNS (same color, consecutive values) =====
+        for (const color of colorOrder) {
+            let colorTiles = remainingTiles.filter(t => t.color === color);
+            colorTiles.sort((a, b) => a.value - b.value);
+            
+            while (colorTiles.length >= 3) {
+                // Try to find the longest run starting from each tile
+                let bestRun: OkeyTile[] = [];
+                
+                for (let startIdx = 0; startIdx < colorTiles.length; startIdx++) {
+                    const run: OkeyTile[] = [colorTiles[startIdx]];
+                    let expectedValue = colorTiles[startIdx].value + 1;
+                    
+                    for (let j = startIdx + 1; j < colorTiles.length && expectedValue <= 13; j++) {
+                        if (colorTiles[j].value === expectedValue) {
+                            run.push(colorTiles[j]);
+                            expectedValue++;
+                        } else if (colorTiles[j].value > expectedValue) {
+                            break;
+                        }
+                    }
+                    
+                    if (run.length >= 3 && run.length > bestRun.length) {
+                        bestRun = run;
+                    }
+                }
+                
+                if (bestRun.length >= 3) {
+                    completedPers.push(bestRun);
+                    // Remove used tiles
+                    const usedIds = new Set(bestRun.map(t => t.id));
+                    remainingTiles = remainingTiles.filter(t => !usedIds.has(t.id));
+                    colorTiles = colorTiles.filter(t => !usedIds.has(t.id));
+                } else {
+                    break;
+                }
+            }
+        }
 
-        // Create new rack with 30 slots (2 rows of 15)
+        // ===== STEP 3: Place tiles in rack =====
         const sortedRack: (OkeyTile | null)[] = new Array(30).fill(null);
+        let currentIndex = 0;
 
-        // Place tiles with gaps between color groups
-        // Top row (0-14): First 2 colors
-        // Bottom row (15-29): Other 2 colors + jokers
-
-        let topIndex = 0;
-        let bottomIndex = 15;
-
-        // Place red tiles on top row
-        colorGroups['red'].forEach(tile => {
-            if (topIndex < 15) {
-                sortedRack[topIndex++] = tile;
+        // Place completed pers with gaps between them
+        for (const per of completedPers) {
+            // Check if we need to move to next row
+            const currentRow = currentIndex < 15 ? 0 : 1;
+            const rowEnd = currentRow === 0 ? 15 : 30;
+            
+            // If per doesn't fit in current row, move to next row
+            if (currentIndex + per.length > rowEnd) {
+                if (currentRow === 0) {
+                    currentIndex = 15; // Move to second row
+                }
             }
-        });
-        if (colorGroups['red'].length > 0 && topIndex < 15) topIndex++; // Add gap
-
-        // Place blue tiles on top row
-        colorGroups['blue'].forEach(tile => {
-            if (topIndex < 15) {
-                sortedRack[topIndex++] = tile;
+            
+            // Place per tiles
+            for (const tile of per) {
+                if (currentIndex < 30) {
+                    sortedRack[currentIndex++] = tile;
+                }
             }
+            
+            // Add gap after per (if not at row end)
+            if (currentIndex < 30 && currentIndex !== 15) {
+                currentIndex++;
+            }
+        }
+
+        // Sort remaining tiles by color then value for easier viewing
+        remainingTiles.sort((a, b) => {
+            const colorIdx = (c: string | null) => c ? colorOrder.indexOf(c as OkeyColor) : 99;
+            if (colorIdx(a.color) !== colorIdx(b.color)) {
+                return colorIdx(a.color) - colorIdx(b.color);
+            }
+            return a.value - b.value;
         });
 
-        // Place black tiles on bottom row
-        colorGroups['black'].forEach(tile => {
-            if (bottomIndex < 30) {
-                sortedRack[bottomIndex++] = tile;
+        // Place remaining tiles
+        for (const tile of remainingTiles) {
+            if (currentIndex < 30) {
+                sortedRack[currentIndex++] = tile;
             }
-        });
-        if (colorGroups['black'].length > 0 && bottomIndex < 30) bottomIndex++; // Add gap
+        }
+        
+        // Add gap before jokers if there are remaining tiles and jokers
+        if (remainingTiles.length > 0 && jokers.length > 0 && currentIndex < 30) {
+            currentIndex++;
+        }
 
-        // Place yellow tiles on bottom row
-        colorGroups['yellow'].forEach(tile => {
-            if (bottomIndex < 30) {
-                sortedRack[bottomIndex++] = tile;
+        // Place jokers at the end
+        for (const tile of jokers) {
+            if (currentIndex < 30) {
+                sortedRack[currentIndex++] = tile;
             }
-        });
-        if (colorGroups['yellow'].length > 0 && bottomIndex < 30) bottomIndex++; // Add gap
-
-        // Place jokers at the end of bottom row
-        jokers.forEach(tile => {
-            if (bottomIndex < 30) {
-                sortedRack[bottomIndex++] = tile;
-            }
-        });
+        }
 
         newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: sortedRack };
 
@@ -715,7 +809,7 @@ export const useOkeyRoom = (roomId: string | null) => {
         updateDoc(roomRef, { players: newPlayers }).catch(err => {
             console.error('Error syncing sorted tiles:', err);
         });
-    };
+    }, [firebaseEnabled, db, roomId, room, getMySlot]);
 
     // Finish game - validate winning hand and end round
     const finishGame = async (discardIndex: number): Promise<boolean> => {

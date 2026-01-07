@@ -57,7 +57,7 @@ interface PlayerPanelProps {
     tileCount?: number;
 }
 
-const PlayerPanel: React.FC<PlayerPanelProps> = ({
+const PlayerPanel: React.FC<PlayerPanelProps> = React.memo(({
     playerId,
     currentTurn,
     className = '',
@@ -102,7 +102,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = ({
             </div>
         </div>
     );
-};
+});
 
 const DiscardZone = ({ playerId, position, discardPiles, currentTurn, userTileCount, onDrawDiscard, isDraggingRackTile, mySlot = 0 }: any) => {
     // Adjust logic for multiplayer - "user" is whoever's turn it is at mySlot
@@ -203,7 +203,7 @@ const DraggableDrawPile = ({ currentTurn, userTileCount, centerStackCount, onDra
     );
 };
 
-const FinishZone = ({ isDraggingRackTile, canFinish }: { isDraggingRackTile: boolean, canFinish: boolean }) => {
+const FinishZone = React.memo(({ isDraggingRackTile, canFinish }: { isDraggingRackTile: boolean, canFinish: boolean }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: 'finish-zone',
         disabled: !canFinish
@@ -219,9 +219,9 @@ const FinishZone = ({ isDraggingRackTile, canFinish }: { isDraggingRackTile: boo
             `}
         />
     );
-};
+});
 
-export const OkeyBoard: React.FC<OkeyBoardProps> = ({
+export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
     gameState,
     onDraw,
     onDrawDiscard,
@@ -491,4 +491,4 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = ({
             </div>
         </DndContext>
     );
-};
+});
