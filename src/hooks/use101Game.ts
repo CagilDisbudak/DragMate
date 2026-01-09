@@ -24,7 +24,7 @@ export const use101Game = (roomId: string | null) => {
 
     // Initialize game
     useEffect(() => {
-        if (!roomId) {
+        if (!roomId || roomId === '') {
             try {
                 const initial = initialize101Game(4);
                 console.log("101 Game Initialized", initial);
@@ -55,7 +55,7 @@ export const use101Game = (roomId: string | null) => {
         setGameState(prev => {
             if (!prev) return null;
             if (prev.currentTurn !== 0) return prev;
-            
+
             const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
             if (currentTilesCount >= 15) return prev; // Can't draw if hand is full
 
@@ -104,16 +104,16 @@ export const use101Game = (roomId: string | null) => {
     const drawFromDiscard = useCallback((targetSlot?: number) => {
         setGameState(prev => {
             if (!prev || prev.currentTurn !== 0) return prev;
-            
+
             const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
             if (currentTilesCount >= 15) return prev;
-            
+
             // Draw from previous player's discard (counter-clockwise, so player 3)
             const prevPlayerIdx = 3; // In single player, we are player 0, prev is 3
             const prevPlayerDiscard = prev.discardPiles[prevPlayerIdx] || [];
             if (prevPlayerDiscard.length === 0) return prev;
 
-            const newDiscardPiles = prev.discardPiles.map((pile, idx) => 
+            const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
                 idx === prevPlayerIdx ? pile.slice(0, -1) : [...pile]
             );
             const drawnTile = prevPlayerDiscard[prevPlayerDiscard.length - 1];
@@ -175,7 +175,7 @@ export const use101Game = (roomId: string | null) => {
             newPlayers[0] = { ...newPlayers[0], tiles: newRack };
 
             // Discard to own pile (player 0)
-            const newDiscardPiles = prev.discardPiles.map((pile, idx) => 
+            const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
                 idx === 0 ? [...pile, discardedTile] : [...pile]
             );
             const nextTurn = (prev.currentTurn + 1) % prev.players.length;
@@ -240,16 +240,16 @@ export const use101Game = (roomId: string | null) => {
             });
 
             const newPlayers = [...prev.players];
-            newPlayers[0] = { 
-                ...newPlayers[0], 
+            newPlayers[0] = {
+                ...newPlayers[0],
                 tiles: newRack,
-                hasLaidDown: true 
+                hasLaidDown: true
             };
 
             // Check if player wins (no tiles left)
             const remainingTiles = newRack.filter(t => t !== null).length;
             const newTableMelds = { ...prev.tableMelds, [newMeld.id]: newMeld };
-            
+
             if (remainingTiles === 0) {
                 return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds }, 0);
             }
@@ -267,7 +267,7 @@ export const use101Game = (roomId: string | null) => {
     const addToMeld = useCallback((tileIndex: number, meldId: string) => {
         setGameState(prev => {
             if (!prev || prev.currentTurn !== 0) return prev;
-            
+
             const player = prev.players[0];
             if (!player.hasLaidDown) {
                 alert("Önce kendi perinizi indirmelisiniz!");
@@ -444,7 +444,7 @@ export const use101Game = (roomId: string | null) => {
             newPlayers[0] = { ...newPlayers[0], tiles: newRack };
 
             // Discard to own pile
-            const newDiscardPiles = prev.discardPiles.map((pile, idx) => 
+            const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
                 idx === 0 ? [...pile, tile] : [...pile]
             );
 
@@ -455,7 +455,7 @@ export const use101Game = (roomId: string | null) => {
         });
     }, []);
 
-    // AI Turn Simulation
+    // Smart AI Turn Simulation
     useEffect(() => {
         if (gameState && gameState.currentTurn !== 0 && gameState.phase === 'playing') {
             const timer = setTimeout(() => {
@@ -463,27 +463,183 @@ export const use101Game = (roomId: string | null) => {
                     if (!prev || prev.currentTurn === 0) return prev;
 
                     const currPlayer = prev.currentTurn;
-                    const newPlayers = [...prev.players];
+                    let newPlayers = [...prev.players];
                     const nextTurn = (currPlayer + 1) % prev.players.length;
+                    let newTableMelds = { ...prev.tableMelds };
 
                     // AI: Draw from center
                     const newStack = [...prev.centerStack];
                     const drawn = newStack.pop();
 
-                    if (drawn) {
-                        const rack = [...newPlayers[currPlayer].tiles];
-                        const emptyIdx = rack.findIndex(s => s === null);
-                        if (emptyIdx !== -1) rack[emptyIdx] = drawn;
+                    if (!drawn) {
+                        return { ...prev, currentTurn: nextTurn };
+                    }
 
-                        // AI: Discard first tile
-                        const firstTileIdx = rack.findIndex(s => s !== null);
-                        const discarded = rack[firstTileIdx];
-                        rack[firstTileIdx] = null;
+                    let rack = [...newPlayers[currPlayer].tiles];
+                    const emptyIdx = rack.findIndex(s => s === null);
+                    if (emptyIdx !== -1) rack[emptyIdx] = drawn;
+
+                    // Get all non-null tiles
+                    const getTiles = () => rack.filter((t): t is Tile101 => t !== null);
+                    const colorOrder: ('red' | 'blue' | 'black' | 'yellow')[] = ['red', 'blue', 'black', 'yellow'];
+
+                    // Helper: Calculate tile points (for discard strategy)
+                    const getTilePoints = (tile: Tile101): number => {
+                        if (tile.isFakeOkey) return 25;
+                        if (tile.value >= 11) return 10;
+                        return tile.value;
+                    };
+
+                    // Helper: Find best meld (prioritize high-value melds)
+                    const findBestMeld = (): { tiles: Tile101[], type: 'set' | 'run', indices: number[] } | null => {
+                        const tiles = getTiles();
+                        let bestMeld: { tiles: Tile101[], type: 'set' | 'run', indices: number[], points: number } | null = null;
+
+                        // Find sets (same value, different colors) - prioritize high values
+                        for (let value = 13; value >= 1; value--) {
+                            const tilesWithValue = tiles.filter(t => t.value === value && !t.isFakeOkey);
+                            const uniqueColors = [...new Set(tilesWithValue.map(t => t.color))];
+
+                            if (uniqueColors.length >= 3) {
+                                const set: Tile101[] = [];
+                                for (const color of colorOrder) {
+                                    if (uniqueColors.includes(color)) {
+                                        const tile = tilesWithValue.find(t => t.color === color && !set.includes(t));
+                                        if (tile) set.push(tile);
+                                    }
+                                }
+                                if (set.length >= 3) {
+                                    const points = set.reduce((sum, t) => sum + getTilePoints(t), 0);
+                                    if (!bestMeld || points > bestMeld.points) {
+                                        const indices = set.map(t => rack.findIndex(rt => rt?.id === t.id));
+                                        bestMeld = { tiles: set, type: 'set', indices, points };
+                                    }
+                                }
+                            }
+                        }
+
+                        // Find runs (same color, consecutive) - prioritize high values
+                        for (const color of colorOrder) {
+                            let colorTiles = tiles.filter(t => t.color === color && !t.isFakeOkey);
+                            colorTiles.sort((a, b) => b.value - a.value); // Start from high values
+
+                            // Look for runs starting from high values
+                            colorTiles.sort((a, b) => a.value - b.value);
+                            for (let startIdx = colorTiles.length - 1; startIdx >= 0; startIdx--) {
+                                const run: Tile101[] = [colorTiles[startIdx]];
+                                let expectedValue = colorTiles[startIdx].value - 1;
+
+                                for (let j = startIdx - 1; j >= 0 && expectedValue >= 1; j--) {
+                                    if (colorTiles[j].value === expectedValue) {
+                                        run.unshift(colorTiles[j]);
+                                        expectedValue--;
+                                    }
+                                }
+
+                                if (run.length >= 3) {
+                                    const points = run.reduce((sum, t) => sum + getTilePoints(t), 0);
+                                    if (!bestMeld || points > bestMeld.points) {
+                                        const indices = run.map(t => rack.findIndex(rt => rt?.id === t.id));
+                                        bestMeld = { tiles: run, type: 'run', indices, points };
+                                    }
+                                }
+                            }
+                        }
+
+                        return bestMeld;
+                    };
+
+                    // Helper: Check if AI can make first lay down (51+ points)
+                    const canMakeFirstLayDown = (meldPoints: number): boolean => {
+                        return meldPoints >= 51;
+                    };
+
+                    // Try to lay down melds (AI strategy: lay down high-value melds)
+                    const player = newPlayers[currPlayer];
+                    let hasLaidDown = player.hasLaidDown;
+
+                    // Keep trying to lay down melds while possible
+                    for (let attempts = 0; attempts < 5; attempts++) {
+                        const bestMeld = findBestMeld();
+                        if (!bestMeld) break;
+
+                        const meldPoints = bestMeld.tiles.filter(t => !t.isFakeOkey).reduce((sum, t) => sum + getTilePoints(t), 0);
+
+                        // Check first lay down requirement
+                        if (!hasLaidDown && !canMakeFirstLayDown(meldPoints)) {
+                            break; // Can't lay down yet
+                        }
+
+                        // Lay down the meld
+                        const meldId = `meld-ai-${currPlayer}-${Date.now()}-${attempts}`;
+                        newTableMelds[meldId] = {
+                            id: meldId,
+                            tiles: bestMeld.tiles,
+                            type: bestMeld.type,
+                            ownerPlayer: currPlayer
+                        };
+
+                        // Remove tiles from rack
+                        for (const idx of bestMeld.indices) {
+                            rack[idx] = null;
+                        }
+                        hasLaidDown = true;
+
+                        // Check if AI won (no tiles left)
+                        if (rack.filter(t => t !== null).length === 0) {
+                            newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack, hasLaidDown };
+                            return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack }, currPlayer);
+                        }
+                    }
+
+                    // Update player state
+                    newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack, hasLaidDown };
+
+                    // Try to add tiles to existing melds (if player has laid down)
+                    if (hasLaidDown) {
+                        for (const [meldId, meld] of Object.entries(newTableMelds)) {
+                            const currentTiles = getTiles();
+                            for (const tile of currentTiles) {
+                                if (canAddToMeld(meld as Meld, tile)) {
+                                    // Add tile to meld
+                                    (newTableMelds[meldId] as Meld).tiles = [...(meld as Meld).tiles, tile];
+                                    const tileIdx = rack.findIndex(t => t?.id === tile.id);
+                                    if (tileIdx !== -1) rack[tileIdx] = null;
+
+                                    newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
+
+                                    // Check if AI won
+                                    if (rack.filter(t => t !== null).length === 0) {
+                                        return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack }, currPlayer);
+                                    }
+                                    break; // Only add one tile per turn to melds
+                                }
+                            }
+                        }
+                    }
+
+                    // AI: Discard the LOWEST value tile (smart strategy)
+                    const tilesWithIdx = rack
+                        .map((t, idx) => ({ tile: t, idx }))
+                        .filter((item): item is { tile: Tile101, idx: number } => item.tile !== null);
+
+                    if (tilesWithIdx.length > 0) {
+                        // Sort by points ascending (lowest first), but avoid discarding jokers
+                        tilesWithIdx.sort((a, b) => {
+                            // Never discard jokers if possible
+                            if (a.tile.isFakeOkey && !b.tile.isFakeOkey) return 1;
+                            if (!a.tile.isFakeOkey && b.tile.isFakeOkey) return -1;
+                            return getTilePoints(a.tile) - getTilePoints(b.tile);
+                        });
+
+                        const lowestTile = tilesWithIdx[0];
+                        const discarded = rack[lowestTile.idx];
+                        rack[lowestTile.idx] = null;
 
                         newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
 
                         // Discard to AI's own pile
-                        const newDiscardPiles = prev.discardPiles.map((pile, idx) => 
+                        const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
                             idx === currPlayer ? (discarded ? [...pile, discarded] : [...pile]) : [...pile]
                         );
 
@@ -492,11 +648,12 @@ export const use101Game = (roomId: string | null) => {
                             centerStack: newStack,
                             players: newPlayers,
                             discardPiles: newDiscardPiles,
+                            tableMelds: newTableMelds,
                             currentTurn: nextTurn
                         };
                     }
 
-                    return { ...prev, currentTurn: nextTurn };
+                    return { ...prev, centerStack: newStack, players: newPlayers, tableMelds: newTableMelds, currentTurn: nextTurn };
                 });
             }, 1500);
             return () => clearTimeout(timer);

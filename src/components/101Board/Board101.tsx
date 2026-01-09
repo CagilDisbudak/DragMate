@@ -69,7 +69,7 @@ const PlayerAvatar: React.FC<{
     position: 'top' | 'left' | 'right';
 }> = React.memo(({ playerInfo, isCurrentTurn, tileCount, colorIndex, position }) => {
     const colors = AVATAR_COLORS[colorIndex % AVATAR_COLORS.length];
-    
+
     const positionClasses = {
         top: 'flex-col',
         left: 'flex-col',
@@ -90,7 +90,7 @@ const PlayerAvatar: React.FC<{
                 ) : (
                     <User size={28} className="text-white" />
                 )}
-                
+
                 {/* Tile count badge */}
                 <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#1a3625] text-white text-[10px] font-bold flex items-center justify-center border-2 border-[#2d5a3d]">
                     {tileCount}
@@ -129,7 +129,7 @@ const DiscardZone101: React.FC<{
 }> = React.memo(({ playerId, discardPile, currentTurn, userTileCount, mySlot, isDraggingRackTile, onDrawDiscard, position }) => {
     // Can drop to own discard when it's your turn and you have 15 tiles
     const canDropHere = playerId === mySlot && currentTurn === mySlot && userTileCount === 15 && isDraggingRackTile;
-    
+
     // Can draw from previous player's discard (counter-clockwise)
     const prevPlayerIdx = (mySlot + 3) % 4;
     const canDrawHere = playerId === prevPlayerIdx && currentTurn === mySlot && userTileCount === 14 && discardPile.length > 0;
@@ -211,9 +211,10 @@ interface RackSlot101Props {
     index: number;
     isSelected: boolean;
     onTileClick: () => void;
+    okeyTile?: Tile101 | null;
 }
 
-const RackSlot101: React.FC<RackSlot101Props> = React.memo(({ tile, index, isSelected, onTileClick }) => {
+const RackSlot101: React.FC<RackSlot101Props> = React.memo(({ tile, index, isSelected, onTileClick, okeyTile }) => {
     const slotId = `rack-${index}`;
     const { setNodeRef: setDroppableRef, isOver } = useDroppable({ id: slotId });
     const {
@@ -248,7 +249,7 @@ const RackSlot101: React.FC<RackSlot101Props> = React.memo(({ tile, index, isSel
                     {...listeners}
                     className={`w-full h-full ${isDragging ? 'opacity-30' : ''} ${isSelected ? 'scale-105' : ''}`}
                 >
-                    <OkeyTile tile={tile} okeyTile={null} size="md" isJoker={isJoker} />
+                    <OkeyTile tile={tile} okeyTile={okeyTile} size="md" isJoker={isJoker} />
                 </div>
             ) : (
                 <div className="w-full h-full bg-[#5a3825]/20 rounded-lg border border-[#8d5b3e]/10" />
@@ -262,9 +263,10 @@ interface PlayerRack101Props {
     tiles: (Tile101 | null)[];
     selectedIndices: number[];
     onTileClick: (index: number) => void;
+    okeyTile?: Tile101 | null;
 }
 
-const PlayerRack101: React.FC<PlayerRack101Props> = React.memo(({ tiles, selectedIndices, onTileClick }) => {
+const PlayerRack101: React.FC<PlayerRack101Props> = React.memo(({ tiles, selectedIndices, onTileClick, okeyTile }) => {
     const topRow = tiles.slice(0, 15);
     const bottomRow = tiles.slice(15, 30);
 
@@ -273,10 +275,10 @@ const PlayerRack101: React.FC<PlayerRack101Props> = React.memo(({ tiles, selecte
             {/* Wooden rack background */}
             <div className="absolute inset-0 bg-gradient-to-b from-[#c9a66b] via-[#b8915a] to-[#8b6914] rounded-lg shadow-2xl" />
             <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-transparent to-black/10 rounded-lg" />
-            
+
             {/* Rack edge (top) */}
             <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-[#dbb978] to-[#c9a66b] rounded-t-lg border-b border-[#a07830]" />
-            
+
             {/* Tiles container */}
             <div className="relative pt-4 pb-3 px-3">
                 {/* Top row */}
@@ -288,13 +290,14 @@ const PlayerRack101: React.FC<PlayerRack101Props> = React.memo(({ tiles, selecte
                             index={idx}
                             isSelected={selectedIndices.includes(idx)}
                             onTileClick={() => onTileClick(idx)}
+                            okeyTile={okeyTile}
                         />
                     ))}
                 </div>
-                
+
                 {/* Divider */}
                 <div className="w-full h-1 bg-gradient-to-r from-transparent via-[#8b6914] to-transparent mb-1" />
-                
+
                 {/* Bottom row */}
                 <div className="flex gap-0.5 justify-center">
                     {bottomRow.map((tile, idx) => (
@@ -304,11 +307,12 @@ const PlayerRack101: React.FC<PlayerRack101Props> = React.memo(({ tiles, selecte
                             index={idx + 15}
                             isSelected={selectedIndices.includes(idx + 15)}
                             onTileClick={() => onTileClick(idx + 15)}
+                            okeyTile={okeyTile}
                         />
                     ))}
                 </div>
             </div>
-            
+
             {/* Rack edge (bottom) */}
             <div className="absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-t from-[#6b4c10] to-[#8b6914] rounded-b-lg border-t border-[#a07830]" />
         </div>
@@ -353,7 +357,7 @@ const CenterBoard: React.FC<{
                         ))}
                     </div>
                 </div>
-                
+
                 {/* Top-right quadrant */}
                 <div className="border-b border-[#4a7c59]/50 p-2 relative">
                     <div className="flex flex-wrap gap-1 content-start">
@@ -362,7 +366,7 @@ const CenterBoard: React.FC<{
                         ))}
                     </div>
                 </div>
-                
+
                 {/* Bottom-left quadrant */}
                 <div className="border-r border-[#4a7c59]/50 p-2 relative">
                     <div className="flex flex-wrap gap-1 content-start">
@@ -371,7 +375,7 @@ const CenterBoard: React.FC<{
                         ))}
                     </div>
                 </div>
-                
+
                 {/* Bottom-right quadrant */}
                 <div className="p-2 relative">
                     <div className="flex flex-wrap gap-1 content-start">
@@ -562,7 +566,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
     const handleDragEnd = useCallback((event: DragEndEvent) => {
         const { active, over } = event;
         setActiveId(null);
-        
+
         if (!over) return;
 
         const draggingId = active.id as string;
@@ -666,7 +670,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         {isGameOver ? 'Kazanan' : 'Bu eli kazanan'}: {winner.name}
                     </p>
                 )}
-                
+
                 <div className="flex gap-4">
                     {gameState.players.map((p, idx) => (
                         <div key={idx} className="flex flex-col items-center gap-2">
@@ -811,18 +815,18 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                             onDrawDiscard={onDrawDiscard}
                             position="bottom"
                         />
-                        
+
                         {/* Sorting buttons group */}
                         <div className="flex items-center gap-1 bg-[#1a3625]/50 rounded-lg p-1 border border-[#4a7c59]/50">
-                            <button 
-                                onClick={onSortByRuns} 
+                            <button
+                                onClick={onSortByRuns}
                                 className="px-3 py-1.5 bg-blue-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-blue-700 hover:scale-105 active:scale-95"
                                 title="Serilere göre diz (aynı renk, ardışık sayılar)"
                             >
                                 Seri
                             </button>
-                            <button 
-                                onClick={onSortByPairs} 
+                            <button
+                                onClick={onSortByPairs}
                                 className="px-3 py-1.5 bg-purple-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-purple-700 hover:scale-105 active:scale-95"
                                 title="Çiftlere göre diz (aynı renk, aynı sayı gerçek çiftler)"
                             >
@@ -832,15 +836,15 @@ export const Board101: React.FC<Board101Props> = React.memo(({
 
                         {/* Open/Select buttons group */}
                         <div className="flex items-center gap-1 bg-[#1a3625]/50 rounded-lg p-1 border border-[#4a7c59]/50">
-                            <button 
-                                onClick={onSelectRuns} 
+                            <button
+                                onClick={onSelectRuns}
                                 className="px-3 py-1.5 bg-amber-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-amber-700 hover:scale-105 active:scale-95"
                                 title="Tüm serileri seç"
                             >
                                 Seri Aç
                             </button>
-                            <button 
-                                onClick={onSelectSets} 
+                            <button
+                                onClick={onSelectSets}
                                 className="px-3 py-1.5 bg-rose-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-rose-700 hover:scale-105 active:scale-95"
                                 title="Tüm çiftleri seç"
                             >
@@ -885,6 +889,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                 onToggleSelection(idx);
                             }
                         }}
+                        okeyTile={gameState.okeyTile}
                     />
 
                     {/* Instructions */}
@@ -916,7 +921,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
                         <span className="text-white font-bold text-xs">OKEY</span>
                         <div className="w-8 h-11">
-                            <OkeyTile tile={gameState.okeyTile} okeyTile={gameState.okeyTile} size="xs" />
+                            <OkeyTile tile={gameState.okeyTile} okeyTile={null} size="xs" />
                         </div>
                     </div>
                 )}

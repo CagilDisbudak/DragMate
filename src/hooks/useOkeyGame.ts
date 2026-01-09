@@ -8,7 +8,7 @@ export const useOkeyGame = (roomId: string | null) => {
 
     // Initialize game
     useEffect(() => {
-        if (!roomId) {
+        if (!roomId || roomId === '') {
             try {
                 // Local game
                 const initial = initializeOkeyGame();
