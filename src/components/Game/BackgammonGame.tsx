@@ -114,8 +114,9 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
 
     // Auto-skip turn if no moves possible
     useEffect(() => {
-        if (!gameState) return;
-        if (gameState.movesLeft.length > 0 && validMoves.length === 0 && !gameState.winner) {
+        if (!gameState || !isOurTurn || gameState.winner) return;
+
+        if (gameState.movesLeft.length > 0 && validMoves.length === 0) {
             const timer = setTimeout(() => {
                 let finalState = { ...gameState };
                 // Switch turn
@@ -132,7 +133,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
             }, 1500);
             return () => clearTimeout(timer);
         }
-    }, [gameState?.movesLeft, validMoves.length, gameState?.winner, gameState?.turn, isLocal, gameState]);
+    }, [gameState?.movesLeft, validMoves.length, gameState?.winner, gameState?.turn, isLocal, gameState, isOurTurn]);
 
     // AI Trigger
     useEffect(() => {

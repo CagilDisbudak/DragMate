@@ -111,11 +111,16 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
 
     // Handle Dice Animation
     React.useEffect(() => {
-        if (JSON.stringify(prevDice.current) !== JSON.stringify(gameState.dice)) {
+        const hasDiceChanged = JSON.stringify(prevDice.current) !== JSON.stringify(gameState.dice);
+
+        if (hasDiceChanged && gameState.dice.length > 0) {
             setIsRollingDice(true);
             const timer = setTimeout(() => setIsRollingDice(false), 800);
             prevDice.current = gameState.dice;
             return () => clearTimeout(timer);
+        } else if (!hasDiceChanged) {
+            // Keep sync if needed without triggering animation
+            prevDice.current = gameState.dice;
         }
     }, [gameState.dice]);
 
