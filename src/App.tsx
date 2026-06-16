@@ -5,6 +5,7 @@ import { Game } from './components/Game/Game';
 import { useGameRoom } from './hooks/useGameRoom';
 import { useBackgammonGame } from './hooks/useBackgammonGame';
 import { use101Room } from './hooks/use101Room';
+import { useOkeyRoom } from './hooks/useOkeyRoom';
 
 import { BackgammonGame } from './components/Game/BackgammonGame';
 import { OkeyGame } from './components/Game/OkeyGame';
@@ -22,15 +23,8 @@ function App() {
   const chessRoom = useGameRoom(null);
   const backgammonRoom = useBackgammonGame(null);
 
-  // Okey online su an devre disi, sadece local Okey kullaniliyor
-  const okeyRoomHook: any = {
-    room: null,
-    isAuthLoading: false,
-    createRoom: async (_name: string) => null,
-    joinRoom: async (_roomId: string, _name: string) => false,
-    startGame: async () => {},
-    leaveRoom: async () => {},
-  };
+  // Okey multiplayer room with roomId for real-time sync
+  const okeyRoomHook = useOkeyRoom(selectedGame === 'okey' ? currentRoomId : null);
   // 101 room with roomId for real-time sync
   const room101Hook = use101Room(selectedGame === '101' ? currentRoomId : null);
 

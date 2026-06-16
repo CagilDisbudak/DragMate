@@ -149,6 +149,208 @@ const checkRecursive = (remainingTiles: OkeyTile[], wildcardCount: number): bool
 // Helpers
 const COLORS: OkeyColor[] = ['red', 'black', 'blue', 'yellow'];
 
+// A tile that may carry display-only metadata when a joker stands in for a real tile.
+export interface DisplayOkeyTile extends OkeyTile {
+    displayValue?: number;
+    displayColor?: string;
+    isJokerPlaceholder?: boolean;
+}
+
+const COLOR_ORDER: Record<string, number> = { red: 0, black: 1, blue: 2, yellow: 3 };
+
+/**
+ * Arranges a collection of tiles into a clean, readable rack layout.
+ * - Detects complete runs (same color, consecutive) and sets (same value, different colors).
+ * - Uses jokers (fake okeys) to complete near-miss runs/sets.
+ * - Groups are placed on the top shelf (slots 0..14) separated by a gap.
+ * - Leftover (ungrouped) tiles are sorted by color & value and placed on the
+ *   bottom shelf (slots 15..29).
+ *
+ * Pure & reusable: used both for the initial deal and the "Düzenle" auto-sort button,
+ * so a freshly dealt hand already looks organized in both single & multiplayer.
+ */
+export const arrangeTiles = (
+    inputTiles: (OkeyTile | null)[],
+    okeyTile: OkeyTile | null
+): (DisplayOkeyTile | null)[] => {
+    const originalTiles = inputTiles.filter((t): t is OkeyTile => t !== null) as DisplayOkeyTile[];
+
+    // Separate joker tiles (pure wild fake okeys) from tiles usable by value.
+    const jokerPool: DisplayOkeyTile[] = [...originalTiles.filter(t => t.isFakeOkey)];
+    const okeyValueTiles = originalTiles.filter(
+        t => !t.isFakeOkey && okeyTile && t.color === okeyTile.color && t.value === okeyTile.value
+    );
+    const normalTiles = originalTiles.filter(
+        t => !t.isFakeOkey && !(okeyTile && t.color === okeyTile.color && t.value === okeyTile.value)
+    );
+
+    // Okey-value tiles can be used both as jokers and by their actual value;
+    // try to use them by value first.
+    const tilesForRuns: DisplayOkeyTile[] = [...normalTiles, ...okeyValueTiles];
+
+    const groups: DisplayOkeyTile[][] = [];
+    const remaining = [...tilesForRuns];
+    const colors: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
+
+    const createJokerPlaceholder = (joker: DisplayOkeyTile, forValue: number, forColor: string): DisplayOkeyTile => ({
+        ...joker,
+        displayValue: forValue,
+        displayColor: forColor,
+        isJokerPlaceholder: true,
+    });
+
+    // 1. First pass: complete runs (3+ consecutive, same color) without jokers.
+    colors.forEach(color => {
+        let sameColor = remaining.filter(t => t.color === color).sort((a, b) => a.value - b.value);
+        let i = 0;
+        while (i < sameColor.length) {
+            const currentRun: DisplayOkeyTile[] = [sameColor[i]];
+            let nextVal = sameColor[i].value + 1;
+            let j = i + 1;
+
+            while (j < sameColor.length) {
+                if (sameColor[j].value === nextVal) {
+                    currentRun.push(sameColor[j]);
+                    nextVal++;
+                    j++;
+                } else if (sameColor[j].value < nextVal) {
+                    j++;
+                } else {
+                    break;
+                }
+            }
+
+            // Special case: wrap around 13-1.
+            if (currentRun[currentRun.length - 1].value === 13) {
+                const oneTile = sameColor.find(t => t.value === 1);
+                if (oneTile && !currentRun.find(rt => rt.id === oneTile.id)) {
+                    currentRun.push(oneTile);
+                }
+            }
+
+            if (currentRun.length >= 3) {
+                groups.push([...currentRun]);
+                currentRun.forEach(t => {
+                    const idx = remaining.findIndex(r => r.id === t.id);
+                    if (idx !== -1) remaining.splice(idx, 1);
+                });
+                sameColor = remaining.filter(t => t.color === color).sort((a, b) => a.value - b.value);
+                i = 0;
+            } else {
+                i++;
+            }
+        }
+    });
+
+    // 2. First pass: complete sets (3+ same value, different colors) without jokers.
+    for (let val = 1; val <= 13; val++) {
+        const sameValue = remaining.filter(t => t.value === val);
+        const uniqueColors = Array.from(new Set(sameValue.map(t => t.color)));
+        if (uniqueColors.length >= 3) {
+            const set = uniqueColors.map(c => sameValue.find(t => t.color === c)!) as DisplayOkeyTile[];
+            groups.push(set);
+            set.forEach(t => {
+                const idx = remaining.findIndex(r => r.id === t.id);
+                if (idx !== -1) remaining.splice(idx, 1);
+            });
+        }
+    }
+
+    // 3. Use jokers to complete 2-tile runs (need 1 joker to make 3).
+    colors.forEach(color => {
+        if (jokerPool.length === 0) return;
+        const sameColor = remaining.filter(t => t.color === color).sort((a, b) => a.value - b.value);
+
+        for (let i = 0; i < sameColor.length - 1 && jokerPool.length > 0; i++) {
+            const tile1 = sameColor[i];
+            const tile2 = sameColor[i + 1];
+
+            // Consecutive (e.g. 5-6, joker as 4 or 7).
+            if (tile2.value === tile1.value + 1) {
+                const joker = jokerPool.shift()!;
+                if (tile2.value < 13) {
+                    groups.push([tile1, tile2, createJokerPlaceholder(joker, tile2.value + 1, color)]);
+                } else if (tile1.value > 1) {
+                    groups.push([createJokerPlaceholder(joker, tile1.value - 1, color), tile1, tile2]);
+                } else {
+                    groups.push([tile1, tile2, createJokerPlaceholder(joker, 3, color)]);
+                }
+                [tile1, tile2].forEach(t => {
+                    const idx = remaining.findIndex(r => r.id === t.id);
+                    if (idx !== -1) remaining.splice(idx, 1);
+                });
+                i = -1; // restart scan
+            }
+            // Gap of 1 (e.g. 5-7, joker as 6).
+            else if (tile2.value === tile1.value + 2 && jokerPool.length > 0) {
+                const joker = jokerPool.shift()!;
+                groups.push([tile1, createJokerPlaceholder(joker, tile1.value + 1, color), tile2]);
+                [tile1, tile2].forEach(t => {
+                    const idx = remaining.findIndex(r => r.id === t.id);
+                    if (idx !== -1) remaining.splice(idx, 1);
+                });
+                i = -1;
+            }
+        }
+    });
+
+    // 4. Use jokers to complete 2-tile sets (same value, 2 different colors).
+    for (let val = 1; val <= 13 && jokerPool.length > 0; val++) {
+        const sameValue = remaining.filter(t => t.value === val);
+        const uniqueColors = Array.from(new Set(sameValue.map(t => t.color)));
+
+        if (uniqueColors.length === 2) {
+            const joker = jokerPool.shift()!;
+            const missingColor = colors.find(c => !uniqueColors.includes(c))!;
+            const jokerTile = createJokerPlaceholder(joker, val, missingColor);
+            const set = [...uniqueColors.map(c => sameValue.find(t => t.color === c)!), jokerTile] as DisplayOkeyTile[];
+            groups.push(set);
+            set.forEach(t => {
+                if (!t.isJokerPlaceholder) {
+                    const idx = remaining.findIndex(r => r.id === t.id);
+                    if (idx !== -1) remaining.splice(idx, 1);
+                }
+            });
+        }
+    }
+
+    // Sort leftovers by color then value for a tidy bottom shelf.
+    remaining.sort((a, b) => {
+        const ca = COLOR_ORDER[a.color ?? ''] ?? 99;
+        const cb = COLOR_ORDER[b.color ?? ''] ?? 99;
+        if (ca !== cb) return ca - cb;
+        return a.value - b.value;
+    });
+
+    // Construct the new rack.
+    const TOP_SHELF = RACK_SIZE / 2; // 15
+    const newRack: (DisplayOkeyTile | null)[] = new Array(RACK_SIZE).fill(null);
+    let currentPos = 0;
+
+    // Place any unused jokers first.
+    jokerPool.forEach(t => {
+        if (currentPos < RACK_SIZE) newRack[currentPos++] = t;
+    });
+    if (jokerPool.length > 0) currentPos++; // gap after jokers
+
+    // Place groups, separated by a gap.
+    groups.forEach(group => {
+        group.forEach(t => {
+            if (currentPos < RACK_SIZE) newRack[currentPos++] = t;
+        });
+        currentPos++; // gap between groups
+    });
+
+    // Place leftover tiles on the bottom shelf.
+    let remainingPos = TOP_SHELF;
+    while (remainingPos < RACK_SIZE && newRack[remainingPos] !== null) remainingPos++;
+    remaining.forEach(t => {
+        if (remainingPos < RACK_SIZE) newRack[remainingPos++] = t;
+    });
+
+    return newRack;
+};
+
 /**
  * Creates a full set of 106 tiles.
  * 1-13 in 4 colors, 2 of each = 13 * 4 * 2 = 104
@@ -231,16 +433,17 @@ export const initializeOkeyGame = (): OkeyGameState => {
         tiles: Array(RACK_SIZE).fill(null)
     }));
 
-    // Fill user's rack (Player 0)
-    for (let i = 0; i < 15; i++) {
-        players[0].tiles[i] = deck.pop()!;
-    }
-
-    // Fill other players' racks
-    for (let p = 1; p < 4; p++) {
-        for (let i = 0; i < 14; i++) {
-            players[p].tiles[i] = deck.pop()!;
+    // Deal each player's tiles (starter gets 15, others 14), then arrange every
+    // hand into a clean layout so it already looks organized the moment it is dealt
+    // (instead of random order). Arranging all seats means every human in an online
+    // room — not just the host at slot 0 — receives a tidy hand.
+    const dealCounts = [15, 14, 14, 14];
+    for (let p = 0; p < 4; p++) {
+        const hand: OkeyTile[] = [];
+        for (let i = 0; i < dealCounts[p]; i++) {
+            hand.push(deck.pop()!);
         }
+        players[p].tiles = arrangeTiles(hand, okeyDef);
     }
 
     return {
