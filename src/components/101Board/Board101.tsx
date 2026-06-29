@@ -82,7 +82,7 @@ const PlayerAvatar: React.FC<{
             <div className={`
                 relative w-14 h-14 rounded-full ${colors.bg} 
                 flex items-center justify-center shadow-xl
-                ${isCurrentTurn ? `ring-4 ${colors.ring} ring-offset-2 ring-offset-[#2d5a3d]` : ''}
+                ${isCurrentTurn ? `ring-[6px] ${colors.ring} ring-offset-2 ring-offset-[#2d5a3d] scale-105` : ''}
                 transition-all duration-300
             `}>
                 {playerInfo.isAI ? (
@@ -350,8 +350,8 @@ const CenterBoard: React.FC<{
             {/* 2x2 Grid */}
             <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
                 {/* Top-left quadrant */}
-                <div className="border-r border-b border-[#4a7c59]/50 p-2 relative">
-                    <div className="flex flex-wrap gap-1 content-start">
+                <div className="border-r border-b border-[#4a7c59]/70 p-2 relative">
+                    <div className="flex flex-wrap gap-1 content-start overflow-y-auto h-full pr-1">
                         {getMeldsForPlayer(getActualSlot(3)).map(meld => (
                             <MeldDisplay key={meld.id} meld={meld} isDraggingRackTile={isDraggingRackTile} playerHasLaidDown={playerHasLaidDown} />
                         ))}
@@ -359,8 +359,8 @@ const CenterBoard: React.FC<{
                 </div>
 
                 {/* Top-right quadrant */}
-                <div className="border-b border-[#4a7c59]/50 p-2 relative">
-                    <div className="flex flex-wrap gap-1 content-start">
+                <div className="border-b border-[#4a7c59]/70 p-2 relative">
+                    <div className="flex flex-wrap gap-1 content-start overflow-y-auto h-full pr-1">
                         {getMeldsForPlayer(getActualSlot(2)).map(meld => (
                             <MeldDisplay key={meld.id} meld={meld} isDraggingRackTile={isDraggingRackTile} playerHasLaidDown={playerHasLaidDown} />
                         ))}
@@ -368,8 +368,8 @@ const CenterBoard: React.FC<{
                 </div>
 
                 {/* Bottom-left quadrant */}
-                <div className="border-r border-[#4a7c59]/50 p-2 relative">
-                    <div className="flex flex-wrap gap-1 content-start">
+                <div className="border-r border-[#4a7c59]/70 p-2 relative">
+                    <div className="flex flex-wrap gap-1 content-start overflow-y-auto h-full pr-1">
                         {getMeldsForPlayer(mySlot).map(meld => (
                             <MeldDisplay key={meld.id} meld={meld} isDraggingRackTile={isDraggingRackTile} playerHasLaidDown={playerHasLaidDown} />
                         ))}
@@ -378,7 +378,7 @@ const CenterBoard: React.FC<{
 
                 {/* Bottom-right quadrant */}
                 <div className="p-2 relative">
-                    <div className="flex flex-wrap gap-1 content-start">
+                    <div className="flex flex-wrap gap-1 content-start overflow-y-auto h-full pr-1">
                         {getMeldsForPlayer(getActualSlot(1)).map(meld => (
                             <MeldDisplay key={meld.id} meld={meld} isDraggingRackTile={isDraggingRackTile} playerHasLaidDown={playerHasLaidDown} />
                         ))}
@@ -388,7 +388,7 @@ const CenterBoard: React.FC<{
 
             {/* Player name labels at corners */}
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex">
-                <div className="px-3 py-1 bg-[#c5d5c5] text-[#2a4a3a] font-bold text-xs border-r border-[#4a7c59]/50">
+                <div className="px-3 py-1 bg-[#c5d5c5] text-[#2a4a3a] font-bold text-xs border-r border-[#4a7c59]/70">
                     {quadrantNames[0].label}
                 </div>
                 <div className="px-3 py-1 bg-[#c5d5c5] text-[#2a4a3a] font-bold text-xs">
@@ -396,7 +396,7 @@ const CenterBoard: React.FC<{
                 </div>
             </div>
             <div className="absolute top-0 left-1/2 -translate-x-1/2 flex">
-                <div className="px-3 py-1 bg-[#c5d5c5] text-[#2a4a3a] font-bold text-xs border-r border-[#4a7c59]/50">
+                <div className="px-3 py-1 bg-[#c5d5c5] text-[#2a4a3a] font-bold text-xs border-r border-[#4a7c59]/70">
                     {quadrantNames[2].label}
                 </div>
                 <div className="px-3 py-1 bg-[#c5d5c5] text-[#2a4a3a] font-bold text-xs">
@@ -423,14 +423,14 @@ const MeldDisplay: React.FC<{
         <div
             ref={setNodeRef}
             className={`
-                flex gap-0.5 p-1 rounded transition-all
-                ${isOver && isDraggingRackTile ? 'bg-amber-400/30 scale-105' : ''}
-                ${isDraggingRackTile && playerHasLaidDown ? 'ring-1 ring-amber-400/30' : ''}
+                flex gap-1 p-1.5 rounded-lg bg-black/15 transition-all
+                ${isOver && isDraggingRackTile ? 'bg-amber-400/30 scale-105 ring-2 ring-amber-400' : ''}
+                ${isDraggingRackTile && playerHasLaidDown ? 'ring-1 ring-amber-400/40' : ''}
             `}
         >
             {meld.tiles.map((tile, idx) => (
-                <div key={`${meld.id}-${idx}`} className="w-7 h-10">
-                    <OkeyTile tile={tile} okeyTile={null} size="xs" isJoker={tile.isFakeOkey} />
+                <div key={`${meld.id}-${idx}`} className="w-10 h-13">
+                    <OkeyTile tile={tile} okeyTile={null} size="sm" isJoker={tile.isFakeOkey} />
                 </div>
             ))}
         </div>
@@ -445,11 +445,11 @@ const ScoreTable: React.FC<{
     const sorted = [...players].map((p, idx) => ({ ...p, originalIndex: idx })).sort((a, b) => a.score - b.score);
 
     return (
-        <div className="bg-[#1a3625] rounded-lg border-2 border-[#4a7c59] overflow-hidden w-[130px]">
+        <div className="bg-[#1a3625] rounded-lg border-2 border-[#4a7c59] overflow-hidden min-w-[140px]">
             <div className="bg-[#4a7c59] px-2 py-1 text-center">
                 <span className="text-white font-black text-[10px] tracking-wider">SKOR</span>
             </div>
-            <div className="bg-red-600/20 px-2 py-0.5 text-center border-b border-[#4a7c59]/50">
+            <div className="bg-red-600/20 px-2 py-0.5 text-center border-b border-[#4a7c59]/70">
                 <span className="text-red-400 text-[9px] font-bold">101 = Kaybet!</span>
             </div>
             <div className="divide-y divide-[#4a7c59]/30">
@@ -731,7 +731,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
 
                     {/* Center area */}
                     <div className="flex-1 flex flex-col">
-                        {/* Top area - avatar and discard */}
+                        {/* Top area - opponent avatar/discard + central draw pile */}
                         <div className="flex justify-center items-center gap-6 py-3">
                             <PlayerAvatar
                                 playerInfo={playerInfo[getActualSlot(2)] || DEFAULT_PLAYER_INFO[2]}
@@ -750,11 +750,22 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                 onDrawDiscard={onDrawDiscard}
                                 position="top"
                             />
+                            <div className="w-px h-16 bg-[#4a7c59]/40 mx-1" />
+                            <div className="flex flex-col items-center gap-1">
+                                <span className="text-[10px] font-black text-amber-300 uppercase tracking-wider">Deste</span>
+                                <DrawPile101
+                                    count={gameState.centerStack.length}
+                                    currentTurn={gameState.currentTurn}
+                                    userTileCount={userTileCount}
+                                    mySlot={mySlot}
+                                    onDraw={() => onDraw()}
+                                />
+                            </div>
                         </div>
 
                         {/* Center board with meld zones */}
-                        <div className="flex-1 px-4">
-                            <div className="h-[240px]">
+                        <div className="flex-1 px-4 pb-2">
+                            <div className="h-[300px]">
                                 <CenterBoard
                                     melds={tableMelds}
                                     playerInfo={playerInfo}
@@ -788,23 +799,20 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         />
                     </div>
 
-                    {/* Far right - Draw pile and score */}
-                    <div className="w-[150px] flex flex-col items-center justify-center gap-3 p-3 bg-[#1a3625]/30">
-                        <DrawPile101
-                            count={gameState.centerStack.length}
-                            currentTurn={gameState.currentTurn}
-                            userTileCount={userTileCount}
-                            mySlot={mySlot}
-                            onDraw={() => onDraw()}
-                        />
+                    {/* Far right - Scoreboard */}
+                    <div className="w-[140px] flex flex-col items-center justify-center gap-3 p-3 bg-[#1a3625]/30">
                         <ScoreTable players={playersWithScores} currentTurn={gameState.currentTurn} />
                     </div>
                 </div>
 
                 {/* Bottom area - Your discard, buttons and rack */}
                 <div className="p-4 flex flex-col items-center gap-3">
+                    {/* Turn banner */}
+                    <div className={`px-6 py-2 rounded-full text-sm font-black uppercase tracking-wider transition-all ${gameState.currentTurn === mySlot ? 'bg-emerald-500 text-white ring-2 ring-emerald-300 shadow-lg shadow-emerald-500/40' : 'bg-[#1a3625]/80 text-[#c5d5c5] shadow-md'}`}>
+                        {gameState.currentTurn === mySlot ? '● SIRA SENDE' : `${playerInfo[gameState.currentTurn]?.name || 'Rakip'} oynuyor...`}
+                    </div>
                     {/* Your discard zone and buttons */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center justify-center gap-3">
                         <DiscardZone101
                             playerId={mySlot}
                             discardPile={gameState.discardPiles[mySlot] || []}
@@ -817,17 +825,17 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         />
 
                         {/* Sorting buttons group */}
-                        <div className="flex items-center gap-1 bg-[#1a3625]/50 rounded-lg p-1 border border-[#4a7c59]/50">
+                        <div className="flex items-center gap-1 bg-[#1a3625]/50 rounded-lg p-1 border border-[#4a7c59]/70">
                             <button
                                 onClick={onSortByRuns}
-                                className="px-3 py-1.5 bg-blue-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-blue-700 hover:scale-105 active:scale-95"
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-blue-700 hover:scale-105 active:scale-95"
                                 title="Serilere göre diz (aynı renk, ardışık sayılar)"
                             >
                                 Seri
                             </button>
                             <button
                                 onClick={onSortByPairs}
-                                className="px-3 py-1.5 bg-purple-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-purple-700 hover:scale-105 active:scale-95"
+                                className="px-4 py-2 bg-purple-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-purple-700 hover:scale-105 active:scale-95"
                                 title="Çiftlere göre diz (aynı renk, aynı sayı gerçek çiftler)"
                             >
                                 Çift
@@ -835,17 +843,17 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         </div>
 
                         {/* Open/Select buttons group */}
-                        <div className="flex items-center gap-1 bg-[#1a3625]/50 rounded-lg p-1 border border-[#4a7c59]/50">
+                        <div className="flex items-center gap-1 bg-[#1a3625]/50 rounded-lg p-1 border border-[#4a7c59]/70">
                             <button
                                 onClick={onSelectRuns}
-                                className="px-3 py-1.5 bg-amber-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-amber-700 hover:scale-105 active:scale-95"
+                                className="px-4 py-2 bg-amber-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-amber-700 hover:scale-105 active:scale-95"
                                 title="Tüm serileri seç"
                             >
                                 Seri Aç
                             </button>
                             <button
                                 onClick={onSelectSets}
-                                className="px-3 py-1.5 bg-rose-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-rose-700 hover:scale-105 active:scale-95"
+                                className="px-4 py-2 bg-rose-600 text-white rounded-md shadow text-xs font-bold uppercase tracking-wider transition-all hover:bg-rose-700 hover:scale-105 active:scale-95"
                                 title="Tüm çiftleri seç"
                             >
                                 Çift Aç

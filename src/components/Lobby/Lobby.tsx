@@ -1,7 +1,26 @@
 import React, { useState } from 'react';
-import { Plus, LogIn, Users, User, Trophy, ArrowLeft, Dices, LayoutGrid, Bot, Play, Copy, Check, Hash } from 'lucide-react';
+import { Plus, LogIn, Users, User, Trophy, ArrowLeft, Dices, LayoutGrid, Bot, Play, Copy, Check, Hash, Info, BookOpen } from 'lucide-react';
 import { useGlobalActivePlayers } from '../../hooks/useGlobalActivePlayers';
 import type { Room101 } from '../../hooks/use101Room';
+import { RulesModal } from './RulesModal';
+import type { GameKey } from '../../data/gameRules';
+
+// Small "Kurallar" trigger placed on each game card (span, not a nested <button>).
+const RulesBadge: React.FC<{ game: GameKey; onOpen: (g: GameKey) => void }> = ({ game, onOpen }) => (
+    <span
+        role="button"
+        tabIndex={0}
+        title="Nasıl oynanır?"
+        onClick={(e) => { e.stopPropagation(); onOpen(game); }}
+        onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onOpen(game); }
+        }}
+        className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/40 text-slate-300 hover:text-white hover:bg-black/60 transition-colors cursor-pointer"
+    >
+        <Info size={13} />
+        <span className="text-[9px] font-black uppercase tracking-wider">Kurallar</span>
+    </span>
+);
 
 interface LobbyProps {
     onCreateRoom: () => void;
@@ -46,6 +65,7 @@ export const Lobby: React.FC<LobbyProps> = ({
     user101Id
 }) => {
     const [step, setStep] = useState<LobbyStep>('game-select');
+    const [rulesGameType, setRulesGameType] = useState<GameKey | null>(null);
     const [roomIdInput, setRoomIdInput] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [playerName, setPlayerName] = useState('');
@@ -151,6 +171,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     onClick={() => { onSelectGame('chess'); setStep('mode-select'); }}
                     className="group relative w-full aspect-square sm:aspect-[4/5] bg-linear-to-br from-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 hover:border-indigo-500/50 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/20 overflow-hidden text-left p-4 sm:p-6 flex flex-col justify-between"
                 >
+                    <RulesBadge game="chess" onOpen={setRulesGameType} />
                     <div>
                         <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400 mb-2 sm:mb-3 group-hover:scale-110 transition-transform" />
                         <h3 className="text-xl sm:text-2xl font-black text-white">CHESS</h3>
@@ -165,6 +186,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     <div className="absolute top-0 right-0 p-1.5 sm:p-2 bg-emerald-500/10 text-emerald-300 rounded-bl-2xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest border-b border-l border-emerald-500/20">
                         New
                     </div>
+                    <RulesBadge game="backgammon" onOpen={setRulesGameType} />
                     <div>
                         <Dices className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-400 mb-2 sm:mb-3 group-hover:scale-110 transition-transform" />
                         <h3 className="text-xl sm:text-2xl font-black text-white">TAVLA</h3>
@@ -179,6 +201,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     <div className="absolute top-0 right-0 p-1.5 sm:p-2 bg-amber-500/10 text-amber-300 rounded-bl-2xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest border-b border-l border-amber-500/20">
                         Top
                     </div>
+                    <RulesBadge game="okey" onOpen={setRulesGameType} />
                     <div>
                         <LayoutGrid className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400 mb-2 sm:mb-3 group-hover:scale-110 transition-transform" />
                         <h3 className="text-xl sm:text-2xl font-black text-white">OKEY</h3>
@@ -193,6 +216,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     <div className="absolute top-0 right-0 p-1.5 sm:p-2 bg-rose-500/10 text-rose-300 rounded-bl-2xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest border-b border-l border-rose-500/20">
                         New
                     </div>
+                    <RulesBadge game="101" onOpen={setRulesGameType} />
                     <div>
                         <Hash className="w-8 h-8 sm:w-10 sm:h-10 text-rose-400 mb-2 sm:mb-3 group-hover:scale-110 transition-transform" />
                         <h3 className="text-xl sm:text-2xl font-black text-white">101</h3>
@@ -274,6 +298,15 @@ export const Lobby: React.FC<LobbyProps> = ({
                     <ArrowLeft size={20} />
                 </button>
                 <h2 className="text-2xl font-bold text-white">Select Mode</h2>
+                {selectedGame && (
+                    <button
+                        onClick={() => setRulesGameType(selectedGame)}
+                        className="ml-auto flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-700 text-slate-300 hover:text-white text-sm font-bold transition-colors border border-slate-700"
+                    >
+                        <BookOpen size={16} />
+                        Kurallar
+                    </button>
+                )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -756,6 +789,8 @@ export const Lobby: React.FC<LobbyProps> = ({
                     {isSupported ? `${activeLoading ? '...' : (activeCount ?? 0).toLocaleString()} Online` : 'Demo Mode'}
                 </div>
             </div>
+
+            <RulesModal gameType={rulesGameType} onClose={() => setRulesGameType(null)} />
         </div>
     );
 };

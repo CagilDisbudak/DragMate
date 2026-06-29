@@ -102,10 +102,11 @@ export const isValidSet = (tiles: Tile101[]): boolean => {
 };
 
 /**
- * Check if a set of tiles forms a valid RUN (same color, 3+ consecutive)
+ * Check if a set of tiles forms a valid RUN (same color, 3+ consecutive).
+ * Jokers may fill internal gaps or extend either end. Duplicate values are NOT allowed.
  */
 export const isValidRun = (tiles: Tile101[]): boolean => {
-    if (tiles.length < 3) return false;
+    if (tiles.length < 3 || tiles.length > 13) return false;
 
     const nonJokers = tiles.filter(t => !t.isFakeOkey);
     const jokerCount = tiles.length - nonJokers.length;
@@ -116,31 +117,28 @@ export const isValidRun = (tiles: Tile101[]): boolean => {
     const color = nonJokers[0].color;
     if (!nonJokers.every(t => t.color === color)) return false;
 
-    // Sort by value
-    const sortedNonJokers = [...nonJokers].sort((a, b) => a.value - b.value);
-    
-    // Check if we can form a consecutive sequence with jokers filling gaps
-    const minVal = sortedNonJokers[0].value;
-    const maxVal = sortedNonJokers[sortedNonJokers.length - 1].value;
-    
-    // The sequence length should match tiles.length
-    const sequenceLength = maxVal - minVal + 1;
-    
-    if (sequenceLength > tiles.length) return false; // Can't fill all gaps
-    if (sequenceLength < tiles.length) {
-        // Need to extend the sequence
-        const canExtendDown = minVal - (tiles.length - sequenceLength) >= 1;
-        const canExtendUp = maxVal + (tiles.length - sequenceLength) <= 13;
-        if (!canExtendDown && !canExtendUp) return false;
+    // No duplicate values allowed in a run
+    const values = nonJokers.map(t => t.value).sort((a, b) => a - b);
+    for (let i = 1; i < values.length; i++) {
+        if (values[i] === values[i - 1]) return false;
     }
 
-    // Check gaps in the sequence
-    let gaps = 0;
-    for (let i = 0; i < sortedNonJokers.length - 1; i++) {
-        gaps += sortedNonJokers[i + 1].value - sortedNonJokers[i].value - 1;
-    }
+    const minVal = values[0];
+    const maxVal = values[values.length - 1];
+    const span = maxVal - minVal + 1; // values covered by the [min,max] window
 
-    return gaps <= jokerCount;
+    // The window itself can't be wider than the run
+    if (span > tiles.length) return false;
+
+    // Internal gaps (missing values inside the window) must be coverable by jokers
+    const internalGaps = span - nonJokers.length;
+    if (internalGaps < 0 || internalGaps > jokerCount) return false;
+
+    // The full run of length tiles.length must fit somewhere in [1,13] while still
+    // covering [minVal, maxVal]. Remaining jokers extend the ends.
+    const earliestStart = Math.max(1, maxVal - tiles.length + 1);
+    const latestStart = Math.min(minVal, 13 - tiles.length + 1);
+    return earliestStart <= latestStart;
 };
 
 /**
@@ -153,34 +151,45 @@ export const isValidMeld = (tiles: Tile101[]): { valid: boolean; type: 'set' | '
 };
 
 /**
- * Check if a tile can be added to an existing meld
+ * Check if a tile can be added to an existing meld.
+ * Re-validates the augmented tile group so end/internal/joker cases are all handled.
  */
 export const canAddToMeld = (meld: Meld, tile: Tile101): boolean => {
     const newTiles = [...meld.tiles, tile];
-    
     if (meld.type === 'set') {
         return isValidSet(newTiles);
-    } else {
-        // For runs, also check adding at beginning or end
-        const sorted = [...meld.tiles].filter(t => !t.isFakeOkey).sort((a, b) => a.value - b.value);
-        if (sorted.length === 0) return isValidRun(newTiles);
-        
-        const minVal = sorted[0].value;
-        const maxVal = sorted[sorted.length - 1].value;
-        const color = sorted[0].color;
-        
-        // Joker can be added anywhere (within reason)
-        if (tile.isFakeOkey) {
-            return newTiles.length <= 13; // Max run length
-        }
-        
-        // Must be same color and extend the sequence
-        if (tile.color !== color) return false;
-        if (tile.value === minVal - 1 && tile.value >= 1) return true;
-        if (tile.value === maxVal + 1 && tile.value <= 13) return true;
-        
-        return false;
     }
+    return isValidRun(newTiles);
+};
+
+/**
+ * Point value of a non-joker tile value (1 = 1, 2-10 = face, 11-13 = 10).
+ */
+const pointsForValue = (value: number): number => (value >= 11 ? 10 : value);
+
+/**
+ * Total point value a meld contributes toward the 51-point first lay-down,
+ * counting jokers as the value they represent (for runs, the filled/extended
+ * positions; for sets, the shared value).
+ */
+export const getMeldPoints = (tiles: Tile101[], type: 'set' | 'run'): number => {
+    const nonJokers = tiles.filter(t => !t.isFakeOkey);
+    if (nonJokers.length === 0) return 0;
+
+    if (type === 'set') {
+        return tiles.length * pointsForValue(nonJokers[0].value);
+    }
+
+    // Run: place the run at the highest values that still cover the non-jokers,
+    // then sum every position (jokers included via their represented value).
+    const maxVal = Math.max(...nonJokers.map(t => t.value));
+    const start = Math.max(1, maxVal - tiles.length + 1);
+    let sum = 0;
+    for (let i = 0; i < tiles.length; i++) {
+        const v = start + i;
+        if (v >= 1 && v <= 13) sum += pointsForValue(v);
+    }
+    return sum;
 };
 
 /**
@@ -188,18 +197,13 @@ export const canAddToMeld = (meld: Meld, tile: Tile101): boolean => {
  */
 export const canMakeFirstLayDown = (melds: Tile101[][]): boolean => {
     let totalPoints = 0;
-    
+
     for (const meld of melds) {
         const validation = isValidMeld(meld);
-        if (!validation.valid) return false;
-        
-        // Only count non-joker points
-        const meldPoints = meld
-            .filter(t => !t.isFakeOkey)
-            .reduce((sum, t) => sum + getTilePoints(t), 0);
-        totalPoints += meldPoints;
+        if (!validation.valid || !validation.type) return false;
+        totalPoints += getMeldPoints(meld, validation.type);
     }
-    
+
     return totalPoints >= FIRST_MELD_MINIMUM;
 };
 
@@ -218,20 +222,18 @@ export const initialize101Game = (playerCount: number = 4): Game101State => {
         score: 0,
         hasLaidDown: false
     }));
-    
-    // Deal 14 tiles to each player
+
+    // Deal each hand (starter gets 1 extra) and arrange it neatly so the hand
+    // already looks organized the moment it is dealt.
     for (let p = 0; p < playerCount; p++) {
-        for (let i = 0; i < INITIAL_HAND_SIZE; i++) {
-            players[p].tiles[i] = deck.pop()!;
+        const count = p === 0 ? INITIAL_HAND_SIZE + 1 : INITIAL_HAND_SIZE;
+        const hand: Tile101[] = [];
+        for (let i = 0; i < count && deck.length > 0; i++) {
+            hand.push(deck.pop()!);
         }
+        players[p].tiles = smartSort101Tiles(hand);
     }
-    
-    // First player gets one extra tile to start
-    const emptySlot = players[0].tiles.findIndex(t => t === null);
-    if (emptySlot !== -1 && deck.length > 0) {
-        players[0].tiles[emptySlot] = deck.pop()!;
-    }
-    
+
     return {
         phase: 'playing',
         players,
@@ -262,21 +264,19 @@ export const startNewRound = (prevState: Game101State): Game101State => {
         score: p.score, // Keep scores
         hasLaidDown: false
     }));
-    
-    // Deal 14 tiles to each player
-    for (let p = 0; p < playerCount; p++) {
-        for (let i = 0; i < INITIAL_HAND_SIZE; i++) {
-            players[p].tiles[i] = deck.pop()!;
-        }
-    }
-    
-    // Dealer (who won last round) starts
+
+    // Dealer (who won last round) starts and gets the extra tile.
     const startingPlayer = prevState.roundWinner ?? 0;
-    const emptySlot = players[startingPlayer].tiles.findIndex(t => t === null);
-    if (emptySlot !== -1 && deck.length > 0) {
-        players[startingPlayer].tiles[emptySlot] = deck.pop()!;
+
+    for (let p = 0; p < playerCount; p++) {
+        const count = p === startingPlayer ? INITIAL_HAND_SIZE + 1 : INITIAL_HAND_SIZE;
+        const hand: Tile101[] = [];
+        for (let i = 0; i < count && deck.length > 0; i++) {
+            hand.push(deck.pop()!);
+        }
+        players[p].tiles = smartSort101Tiles(hand);
     }
-    
+
     return {
         phase: 'playing',
         players,
@@ -327,6 +327,174 @@ export const endRound = (state: Game101State, winnerId: number): Game101State =>
         roundWinner: winnerId,
         gameWinner
     };
+};
+
+/**
+ * Compute one full AI turn for the player whose turn it currently is.
+ *
+ * Pure function — takes the current game state and returns the next state after the
+ * AI has: drawn from the center, laid down the best melds it can (respecting the
+ * 51-point first lay-down rule), added tiles to existing melds, and discarded its
+ * lowest-value tile (advancing the turn). If the AI empties its hand it wins the round.
+ *
+ * Shared by single-player (use101Game) and the online host (use101Room) so AI behaves
+ * identically in both modes.
+ */
+export const computeAIMove = (prev: Game101State): Game101State => {
+    const currPlayer = prev.currentTurn;
+    const playerCount = prev.players.length;
+    const nextTurn = (currPlayer + 1) % playerCount;
+    const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
+
+    const newPlayers = prev.players.map(p => ({ ...p, tiles: [...p.tiles] }));
+    const newTableMelds: { [key: string]: Meld } = { ...prev.tableMelds };
+    const newStack = [...prev.centerStack];
+
+    // 1) Draw from the center stack.
+    const drawn = newStack.pop();
+    if (!drawn) {
+        // No tiles left to draw — just pass the turn.
+        return { ...prev, currentTurn: nextTurn };
+    }
+
+    const rack = newPlayers[currPlayer].tiles;
+    const emptyIdx = rack.findIndex(s => s === null);
+    if (emptyIdx !== -1) rack[emptyIdx] = drawn;
+
+    const getTiles = () => rack.filter((t): t is Tile101 => t !== null);
+
+    // Find the highest-value valid meld within a pool of tiles (joker-free, to stay safe).
+    const findBestMeldIn = (pool: Tile101[]): { tiles: Tile101[]; type: 'set' | 'run'; points: number } | null => {
+        let best: { tiles: Tile101[]; type: 'set' | 'run'; points: number } | null = null;
+
+        // Sets (same value, different colors), high values first.
+        for (let value = 13; value >= 1; value--) {
+            const sameValue = pool.filter(t => t.value === value && !t.isFakeOkey);
+            const uniqueColors = [...new Set(sameValue.map(t => t.color))];
+            if (uniqueColors.length >= 3) {
+                const set: Tile101[] = [];
+                for (const color of colorOrder) {
+                    if (uniqueColors.includes(color)) {
+                        const tile = sameValue.find(t => t.color === color && !set.includes(t));
+                        if (tile) set.push(tile);
+                    }
+                }
+                if (set.length >= 3) {
+                    const points = getMeldPoints(set, 'set');
+                    if (!best || points > best.points) best = { tiles: set, type: 'set', points };
+                }
+            }
+        }
+
+        // Runs (same color, consecutive).
+        for (const color of colorOrder) {
+            const colorTiles = pool.filter(t => t.color === color && !t.isFakeOkey).sort((a, b) => a.value - b.value);
+            for (let startIdx = colorTiles.length - 1; startIdx >= 0; startIdx--) {
+                const run: Tile101[] = [colorTiles[startIdx]];
+                let expectedValue = colorTiles[startIdx].value - 1;
+                for (let j = startIdx - 1; j >= 0 && expectedValue >= 1; j--) {
+                    if (colorTiles[j].value === expectedValue) {
+                        run.unshift(colorTiles[j]);
+                        expectedValue--;
+                    }
+                }
+                if (run.length >= 3) {
+                    const points = getMeldPoints(run, 'run');
+                    if (!best || points > best.points) best = { tiles: run, type: 'run', points };
+                }
+            }
+        }
+
+        return best;
+    };
+
+    // Greedily collect as many non-overlapping melds as possible from the current hand.
+    const collectMelds = (): { tiles: Tile101[]; type: 'set' | 'run'; points: number }[] => {
+        let pool = getTiles();
+        const melds: { tiles: Tile101[]; type: 'set' | 'run'; points: number }[] = [];
+        let best = findBestMeldIn(pool);
+        while (best) {
+            melds.push(best);
+            const usedIds = new Set(best.tiles.map(t => t.id));
+            pool = pool.filter(t => !usedIds.has(t.id));
+            best = findBestMeldIn(pool);
+        }
+        return melds;
+    };
+
+    // 2) Lay down melds. To OPEN, the combined value of melds laid this turn must reach 51.
+    let hasLaidDown = newPlayers[currPlayer].hasLaidDown;
+    const planned = collectMelds();
+    const plannedTotal = planned.reduce((sum, m) => sum + m.points, 0);
+
+    if (planned.length > 0 && (hasLaidDown || plannedTotal >= FIRST_MELD_MINIMUM)) {
+        planned.forEach((m, i) => {
+            const meldId = `meld-ai-${currPlayer}-r${prev.roundNumber}-${i}-${m.tiles[0].id}`;
+            newTableMelds[meldId] = { id: meldId, tiles: m.tiles, type: m.type, ownerPlayer: currPlayer };
+            for (const tile of m.tiles) {
+                const idx = rack.findIndex(rt => rt?.id === tile.id);
+                if (idx !== -1) rack[idx] = null;
+            }
+        });
+        hasLaidDown = true;
+
+        if (rack.filter(t => t !== null).length === 0) {
+            newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack, hasLaidDown };
+            return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack }, currPlayer);
+        }
+    }
+    newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack, hasLaidDown };
+
+    // 3) Add tiles to existing melds (once laid down).
+    if (hasLaidDown) {
+        for (const [meldId, meld] of Object.entries(newTableMelds)) {
+            const tiles = getTiles();
+            for (const tile of tiles) {
+                if (canAddToMeld(meld, tile)) {
+                    newTableMelds[meldId] = { ...meld, tiles: [...meld.tiles, tile] };
+                    const ti = rack.findIndex(t => t?.id === tile.id);
+                    if (ti !== -1) rack[ti] = null;
+                    newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
+                    if (rack.filter(t => t !== null).length === 0) {
+                        return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack }, currPlayer);
+                    }
+                    break; // one tile per meld per turn
+                }
+            }
+        }
+    }
+
+    // 4) Discard the lowest-value tile (never a joker if avoidable) and advance.
+    const tilesWithIdx = rack
+        .map((t, idx) => ({ tile: t, idx }))
+        .filter((x): x is { tile: Tile101; idx: number } => x.tile !== null);
+
+    if (tilesWithIdx.length > 0) {
+        tilesWithIdx.sort((a, b) => {
+            if (a.tile.isFakeOkey && !b.tile.isFakeOkey) return 1;
+            if (!a.tile.isFakeOkey && b.tile.isFakeOkey) return -1;
+            return getTilePoints(a.tile) - getTilePoints(b.tile);
+        });
+        const low = tilesWithIdx[0];
+        const discarded = rack[low.idx];
+        rack[low.idx] = null;
+        newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
+
+        const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
+            idx === currPlayer ? (discarded ? [...pile, discarded] : [...pile]) : [...pile]
+        );
+
+        return {
+            ...prev,
+            centerStack: newStack,
+            players: newPlayers,
+            discardPiles: newDiscardPiles,
+            tableMelds: newTableMelds,
+            currentTurn: nextTurn,
+        };
+    }
+
+    return { ...prev, centerStack: newStack, players: newPlayers, tableMelds: newTableMelds, currentTurn: nextTurn };
 };
 
 export type SortMode = 'smart' | 'runs' | 'sets';

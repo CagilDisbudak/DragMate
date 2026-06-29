@@ -14,6 +14,9 @@ import {
     isValidMeld,
     canAddToMeld,
     canMakeFirstLayDown,
+    computeAIMove,
+    endRound,
+    startNewRound as startNewRound101,
     smartSort101Tiles,
     sortByRuns,
     sortBySets,
@@ -22,7 +25,7 @@ import {
     findSetIndices,
     RACK_SIZE_101
 } from '../logic/101Logic';
-import type { Tile101, Meld } from '../logic/101Logic';
+import type { Tile101, Meld, Game101State } from '../logic/101Logic';
 
 // ============ TYPES ============
 
@@ -73,6 +76,50 @@ export interface Room101 {
 const generateRoomId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
 let meldIdCounter = 1;
+
+// ===== Room <-> Game101State conversion helpers =====
+// The Firestore room stores discardPiles/tableMelds as keyed objects; the shared
+// game engine works on Game101State (array-based). These keep both in sync.
+
+const discardMapToArray = (m: DiscardPilesMap): Tile101[][] => [
+    m['0'] || [], m['1'] || [], m['2'] || [], m['3'] || []
+];
+
+const discardArrayToMap = (a: Tile101[][]): DiscardPilesMap => ({
+    '0': a[0] || [], '1': a[1] || [], '2': a[2] || [], '3': a[3] || []
+});
+
+const roomToGameState = (data: Room101): Game101State => ({
+    phase: data.phase === 'waiting' ? 'dealing' : data.phase,
+    players: data.players.map(p => ({ tiles: p.tiles, score: p.score, hasLaidDown: p.hasLaidDown })),
+    centerStack: data.centerStack,
+    discardPiles: discardMapToArray(data.discardPiles),
+    indicatorTile: data.indicatorTile,
+    okeyTile: data.okeyTile,
+    tableMelds: data.tableMelds as { [key: string]: Meld },
+    currentTurn: data.currentTurn,
+    roundWinner: data.roundWinner,
+    gameWinner: data.gameWinner,
+    roundNumber: data.roundNumber,
+});
+
+// Build a Firestore update payload that applies a computed Game101State back onto the
+// room, preserving each player's identity fields (slot, userId, name, AI flag).
+const mergeStateIntoRoom = (data: Room101, next: Game101State) => ({
+    players: data.players.map((p, i) => ({
+        ...p,
+        tiles: next.players[i].tiles,
+        score: next.players[i].score,
+        hasLaidDown: next.players[i].hasLaidDown,
+    })),
+    centerStack: next.centerStack,
+    discardPiles: discardArrayToMap(next.discardPiles),
+    tableMelds: next.tableMelds as MeldMap,
+    currentTurn: next.currentTurn,
+    phase: next.phase as Room101Phase,
+    roundWinner: next.roundWinner,
+    gameWinner: next.gameWinner,
+});
 
 // ============ HOOK ============
 
@@ -543,31 +590,12 @@ export const use101Room = (roomId: string | null) => {
 
                 const newMelds = { ...data.tableMelds, [meldId]: newMeld };
 
-                // Check win
+                // Check win — score via the shared endRound (lowest total wins the game)
                 const remainingTiles = newRack.filter(t => t !== null).length;
                 if (remainingTiles === 0) {
-                    // Calculate scores
-                    const updatedPlayers = newPlayers.map((p, idx) => {
-                        if (idx === mySlot) return p;
-                        const handPoints = p.tiles
-                            .filter((t): t is Tile101 => t !== null)
-                            .reduce((sum, t) => {
-                                if (t.isFakeOkey) return sum + 25;
-                                if (t.value >= 11) return sum + 10;
-                                return sum + t.value;
-                            }, 0);
-                        return { ...p, score: p.score + handPoints };
-                    });
-
-                    const gameLoser = updatedPlayers.findIndex(p => p.score >= 101);
-
-                    transaction.update(roomRef, {
-                        players: updatedPlayers,
-                        tableMelds: newMelds,
-                        phase: gameLoser !== -1 ? 'gameOver' : 'roundOver',
-                        roundWinner: mySlot,
-                        gameWinner: gameLoser !== -1 ? mySlot : null
-                    });
+                    const gsPlayers = newPlayers.map(p => ({ tiles: p.tiles, score: p.score, hasLaidDown: p.hasLaidDown }));
+                    const ended = endRound({ ...roomToGameState(data), players: gsPlayers, tableMelds: newMelds }, mySlot);
+                    transaction.update(roomRef, mergeStateIntoRoom(data, ended));
                 } else {
                     transaction.update(roomRef, {
                         players: newPlayers,
@@ -627,30 +655,12 @@ export const use101Room = (roomId: string | null) => {
                 const newPlayers = [...data.players];
                 newPlayers[mySlot] = { ...newPlayers[mySlot], tiles: newRack };
 
-                // Check win
+                // Check win — score via the shared endRound (lowest total wins the game)
                 const remainingTiles = newRack.filter(t => t !== null).length;
                 if (remainingTiles === 0) {
-                    const updatedPlayers = newPlayers.map((p, idx) => {
-                        if (idx === mySlot) return p;
-                        const handPoints = p.tiles
-                            .filter((t): t is Tile101 => t !== null)
-                            .reduce((sum, t) => {
-                                if (t.isFakeOkey) return sum + 25;
-                                if (t.value >= 11) return sum + 10;
-                                return sum + t.value;
-                            }, 0);
-                        return { ...p, score: p.score + handPoints };
-                    });
-
-                    const gameLoser = updatedPlayers.findIndex(p => p.score >= 101);
-
-                    transaction.update(roomRef, {
-                        players: updatedPlayers,
-                        tableMelds: newMelds,
-                        phase: gameLoser !== -1 ? 'gameOver' : 'roundOver',
-                        roundWinner: mySlot,
-                        gameWinner: gameLoser !== -1 ? mySlot : null
-                    });
+                    const gsPlayers = newPlayers.map(p => ({ tiles: p.tiles, score: p.score, hasLaidDown: p.hasLaidDown }));
+                    const ended = endRound({ ...roomToGameState(data), players: gsPlayers, tableMelds: newMelds }, mySlot);
+                    transaction.update(roomRef, mergeStateIntoRoom(data, ended));
                 } else {
                     transaction.update(roomRef, {
                         players: newPlayers,
@@ -783,31 +793,33 @@ export const use101Room = (roomId: string | null) => {
         }
     }, [room, getMySlot]);
 
-    // Start new round
+    // Start new round — deals via the shared engine (keeps scores, dealer = round
+    // winner gets the extra tile and starts).
     const startNewRound = async () => {
         if (!firebaseEnabled || !db || !roomId || !isHost() || !room) return;
         if (room.phase !== 'roundOver') return;
 
         try {
             const roomRef = doc(collection(db, '101Rooms'), roomId);
-            const gameSetup = initialize101Game(4);
-
-            const newPlayers = room.players.map((p, idx) => ({
-                ...p,
-                tiles: gameSetup.players[idx].tiles,
-                hasLaidDown: false
-            }));
+            const next = startNewRound101(roomToGameState(room));
 
             await updateDoc(roomRef, {
                 phase: 'playing',
-                players: newPlayers,
-                centerStack: gameSetup.centerStack,
-                discardPiles: { '0': [], '1': [], '2': [], '3': [] },
-                indicatorTile: gameSetup.indicatorTile,
-                okeyTile: gameSetup.okeyTile,
+                players: room.players.map((p, idx) => ({
+                    ...p,
+                    tiles: next.players[idx].tiles,
+                    score: next.players[idx].score,
+                    hasLaidDown: next.players[idx].hasLaidDown
+                })),
+                centerStack: next.centerStack,
+                discardPiles: discardArrayToMap(next.discardPiles),
+                indicatorTile: next.indicatorTile,
+                okeyTile: next.okeyTile,
                 tableMelds: {},
-                currentTurn: room.roundWinner ?? 0,
-                roundNumber: room.roundNumber + 1
+                currentTurn: next.currentTurn,
+                roundWinner: null,
+                gameWinner: next.gameWinner,
+                roundNumber: next.roundNumber
             });
         } catch (error) {
             console.error('Error starting new round:', error);
@@ -840,44 +852,12 @@ export const use101Room = (roomId: string | null) => {
                     if (!snap.exists()) return;
 
                     const data = snap.data() as Room101;
-                    if (data.currentTurn !== currentPlayerSlot) return;
+                    if (data.currentTurn !== currentPlayerSlot || data.phase !== 'playing') return;
+                    if (!data.players[currentPlayerSlot]?.adIsAI) return;
 
-                    const aiPlayer = data.players[currentPlayerSlot];
-                    if (!aiPlayer.adIsAI) return;
-
-                    // AI draws from center
-                    const newStack = [...data.centerStack];
-                    const drawn = newStack.pop();
-
-                    if (drawn) {
-                        const rack = [...aiPlayer.tiles];
-                        const emptyIdx = rack.findIndex(s => s === null);
-                        if (emptyIdx !== -1) rack[emptyIdx] = drawn;
-
-                        // AI discards first tile
-                        const firstTileIdx = rack.findIndex(s => s !== null);
-                        const discarded = rack[firstTileIdx];
-                        rack[firstTileIdx] = null;
-
-                        const newPlayers = [...data.players];
-                        newPlayers[currentPlayerSlot] = { ...aiPlayer, tiles: rack };
-
-                        // Discard to AI's own pile
-                        const aiDiscardPile = data.discardPiles[String(currentPlayerSlot)] || [];
-                        const newDiscardPiles = {
-                            ...data.discardPiles,
-                            [String(currentPlayerSlot)]: discarded ? [...aiDiscardPile, discarded] : [...aiDiscardPile]
-                        };
-
-                        const nextTurn = (currentPlayerSlot + 1) % 4;
-
-                        transaction.update(roomRef, {
-                            centerStack: newStack,
-                            players: newPlayers,
-                            discardPiles: newDiscardPiles,
-                            currentTurn: nextTurn
-                        });
-                    }
+                    // Run the shared smart-AI engine (melds, adds, smart discard, win).
+                    const next = computeAIMove(roomToGameState(data));
+                    transaction.update(roomRef, mergeStateIntoRoom(data, next));
                 });
             } catch (error) {
                 console.error('AI turn error:', error);
