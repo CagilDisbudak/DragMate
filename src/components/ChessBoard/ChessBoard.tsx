@@ -13,28 +13,40 @@ import { Square } from './Square';
 import { Piece } from '../Piece/Piece';
 
 interface ChessBoardProps {
-    onMove?: (fen: string) => void;
+    onMove?: (fen: string, move: { from: string; to: string; promotion?: string }) => void;
     initialFen?: string;
     playerColor?: 'w' | 'b';
     isGameOver?: boolean;
+    /** Bumped by the parent when a move is rejected, forcing a rollback to `initialFen`. */
+    resyncSignal?: number;
 }
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
     onMove,
     initialFen,
     playerColor = 'w',
-    isGameOver = false
+    isGameOver = false,
+    resyncSignal = 0
 }) => {
     const [game, setGame] = useState(() => createGame(initialFen));
     const [highlightedSquares, setHighlightedSquares] = useState<string[]>([]);
     const [activeSquare, setActiveSquare] = useState<string | null>(null);
 
-    // Sync local game state with server FEN
+    // Sync local game state with the authoritative server FEN.
     React.useEffect(() => {
         if (initialFen && initialFen !== game.fen()) {
             setGame(createGame(initialFen));
         }
     }, [initialFen]);
+
+    // Roll back an optimistic move the server rejected.
+    React.useEffect(() => {
+        if (resyncSignal && initialFen) {
+            setGame(createGame(initialFen));
+            setHighlightedSquares([]);
+            setActiveSquare(null);
+        }
+    }, [resyncSignal]);
 
     const sensors = useSensors(
         // TouchSensor öne alınarak mobilde daha tutarlı sürükleme
@@ -59,8 +71,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const move = validateMove(nextGame, from, to);
 
         if (move) {
-            setGame(nextGame);
-            if (onMove) onMove(nextGame.fen());
+            setGame(nextGame); // optimistic; server confirms or the parent triggers a resync
+            if (onMove) onMove(nextGame.fen(), { from, to, promotion: (move as { promotion?: string }).promotion });
         }
     }, [game, onMove]);
 

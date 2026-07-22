@@ -1,0 +1,22 @@
+# Render Blueprint — deploys the DragMate authoritative game backend.
+# The React frontend stays on GitHub Pages; only this Node + Socket.IO service
+# runs on Render. Render provides HTTPS/WSS on the *.onrender.com domain, which
+# the gh-pages (HTTPS) client connects to.
+#
+# To deploy: push to GitHub, then in the Render dashboard choose
+# "New +" → "Blueprint" and point it at this repo.
+services:
+  - type: web
+    name: dragmate-server
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: CLIENT_ORIGIN
+        value: https://cagildisbudak.github.io

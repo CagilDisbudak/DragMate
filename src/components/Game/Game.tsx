@@ -22,6 +22,8 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
     const [localFen, setLocalFen] = useState(localGame.fen());
     const [localStatus, setLocalStatus] = useState<'active' | 'checkmate' | 'stalemate' | 'draw'>('active');
     const [localWinner, setLocalWinner] = useState<'w' | 'b' | ''>('');
+    // Bumped when the server rejects an optimistic move, forcing the board to roll back.
+    const [resyncSignal, setResyncSignal] = useState(0);
 
     // Unified State
     const isLocal = mode === 'local';
@@ -79,7 +81,12 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
     };
 
     // Actions
-    const updateMove = isLocal ? handleLocalMove : gameRoom.updateMove;
+    const updateMove = isLocal
+        ? (fen: string) => handleLocalMove(fen)
+        : async (_fen: string, move: { from: string; to: string; promotion?: string }) => {
+            const ok = await gameRoom.makeMove(move);
+            if (!ok) setResyncSignal((n) => n + 1); // server rejected → roll back the board
+        };
     const resignGame = isLocal ? (color: 'w' | 'b') => {
         setLocalStatus('active'); // Resign just ends it locally visually for now, or elaborate logic
         setLocalWinner(color === 'w' ? 'b' : 'w');
@@ -226,6 +233,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                         onMove={updateMove}
                         playerColor={playerColor}
                         isGameOver={isGameOver}
+                        resyncSignal={resyncSignal}
                     />
                 </div>
 

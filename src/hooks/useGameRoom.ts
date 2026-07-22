@@ -1,235 +1,139 @@
-import { useEffect, useState } from 'react';
-import {
-    collection,
-    doc,
-    onSnapshot,
-    runTransaction,
-    setDoc,
-    updateDoc
-} from 'firebase/firestore';
-import { getAuth, signInAnonymously } from 'firebase/auth';
-import { Chess } from 'chess.js';
-import { db, firebaseEnabled } from '../lib/firebase';
+import { useEffect, useRef, useState } from 'react';
+import { getSocket, getUserId, emitAck, EV, type RoomView } from '../lib/socket';
 
+/**
+ * Chess room hook — now backed by the authoritative Socket.IO server instead of
+ * Firestore. The public shape is preserved (room/userId/loading/isAuthLoading +
+ * create/join/resign/reset/leave) so consuming components barely change. The one
+ * change is `updateMove(fen)` → `makeMove({from,to,promotion})`, because the
+ * server validates the move against its stored position rather than trusting a
+ * client-computed FEN.
+ */
 export interface GameRoom {
     fen: string;
     whitePlayer: string;
     blackPlayer: string;
     turn: 'w' | 'b';
-    lastMove?: any;
-    status?: 'active' | 'checkmate' | 'stalemate' | 'draw' | 'resigned';
+    lastMove?: unknown;
+    status?: 'active' | 'checkmate' | 'stalemate' | 'draw' | 'resigned' | string;
     winner?: 'w' | 'b' | '';
     resultReason?: string;
 }
 
-const generateRoomId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
-const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+export interface ChessMoveIntent {
+    from: string;
+    to: string;
+    promotion?: string;
+}
+
+/** Adapt the server's per-seat view into the legacy GameRoom shape. */
+function viewToRoom(view: RoomView): GameRoom {
+    const state = view.state as { fen?: string };
+    const winnerSeat = view.winner;
+    return {
+        fen: state.fen ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        whitePlayer: view.seats[0]?.userId ?? '',
+        blackPlayer: view.seats[1]?.userId ?? '',
+        turn: view.currentTurn === 0 ? 'w' : 'b',
+        lastMove: view.lastMove,
+        status: view.status,
+        winner: winnerSeat === 0 ? 'w' : winnerSeat === 1 ? 'b' : '',
+        resultReason: view.status,
+    };
+}
 
 export const useGameRoom = (roomId: string | null) => {
     const [room, setRoom] = useState<GameRoom | null>(null);
-    const [userId, setUserId] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [userId] = useState<string>(() => getUserId());
+    const [loading, setLoading] = useState<boolean>(!!roomId);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
+    const [version, setVersion] = useState(0);
+    const versionRef = useRef(0);
 
-    // Firebase auth: anonymous sign-in
+    // Socket connection readiness (replaces Firebase anonymous auth loading).
     useEffect(() => {
-        const auth = getAuth();
-        signInAnonymously(auth)
-            .then((cred) => {
-                setUserId(cred.user.uid);
-            })
-            .catch((err) => {
-                console.error('Auth failed', err);
-            })
-            .finally(() => setIsAuthLoading(false));
+        const socket = getSocket();
+        const onConnect = () => setIsAuthLoading(false);
+        if (socket.connected) setIsAuthLoading(false);
+        socket.on('connect', onConnect);
+        return () => {
+            socket.off('connect', onConnect);
+        };
     }, []);
 
-    // Ensure we have a userId before performing room ops
-    const ensureUserReady = async () => {
-        if (userId) return userId;
-        const auth = getAuth();
-        const cred = await signInAnonymously(auth);
-        setUserId(cred.user.uid);
-        return cred.user.uid;
-    };
-
-    // Subscribe to room changes
+    // Subscribe to the room and receive authoritative views.
     useEffect(() => {
-        if (!firebaseEnabled || !db) {
-            console.warn('Firebase not configured; room sync disabled.');
-            setLoading(false);
-            return;
-        }
-
         if (!roomId) {
             setRoom(null);
             setLoading(false);
             return;
         }
-
         setLoading(true);
-        const roomRef = doc(collection(db, 'rooms'), roomId);
-        const unsubscribe = onSnapshot(
-            roomRef,
-            (snapshot) => {
-                if (snapshot.exists()) {
-                    setRoom(snapshot.data() as GameRoom);
-                } else {
-                    setRoom(null);
-                }
-                setLoading(false);
-            },
-            (error) => {
-                console.error('Room subscription error', error);
-                setRoom(null);
-                setLoading(false);
-            }
-        );
+        const socket = getSocket();
 
-        return () => unsubscribe();
+        const onView = (view: RoomView) => {
+            if (view.roomId !== roomId || view.gameType !== 'chess') return;
+            versionRef.current = view.version;
+            setVersion(view.version);
+            setRoom(viewToRoom(view));
+            setLoading(false);
+        };
+
+        socket.on(EV.view, onView);
+        // Ensure this socket is joined to the room's channel and gets a fresh view.
+        emitAck(EV.subscribe, { roomId }).then((ack) => {
+            if (!ack.ok) setLoading(false);
+        });
+
+        return () => {
+            socket.off(EV.view, onView);
+        };
     }, [roomId]);
 
-    const createRoom = async () => {
-        if (!firebaseEnabled || !db) throw new Error('Firebase not configured');
-
-        const uid = await ensureUserReady();
-
-        const id = generateRoomId();
-        const roomRef = doc(collection(db, 'rooms'), id);
-
-        await setDoc(roomRef, {
-            fen: START_FEN,
-            whitePlayer: uid,
-            blackPlayer: '',
-            turn: 'w',
-            status: 'active',
-            winner: '',
-            resultReason: '',
-        });
-
-        return id;
+    const createRoom = async (): Promise<string> => {
+        const ack = await emitAck<{ roomId: string }>(EV.create, { gameType: 'chess' });
+        if (!ack.ok || !ack.data) throw new Error(ack.ok ? 'No room id' : ack.error);
+        return ack.data.roomId;
     };
 
-    const joinRoom = async (id: string) => {
-        if (!firebaseEnabled || !db) throw new Error('Firebase not configured');
-        const uid = await ensureUserReady();
-
-        const roomRef = doc(collection(db, 'rooms'), id);
-
-        await runTransaction(db, async (transaction) => {
-            const snap = await transaction.get(roomRef);
-            if (!snap.exists()) {
-                throw new Error('Room not found');
-            }
-
-            const data = snap.data() as GameRoom;
-            const nextData = { ...data };
-
-            if (!nextData.whitePlayer) {
-                nextData.whitePlayer = uid;
-            } else if (!nextData.blackPlayer && nextData.whitePlayer !== uid) {
-                nextData.blackPlayer = uid;
-            }
-
-            transaction.update(roomRef, nextData);
-        });
+    const joinRoom = async (id: string): Promise<void> => {
+        const ack = await emitAck(EV.join, { roomId: id });
+        if (!ack.ok) throw new Error(ack.error);
     };
 
-    const updateMove = async (fen: string) => {
-        if (!firebaseEnabled || !db) return;
+    /** Send a move intent; returns true if the server accepted it. */
+    const makeMove = async (move: ChessMoveIntent): Promise<boolean> => {
+        if (!roomId) return false;
+        const ack = await emitAck(EV.move, { roomId, move, expectedVersion: versionRef.current });
+        return ack.ok;
+    };
+
+    const resignGame = async (_color?: 'w' | 'b'): Promise<void> => {
         if (!roomId) return;
-
-        const roomRef = doc(collection(db, 'rooms'), roomId);
-
-        await runTransaction(db, async (transaction) => {
-            const snap = await transaction.get(roomRef);
-            if (!snap.exists()) return;
-
-            const data = snap.data() as GameRoom;
-            if (data.status && data.status !== 'active') {
-                // Oyun bitmişse yeni hamle yazma
-                return;
-            }
-
-            const game = new Chess(fen);
-            const turn = game.turn() as 'w' | 'b';
-
-            let status: GameRoom['status'] = 'active';
-            let winner: GameRoom['winner'] = '';
-            let resultReason = '';
-
-            if (game.isCheckmate()) {
-                status = 'checkmate';
-                winner = turn === 'w' ? 'b' : 'w'; // Sırası gelen mat ise kazanan diğer renk
-                resultReason = 'checkmate';
-            } else if ((game as any).isStalemate && (game as any).isStalemate()) {
-                status = 'stalemate';
-                winner = '';
-                resultReason = 'stalemate';
-            } else if (game.isDraw()) {
-                status = 'draw';
-                winner = '';
-                resultReason = 'draw';
-            }
-
-            transaction.update(roomRef, { fen, turn, status, winner, resultReason });
-        });
+        await emitAck(EV.resign, { roomId });
     };
 
-    const resignGame = async (color: 'w' | 'b') => {
-        if (!firebaseEnabled || !db) return;
+    const resetGame = async (): Promise<void> => {
         if (!roomId) return;
-
-        const roomRef = doc(collection(db, 'rooms'), roomId);
-        const winner = color === 'w' ? 'b' : 'w';
-        await updateDoc(roomRef, {
-            status: 'resigned',
-            winner,
-            resultReason: 'resigned',
-        });
+        await emitAck(EV.rematch, { roomId });
     };
 
-    const resetGame = async () => {
-        if (!firebaseEnabled || !db) return;
+    const leaveRoom = async (): Promise<void> => {
         if (!roomId) return;
-
-        const roomRef = doc(collection(db, 'rooms'), roomId);
-        await updateDoc(roomRef, {
-            fen: START_FEN,
-            turn: 'w',
-            status: 'active',
-            winner: '',
-            resultReason: '',
-        });
+        await emitAck(EV.leave, { roomId });
     };
 
-    const leaveRoom = async () => {
-        if (!firebaseEnabled || !db) return;
-        if (!roomId) return;
-
-        try {
-            const uid = await ensureUserReady();
-            const roomRef = doc(collection(db, 'rooms'), roomId);
-
-            await runTransaction(db, async (transaction) => {
-                const snap = await transaction.get(roomRef);
-                if (!snap.exists()) return;
-
-                const data = snap.data() as GameRoom;
-                const nextData = { ...data };
-
-                if (nextData.whitePlayer === uid) {
-                    nextData.whitePlayer = '';
-                } else if (nextData.blackPlayer === uid) {
-                    nextData.blackPlayer = '';
-                }
-
-                transaction.update(roomRef, nextData);
-            });
-        } catch (error) {
-            console.error("Error leaving room:", error);
-        }
+    return {
+        room,
+        userId,
+        loading,
+        isAuthLoading,
+        version,
+        createRoom,
+        joinRoom,
+        makeMove,
+        resignGame,
+        resetGame,
+        leaveRoom,
     };
-
-    return { room, userId, loading, isAuthLoading, createRoom, joinRoom, updateMove, resignGame, resetGame, leaveRoom };
 };
