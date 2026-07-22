@@ -136,7 +136,7 @@ body {
 }
 
 .text-gradient-brand {
-  @apply text-transparent bg-clip-text bg-linear-to-r from-indigo-300 via-violet-300 to-pink-300;
+  @apply text-transparent bg-clip-text bg-linear-to-r from-sky-300 via-indigo-300 to-fuchsia-300;
 }
 
 /* ---------- Glass primitives ---------- */
@@ -167,7 +167,7 @@ body {
 /* ---------- Buttons ---------- */
 
 .btn-premium {
-  @apply relative overflow-hidden px-6 py-3 bg-linear-to-br from-indigo-500 via-violet-500 to-pink-500 text-white font-bold rounded-xl transition-all duration-300 shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98];
+  @apply relative overflow-hidden px-6 py-3 bg-linear-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white font-bold rounded-xl transition-all duration-300 shadow-lg shadow-violet-500/25 hover:shadow-xl hover:shadow-violet-500/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98];
 }
 .btn-premium::after {
   content: "";
@@ -193,24 +193,24 @@ body {
 
 /* ---------- Game surface materials ---------- */
 
-/* Green felt (okey / card tables) */
+/* Rich emerald-teal felt (okey / card tables) */
 .felt-surface {
   background:
     radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.06), transparent 55%),
-    radial-gradient(ellipse at center, #14532d 0%, #0f3d22 55%, #092b18 100%);
+    radial-gradient(ellipse at center, #0e5c46 0%, #0a4433 55%, #062e22 100%);
   box-shadow:
     inset 0 2px 24px rgba(0, 0, 0, 0.55),
     inset 0 0 90px rgba(0, 0, 0, 0.35);
 }
 
-/* Warm wood (backgammon frame) */
+/* Warm walnut wood (backgammon frame, racks) */
 .wood-surface {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 30%),
-    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.12) 0 2px, transparent 2px 7px),
-    linear-gradient(135deg, #4a2c17 0%, #6b3f1f 45%, #3f2513 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%),
+    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.1) 0 2px, transparent 2px 7px),
+    linear-gradient(135deg, #452a15 0%, #7a4a24 45%, #331e0e 100%);
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.08),
+    inset 0 2px 0 rgba(255, 255, 255, 0.09),
     inset 0 -6px 24px rgba(0, 0, 0, 0.5);
 }
 

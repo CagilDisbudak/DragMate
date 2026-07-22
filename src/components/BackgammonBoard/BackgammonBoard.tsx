@@ -1,11 +1,15 @@
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     DndContext,
+    type CollisionDetection,
     type DragEndEvent,
     type DragStartEvent,
     MouseSensor,
     TouchSensor,
+    pointerWithin,
+    rectIntersection,
     useSensor,
     useSensors,
     useDroppable,
@@ -24,6 +28,15 @@ interface BackgammonBoardProps {
     onRollDice: (dice: number[]) => void;
     validMoves: Move[];
 }
+
+// Prefer the actual pointer position when picking a drop target. The default
+// rect-intersection uses the DragOverlay's rect, which is bigger than the
+// checker and offset from the cursor — drops kept landing on the wrong point.
+const pointerFirstCollision: CollisionDetection = (args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) return pointerCollisions;
+    return rectIntersection(args);
+};
 
 // Dark leather/felt playing field inside the wood frame
 const feltFieldStyle: React.CSSProperties = {
@@ -200,7 +213,12 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
     };
 
     return (
-        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DndContext
+            sensors={sensors}
+            collisionDetection={pointerFirstCollision}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+        >
             <div className="flex flex-col md:flex-row w-full max-w-full md:max-w-7xl mx-auto gap-2 md:gap-4 items-stretch p-1 md:p-4">
 
                 {/* Main Board Area — wood frame around a dark felt field */}
@@ -353,24 +371,30 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
 
             </div>
 
-            <DragOverlay>
-                {activeId ? (
-                    <div className="w-12 h-12 md:w-14 md:h-14 cursor-grabbing scale-110 rotate-3 drop-shadow-[0_14px_18px_rgba(0,0,0,0.55)]">
-                        <CheckerVisual color={
-                            (function () {
-                                if (activeId.startsWith('bar-white')) return 'white';
-                                if (activeId.startsWith('bar-black')) return 'black';
-                                if (activeId.startsWith('checker-')) {
-                                    const parts = activeId.split('-');
-                                    const idx = parseInt(parts[1]);
-                                    return board[idx] > 0 ? 'white' : 'black';
-                                }
-                                return 'white'; // Fallback
-                            })() as 'white' | 'black'
-                        } />
-                    </div>
-                ) : null}
-            </DragOverlay>
+            {/* Portal the overlay to <body>: ancestors with transforms/animations
+                (e.g. anim-fade-up) break position:fixed and made the dragged
+                checker render far away from the cursor. */}
+            {createPortal(
+                <DragOverlay>
+                    {activeId ? (
+                        <div className="w-full h-full cursor-grabbing scale-110 rotate-3 drop-shadow-[0_14px_18px_rgba(0,0,0,0.55)]">
+                            <CheckerVisual color={
+                                (function () {
+                                    if (activeId.startsWith('bar-white')) return 'white';
+                                    if (activeId.startsWith('bar-black')) return 'black';
+                                    if (activeId.startsWith('checker-')) {
+                                        const parts = activeId.split('-');
+                                        const idx = parseInt(parts[1]);
+                                        return board[idx] > 0 ? 'white' : 'black';
+                                    }
+                                    return 'white'; // Fallback
+                                })() as 'white' | 'black'
+                            } />
+                        </div>
+                    ) : null}
+                </DragOverlay>,
+                document.body
+            )}
         </DndContext>
     );
 };

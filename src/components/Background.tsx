@@ -7,18 +7,18 @@ const NOISE_URI =
 export const Background: React.FC = () => {
     return (
         <div className="fixed inset-0 -z-50 overflow-hidden pointer-events-none bg-[#020617]">
-            {/* Aurora layers */}
-            <div className="bg-blob opacity-25 w-[900px] h-[900px] -top-96 -left-96 bg-indigo-600 blur-[130px]" />
+            {/* Aurora layers — indigo core, violet drift, teal + rose glints */}
+            <div className="bg-blob opacity-30 w-[900px] h-[900px] -top-96 -left-96 bg-indigo-500 blur-[130px]" />
             <div
-                className="bg-blob opacity-25 w-[650px] h-[650px] top-1/2 -right-56 bg-fuchsia-600 blur-[110px]"
+                className="bg-blob opacity-25 w-[680px] h-[680px] top-1/2 -right-56 bg-violet-600 blur-[110px]"
                 style={{ animationDelay: '-5s', animationDuration: '26s' }}
             />
             <div
-                className="bg-blob opacity-15 w-[520px] h-[520px] bottom-0 left-1/4 bg-cyan-400 blur-[90px]"
+                className="bg-blob opacity-15 w-[540px] h-[540px] bottom-0 left-1/4 bg-teal-400 blur-[95px]"
                 style={{ animationDelay: '-12s', animationDuration: '19s' }}
             />
             <div
-                className="bg-blob opacity-10 w-[420px] h-[420px] top-24 left-1/2 bg-emerald-500 blur-[100px]"
+                className="bg-blob opacity-[0.12] w-[420px] h-[420px] top-24 left-[55%] bg-rose-500 blur-[100px]"
                 style={{ animationDelay: '-8s', animationDuration: '30s' }}
             />
 

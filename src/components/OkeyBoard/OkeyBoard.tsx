@@ -62,6 +62,8 @@ interface PlayerPanelProps {
     isDragging?: boolean;
     playerInfo: PlayerInfo;
     tileCount?: number;
+    /** Narrow side-column variant: hides the name on small screens. */
+    compact?: boolean;
 }
 
 const PlayerPanel: React.FC<PlayerPanelProps> = React.memo(({
@@ -70,7 +72,8 @@ const PlayerPanel: React.FC<PlayerPanelProps> = React.memo(({
     className = '',
     isDragging = false,
     playerInfo,
-    tileCount = 14
+    tileCount = 14,
+    compact = false
 }) => {
     const isActive = currentTurn === playerId;
     const initial = (playerInfo.name || '?').trim().charAt(0).toUpperCase();
@@ -78,7 +81,8 @@ const PlayerPanel: React.FC<PlayerPanelProps> = React.memo(({
     return (
         <div className={`transition-all duration-300 ${isActive && !isDragging ? 'scale-105' : 'opacity-90'} ${className}`}>
             <div className={`
-                relative flex items-center gap-2 min-w-[160px] h-9 pl-1.5 pr-3 rounded-full border backdrop-blur-md transition-all duration-300
+                relative flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full border backdrop-blur-md transition-all duration-300
+                ${compact ? 'min-w-0' : 'min-w-[130px] sm:min-w-[160px]'}
                 ${isActive
                     ? 'border-amber-400/70 bg-amber-500/15 shadow-[0_0_22px_-2px_rgba(251,191,36,0.55)]'
                     : 'border-white/10 bg-black/45 shadow-lg'}
@@ -92,7 +96,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = React.memo(({
                     {playerInfo.isAI ? <Bot size={13} /> : initial}
                 </div>
 
-                <div className={`flex-1 flex items-center justify-center gap-1.5 font-bold text-[11px] uppercase tracking-wide min-w-0 ${isActive ? 'text-amber-100' : 'text-slate-300'}`}>
+                <div className={`flex-1 items-center justify-center gap-1.5 font-bold text-[11px] uppercase tracking-wide min-w-0 ${compact ? 'hidden md:flex' : 'flex'} ${isActive ? 'text-amber-100' : 'text-slate-300'}`}>
                     {isActive && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />}
                     <span className="truncate">{playerInfo.name}</span>
                     {playerInfo.isYou && !playerInfo.isAI && (
@@ -100,14 +104,13 @@ const PlayerPanel: React.FC<PlayerPanelProps> = React.memo(({
                     )}
                 </div>
 
-                {/* Only show tile count for other players, not for self */}
+                {/* Tile-count badge lives INSIDE the pill (no overflow → no overlap) */}
                 {!playerInfo.isYou && (
                     <div className={`
-                        absolute -bottom-5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[9px] font-bold shadow-md flex items-center gap-1 border whitespace-nowrap
-                        ${isActive ? 'bg-amber-500/90 border-amber-300/60 text-amber-950' : 'bg-black/70 border-white/10 text-slate-300'}
+                        px-1.5 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 border whitespace-nowrap shrink-0
+                        ${isActive ? 'bg-amber-500/90 border-amber-300/60 text-amber-950' : 'bg-black/60 border-white/10 text-slate-300'}
                     `}>
-                        {playerInfo.isAI && <Bot size={10} />}
-                        TAŞ: {tileCount}
+                        {tileCount}
                     </div>
                 )}
             </div>
@@ -115,7 +118,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = React.memo(({
     );
 });
 
-const DiscardZone = ({ playerId, position, discardPiles, okeyTile, currentTurn, userTileCount, onDrawDiscard, isDraggingRackTile, mySlot = 0 }: any) => {
+const DiscardZone = ({ playerId, discardPiles, okeyTile, currentTurn, userTileCount, onDrawDiscard, isDraggingRackTile, mySlot = 0 }: any) => {
     // Adjust logic for multiplayer - "user" is whoever's turn it is at mySlot
     const canDropHere = (playerId === mySlot && currentTurn === mySlot && userTileCount === 15 && isDraggingRackTile);
     const prevPlayerIdx = (mySlot + 3) % 4;
@@ -134,21 +137,16 @@ const DiscardZone = ({ playerId, position, discardPiles, okeyTile, currentTurn, 
         disabled: !canDrawHere || !lastTile
     });
 
-    const posStyle: any = {
-        top: "absolute top-[22%] left-1/2 -translate-x-1/2",
-        bottom: "absolute bottom-[36%] right-[12%]",
-        left: "absolute left-[12%] top-[35%]",
-        right: "absolute right-[12%] top-[35%]",
-    };
-
     const jitterRots = [-7, 5];
 
+    // Positioned by the parent flex rows — no absolute placement, so zones can
+    // never overlap other table elements regardless of viewport size.
     return (
         <div
             ref={setNodeRef}
             onClick={() => canDrawHere && onDrawDiscard()}
             className={`
-                ${posStyle[position]} w-16 h-24 rounded-xl transition-all duration-200 flex items-center justify-center z-20
+                relative w-14 h-20 sm:w-16 sm:h-24 shrink-0 rounded-xl transition-all duration-200 flex items-center justify-center
                 ${isOver ? 'bg-emerald-400/30 scale-110 ring-4 ring-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.5)]' : ''}
                 ${canDropHere && !isOver ? 'bg-emerald-500/10 ring-2 ring-emerald-400/50' : ''}
                 ${canDrawHere ? 'cursor-grab active:cursor-grabbing bg-amber-400/10' : ''}
@@ -366,65 +364,69 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
             {/* Wooden table rim */}
             <div className="relative w-full mx-auto rounded-[24px] shadow-glass-lg anim-fade-up">
                 <div className="wood-surface rounded-[24px] p-1.5 sm:p-2.5">
-                    <div className="relative w-full aspect-[16/10] felt-surface rounded-[16px] overflow-hidden font-sans">
+                    {/* Flex-row table: rows can never overlap each other, at any viewport size */}
+                    <div className="relative w-full felt-surface rounded-[16px] overflow-hidden font-sans flex flex-col gap-3 sm:gap-4 px-2 sm:px-5 pt-3 pb-2 sm:pb-3">
                         {/* Felt vignette */}
                         <div className="absolute inset-0 rounded-[16px] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.4),inset_0_0_80px_rgba(0,0,0,0.3)] pointer-events-none" />
 
-                        {/* Top player (display position 2) */}
-                        <PlayerPanel
-                            playerId={getActualSlot(2)}
-                            currentTurn={gameState.currentTurn}
-                            isDragging={!!activeId}
-                            className="absolute top-4 left-1/2 -translate-x-1/2 z-30"
-                            playerInfo={getPlayerInfoForDisplay(2)}
-                            tileCount={getTileCount(getActualSlot(2))}
-                        />
-
-                        {/* Left player (display position 3) */}
-                        <PlayerPanel
-                            playerId={getActualSlot(3)}
-                            currentTurn={gameState.currentTurn}
-                            isDragging={!!activeId}
-                            className="absolute left-4 top-1/2 -translate-y-1/2 -rotate-90 origin-center z-30"
-                            playerInfo={getPlayerInfoForDisplay(3)}
-                            tileCount={getTileCount(getActualSlot(3))}
-                        />
-
-                        {/* Right player (display position 1) */}
-                        <PlayerPanel
-                            playerId={getActualSlot(1)}
-                            currentTurn={gameState.currentTurn}
-                            isDragging={!!activeId}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 origin-center z-30"
-                            playerInfo={getPlayerInfoForDisplay(1)}
-                            tileCount={getTileCount(getActualSlot(1))}
-                        />
-
-                        {/* Discard zones */}
-                        <DiscardZone playerId={getActualSlot(2)} position="top" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
-                        <DiscardZone playerId={getActualSlot(3)} position="left" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
-                        <DiscardZone playerId={getActualSlot(1)} position="right" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
-                        <DiscardZone playerId={mySlot} position="bottom" {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
-
-                        {/* Center: indicator plaque + draw pile — sits above the bottom rack bar */}
-                        <div className="absolute top-[36%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-8 sm:gap-12">
-                            <div className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-amber-400/35 bg-linear-to-b from-[#4a2f10]/90 to-[#2c1b08]/95 px-3.5 py-2.5 shadow-[inset_0_1px_0_rgba(251,191,36,0.25),0_10px_28px_rgba(0,0,0,0.55)]">
-                                <span className="font-display text-[9px] font-bold uppercase tracking-[0.3em] text-amber-300/90">Gösterge</span>
-                                <OkeyTile tile={gameState.indicatorTile!} size="md" okeyTile={gameState.okeyTile} />
-                                {gameState.okeyTile && (
-                                    <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-amber-200/80">
-                                        Okey:
-                                        <span className={`w-2 h-2 rounded-full ${gameState.okeyTile.color ? OKEY_DOT_COLORS[gameState.okeyTile.color] : 'bg-slate-400'}`} />
-                                        <span className="font-display">{gameState.okeyTile.value}</span>
-                                    </span>
-                                )}
-                                <FinishZone isDraggingRackTile={activeId?.startsWith('slot-') || false} canFinish={gameState.currentTurn === mySlot && userTileCount === 15} />
-                            </div>
-                            <DraggableDrawPile {...gameState} userTileCount={userTileCount} centerStackCount={gameState.centerStack.length} onDraw={onDraw} mySlot={mySlot} />
+                        {/* Row 1: top opponent + their discard pile */}
+                        <div className="relative z-10 flex flex-col items-center gap-2.5">
+                            <PlayerPanel
+                                playerId={getActualSlot(2)}
+                                currentTurn={gameState.currentTurn}
+                                isDragging={!!activeId}
+                                playerInfo={getPlayerInfoForDisplay(2)}
+                                tileCount={getTileCount(getActualSlot(2))}
+                            />
+                            <DiscardZone playerId={getActualSlot(2)} {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
                         </div>
 
-                        <div className="absolute bottom-0 left-0 right-0 z-40 p-2 sm:p-3 flex flex-col items-center gap-3">
-                            <div className="flex items-center gap-4 sm:gap-6">
+                        {/* Row 2: left opponent | center (indicator + draw pile) | right opponent */}
+                        <div className="relative z-10 flex-1 flex items-center justify-between gap-2 sm:gap-6 min-h-[11rem]">
+                            <div className="flex flex-col items-center gap-8 shrink-0">
+                                <PlayerPanel
+                                    playerId={getActualSlot(3)}
+                                    currentTurn={gameState.currentTurn}
+                                    isDragging={!!activeId}
+                                    playerInfo={getPlayerInfoForDisplay(3)}
+                                    tileCount={getTileCount(getActualSlot(3))}
+                                    compact
+                                />
+                                <DiscardZone playerId={getActualSlot(3)} {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
+                            </div>
+
+                            <div className="flex items-center gap-6 sm:gap-12">
+                                <div className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-amber-400/35 bg-linear-to-b from-[#4a2f10]/90 to-[#2c1b08]/95 px-3.5 py-2.5 shadow-[inset_0_1px_0_rgba(251,191,36,0.25),0_10px_28px_rgba(0,0,0,0.55)]">
+                                    <span className="font-display text-[9px] font-bold uppercase tracking-[0.3em] text-amber-300/90">Gösterge</span>
+                                    <OkeyTile tile={gameState.indicatorTile!} size="md" okeyTile={gameState.okeyTile} />
+                                    {gameState.okeyTile && (
+                                        <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-amber-200/80">
+                                            Okey:
+                                            <span className={`w-2 h-2 rounded-full ${gameState.okeyTile.color ? OKEY_DOT_COLORS[gameState.okeyTile.color] : 'bg-slate-400'}`} />
+                                            <span className="font-display">{gameState.okeyTile.value}</span>
+                                        </span>
+                                    )}
+                                    <FinishZone isDraggingRackTile={activeId?.startsWith('slot-') || false} canFinish={gameState.currentTurn === mySlot && userTileCount === 15} />
+                                </div>
+                                <DraggableDrawPile {...gameState} userTileCount={userTileCount} centerStackCount={gameState.centerStack.length} onDraw={onDraw} mySlot={mySlot} />
+                            </div>
+
+                            <div className="flex flex-col items-center gap-8 shrink-0">
+                                <PlayerPanel
+                                    playerId={getActualSlot(1)}
+                                    currentTurn={gameState.currentTurn}
+                                    isDragging={!!activeId}
+                                    playerInfo={getPlayerInfoForDisplay(1)}
+                                    tileCount={getTileCount(getActualSlot(1))}
+                                    compact
+                                />
+                                <DiscardZone playerId={getActualSlot(1)} {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
+                            </div>
+                        </div>
+
+                        {/* Row 3: me — my discard target + identity + sort, then the rack */}
+                        <div className="relative z-10 flex flex-col items-center gap-2.5">
+                            <div className="flex items-center justify-center gap-3 sm:gap-5 flex-wrap">
                                 <PlayerPanel
                                     playerId={mySlot}
                                     currentTurn={gameState.currentTurn}
@@ -435,6 +437,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
                                     <Wand2 size={14} className="text-amber-400" />
                                     Düzenle
                                 </button>
+                                <DiscardZone playerId={mySlot} {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
                             </div>
                             <PlayerRack tiles={gameState.players[mySlot].tiles} playerId={mySlot} isCurrentPlayer okeyTile={gameState.okeyTile} />
                         </div>

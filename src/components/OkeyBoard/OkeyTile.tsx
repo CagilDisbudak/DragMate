@@ -7,7 +7,8 @@ interface OkeyTileProps {
   isJoker?: boolean;
   className?: string;
   dragging?: boolean;
-  size?: 'xs' | 'sm' | 'md' | 'lg';
+  /** 'fit' fills the parent (used by rack slots so tiles scale with the slot). */
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'fit';
 }
 
 // Numeral gradients per tile color (painted on ivory)
@@ -26,9 +27,9 @@ const DOT_COLORS: Record<string, string> = {
 };
 
 export const OkeyTile: React.FC<OkeyTileProps> = React.memo(({ tile, okeyTile, isJoker, className = '', dragging = false, size = 'md' }) => {
-  const dims = size === 'xs' ? 'w-8 h-11 rounded-md' : size === 'sm' ? 'w-10 h-13 rounded-lg' : size === 'lg' ? 'w-16 h-22 rounded-2xl' : 'w-14 h-19 rounded-xl';
-  const fontSize = size === 'xs' ? 'text-lg' : size === 'sm' ? 'text-2xl' : size === 'lg' ? 'text-5xl' : 'text-4xl';
-  const dotSize = size === 'xs' || size === 'sm' ? 'w-1.5 h-1.5' : 'w-2 h-2';
+  const dims = size === 'fit' ? 'w-full h-full rounded-lg' : size === 'xs' ? 'w-8 h-11 rounded-md' : size === 'sm' ? 'w-10 h-13 rounded-lg' : size === 'lg' ? 'w-16 h-22 rounded-2xl' : 'w-14 h-19 rounded-xl';
+  const fontSize = size === 'fit' ? 'text-[clamp(1rem,2.9vw,2.1rem)]' : size === 'xs' ? 'text-lg' : size === 'sm' ? 'text-2xl' : size === 'lg' ? 'text-5xl' : 'text-4xl';
+  const dotSize = size === 'xs' || size === 'sm' ? 'w-1.5 h-1.5' : size === 'fit' ? 'w-1.5 h-1.5 sm:w-2 sm:h-2' : 'w-2 h-2';
 
   const isFake = !!tile.isFakeOkey;
   // Real Okey check (the tile currently acting as the joker for this round)
@@ -38,9 +39,9 @@ export const OkeyTile: React.FC<OkeyTileProps> = React.memo(({ tile, okeyTile, i
   const renderContent = () => {
     // Fake Okey ("Sahte Okey") — clover motif
     if (isFake) {
-      const jokerSize = size === 'xs' ? 'w-5 h-5' : size === 'sm' ? 'w-6 h-6' : size === 'lg' ? 'w-10 h-10' : 'w-8 h-8';
-      const cloverSize = size === 'xs' ? 'text-[10px]' : size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-2xl' : 'text-lg';
-      const textSize = size === 'xs' ? 'text-[6px]' : size === 'sm' ? 'text-[8px]' : size === 'lg' ? 'text-sm' : 'text-[10px]';
+      const jokerSize = size === 'fit' ? 'w-5 h-5 sm:w-7 sm:h-7' : size === 'xs' ? 'w-5 h-5' : size === 'sm' ? 'w-6 h-6' : size === 'lg' ? 'w-10 h-10' : 'w-8 h-8';
+      const cloverSize = size === 'fit' ? 'text-xs sm:text-base' : size === 'xs' ? 'text-[10px]' : size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-2xl' : 'text-lg';
+      const textSize = size === 'fit' ? 'text-[6px] sm:text-[9px]' : size === 'xs' ? 'text-[6px]' : size === 'sm' ? 'text-[8px]' : size === 'lg' ? 'text-sm' : 'text-[10px]';
 
       return (
         <div className="flex flex-col items-center justify-center gap-0.5">
