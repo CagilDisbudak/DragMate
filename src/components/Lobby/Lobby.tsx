@@ -223,7 +223,7 @@ export const Lobby: React.FC<LobbyProps> = ({
     const [isJoining, setIsJoining] = useState(false);
     const [joinRoomId, setJoinRoomId] = useState('');
     const [copied, setCopied] = useState(false);
-    const { count: activeCount, loading: activeLoading, isSupported } = useGlobalActivePlayers();
+    const { count: activeCount, loading: activeLoading, isOnline: presenceOnline, isSupported } = useGlobalActivePlayers();
 
     const currentAccent = ACCENT[selectedGame ?? 'chess'];
 
@@ -713,8 +713,12 @@ export const Lobby: React.FC<LobbyProps> = ({
                 </p>
                 <div className="flex justify-center pt-1">
                     <div className="glass-chip text-slate-300">
-                        <span className={`w-2 h-2 rounded-full ${isSupported ? 'bg-emerald-400 animate-glow-pulse' : 'bg-slate-600'}`} />
-                        {isSupported ? `${activeLoading ? '...' : (activeCount ?? 0).toLocaleString()} Online` : 'Demo Mode'}
+                        <span className={`w-2 h-2 rounded-full ${!isSupported ? 'bg-slate-600' : presenceOnline ? 'bg-emerald-400 animate-glow-pulse' : 'bg-amber-400 animate-pulse'}`} />
+                        {!isSupported
+                            ? 'Demo Mode'
+                            : !presenceOnline
+                                ? 'Sunucuya bağlanılıyor…'
+                                : `${activeLoading ? '…' : (activeCount ?? 1).toLocaleString()} Online`}
                     </div>
                 </div>
             </header>

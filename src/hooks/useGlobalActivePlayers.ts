@@ -27,10 +27,27 @@ export function useGlobalActivePlayers(): PresenceState {
       setCount(data?.count ?? null);
       setLoading(false);
     };
-    const onConnect = () => setIsOnline(true);
+    // Pull the count explicitly: the connect-time broadcast can fire before this
+    // hook attaches its listener, and with a single visitor no further
+    // connect/disconnect event would ever arrive — count would stay "..." forever.
+    const pullCount = () => {
+      socket.emit('presence:get', (res: { count?: number } | undefined) => {
+        if (typeof res?.count === 'number') {
+          setCount(res.count);
+          setLoading(false);
+        }
+      });
+    };
+    const onConnect = () => {
+      setIsOnline(true);
+      pullCount();
+    };
     const onDisconnect = () => setIsOnline(false);
 
-    if (socket.connected) setIsOnline(true);
+    if (socket.connected) {
+      setIsOnline(true);
+      pullCount();
+    }
     socket.on(EV.presence, onPresence);
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);

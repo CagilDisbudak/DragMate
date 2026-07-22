@@ -57,6 +57,12 @@ io.on('connection', (socket) => {
 
   broadcastPresence();
 
+  // On-demand pull: lets a client that missed the connect-time broadcast
+  // (handler attached late) fetch the count instead of waiting forever.
+  socket.on(EV.presenceGet, (ack?: (a: unknown) => void) => {
+    ack?.({ count: io.engine.clientsCount });
+  });
+
   socket.on(EV.create, async (payload: CreateRoomPayload, ack?: (a: unknown) => void) => {
     try {
       const userId = socket.data.userId as string;
@@ -149,6 +155,9 @@ io.on('connection', (socket) => {
 
 // Periodically drop abandoned rooms.
 setInterval(() => manager.sweep(), 30 * 60 * 1000);
+
+// Presence heartbeat: catches any client that missed an event-driven update.
+setInterval(() => broadcastPresence(), 30 * 1000);
 
 httpServer.listen(PORT, () => {
   console.log(`✅ DragMate server listening on :${PORT}`);

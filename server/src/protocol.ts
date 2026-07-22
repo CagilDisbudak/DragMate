@@ -72,4 +72,7 @@ export const EV = {
   view: 'room:view',
   error: 'room:error',
   presence: 'presence:count',
+  // client -> server (ack request): pull the current count on demand, so a
+  // client that missed the connect-time broadcast never gets stuck loading
+  presenceGet: 'presence:get',
 } as const;
