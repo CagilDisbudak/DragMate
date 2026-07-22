@@ -10,52 +10,53 @@ interface OkeyTileProps {
   size?: 'xs' | 'sm' | 'md' | 'lg';
 }
 
+// Numeral gradients per tile color (painted on ivory)
+const NUMERAL_GRADIENTS: Record<string, string> = {
+  red: 'from-red-500 via-red-600 to-red-800',
+  black: 'from-slate-600 via-slate-800 to-slate-950',
+  blue: 'from-blue-500 via-blue-600 to-blue-900',
+  yellow: 'from-amber-400 via-amber-500 to-amber-600',
+};
+
+const DOT_COLORS: Record<string, string> = {
+  red: 'bg-red-600',
+  black: 'bg-slate-900',
+  blue: 'bg-blue-600',
+  yellow: 'bg-amber-500',
+};
+
 export const OkeyTile: React.FC<OkeyTileProps> = React.memo(({ tile, okeyTile, isJoker, className = '', dragging = false, size = 'md' }) => {
-  const getTextColor = (color: string | null) => {
-    switch (color) {
-      case 'red': return 'text-[#d32f2f]';
-      case 'black': return 'text-[#212121]';
-      case 'blue': return 'text-[#1976d2]';
-      case 'yellow': return 'text-[#ffa000]';
-      default: return 'text-slate-400';
-    }
-  };
-
-  const dims = size === 'xs' ? 'w-8 h-11' : size === 'sm' ? 'w-10 h-13' : size === 'lg' ? 'w-16 h-22' : 'w-14 h-19';
+  const dims = size === 'xs' ? 'w-8 h-11 rounded-md' : size === 'sm' ? 'w-10 h-13 rounded-lg' : size === 'lg' ? 'w-16 h-22 rounded-2xl' : 'w-14 h-19 rounded-xl';
   const fontSize = size === 'xs' ? 'text-lg' : size === 'sm' ? 'text-2xl' : size === 'lg' ? 'text-5xl' : 'text-4xl';
+  const dotSize = size === 'xs' || size === 'sm' ? 'w-1.5 h-1.5' : 'w-2 h-2';
 
-  // Real Okey check
-  const isRealOkey = okeyTile && tile.color === okeyTile.color && tile.value === okeyTile.value && !tile.isFakeOkey;
+  const isFake = !!tile.isFakeOkey;
+  // Real Okey check (the tile currently acting as the joker for this round)
+  const isRealOkey = !isFake && !!okeyTile && tile.color === okeyTile.color && tile.value === okeyTile.value;
+  const showOkeyGlow = isRealOkey || (!!isJoker && !isFake);
 
   const renderContent = () => {
-    // Joker (Fake Okey) - special display
-    if (tile.isFakeOkey) {
+    // Fake Okey ("Sahte Okey") — clover motif
+    if (isFake) {
       const jokerSize = size === 'xs' ? 'w-5 h-5' : size === 'sm' ? 'w-6 h-6' : size === 'lg' ? 'w-10 h-10' : 'w-8 h-8';
-      const innerSize = size === 'xs' ? 'w-2.5 h-2.5' : size === 'sm' ? 'w-3 h-3' : size === 'lg' ? 'w-5 h-5' : 'w-4 h-4';
+      const cloverSize = size === 'xs' ? 'text-[10px]' : size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-2xl' : 'text-lg';
       const textSize = size === 'xs' ? 'text-[6px]' : size === 'sm' ? 'text-[8px]' : size === 'lg' ? 'text-sm' : 'text-[10px]';
-      
+
       return (
         <div className="flex flex-col items-center justify-center gap-0.5">
-          <div className={`${jokerSize} rounded-full border-2 border-emerald-400 flex items-center justify-center bg-gradient-to-br from-emerald-100 to-emerald-200`}>
-            <div className={`${innerSize} rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-sm animate-pulse`} />
+          <div className={`${jokerSize} rounded-full border-2 border-emerald-500/80 bg-linear-to-br from-emerald-50 to-emerald-200 flex items-center justify-center shadow-[inset_0_1px_2px_rgba(255,255,255,0.8),0_1px_3px_rgba(6,95,70,0.35)]`}>
+            <span className={`${cloverSize} leading-none text-emerald-600 drop-shadow-sm`}>☘</span>
           </div>
-          <span className={`${textSize} font-black text-emerald-600 tracking-tight uppercase`}>JOKER</span>
+          <span className={`${textSize} font-black text-emerald-700 tracking-tight uppercase`}>JOKER</span>
         </div>
       );
     }
     return (
       <div className="flex flex-col items-center justify-center leading-none">
-        <span className={`${fontSize} font-bold ${getTextColor(tile.color)} tracking-tighter`}>
+        <span className={`${fontSize} font-display font-bold tracking-tighter text-transparent bg-clip-text bg-linear-to-b ${tile.color ? NUMERAL_GRADIENTS[tile.color] : 'from-slate-400 to-slate-500'} drop-shadow-[0_1px_0_rgba(255,255,255,0.6)]`}>
           {tile.value}
         </span>
-        <div className={`w-2 h-2 rounded-full mt-1 ${tile.color === 'red' ? 'bg-red-500' : tile.color === 'blue' ? 'bg-blue-500' : tile.color === 'yellow' ? 'bg-yellow-500' : 'bg-black'} shadow-sm`} />
-
-        {/* Real Okey Badge */}
-        {isRealOkey && (
-          <div className="absolute top-1 right-1">
-            <div className="text-[10px] drop-shadow-sm">⭐</div>
-          </div>
-        )}
+        <div className={`${dotSize} rounded-full mt-1 ${tile.color ? DOT_COLORS[tile.color] : 'bg-slate-400'} shadow-[inset_0_-1px_1px_rgba(0,0,0,0.35),0_1px_1px_rgba(255,255,255,0.5)]`} />
       </div>
     );
   };
@@ -67,29 +68,39 @@ export const OkeyTile: React.FC<OkeyTileProps> = React.memo(({ tile, okeyTile, i
     zIndex: 50,
     willChange: 'transform',
     cursor: 'grabbing',
-    boxShadow: '0 8px 20px rgba(0,0,0,0.3)',
+    boxShadow: '0 12px 24px rgba(0,0,0,0.45)',
   } : {};
-
-  // Determine if we should show joker styling (from prop or from tile.isFakeOkey)
-  const showJokerStyle = isJoker || tile.isFakeOkey;
 
   return (
     <div
       className={`
         relative ${dims}
-        bg-[#fffdfa]
-        rounded-md
+        tile-ivory
         flex items-center justify-center
         select-none
-        border border-[#e5e3de]
-        ${!dragging ? 'shadow-[0_2px_0_#d1cfca,0_4px_8px_rgba(0,0,0,0.2)] cursor-grab hover:-translate-y-1 transition-transform duration-150' : ''}
-        ${showJokerStyle ? 'ring-2 ring-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.5)]' : ''}
+        ${!dragging ? 'anim-deal-in' : ''}
         ${className}
       `}
       style={tileStyle}
     >
-      {/* Tile Surface Polish */}
-      <div className="absolute inset-[2px] rounded-[3px] bg-gradient-to-br from-white to-transparent opacity-50 pointer-events-none" />
+      {/* Tile surface polish */}
+      <div className="absolute inset-[2px] rounded-[inherit] bg-linear-to-br from-white to-transparent opacity-50 pointer-events-none" />
+
+      {/* Okey glow ring (the round's joker tile) */}
+      {showOkeyGlow && (
+        <div className="absolute -inset-px rounded-[inherit] ring-2 ring-amber-400/90 shadow-[0_0_16px_rgba(251,191,36,0.6)] pointer-events-none" />
+      )}
+      {/* Fake Okey emerald ring */}
+      {isFake && (
+        <div className="absolute -inset-px rounded-[inherit] ring-2 ring-emerald-400/80 shadow-[0_0_12px_rgba(16,185,129,0.5)] pointer-events-none" />
+      )}
+
+      {/* Okey star badge */}
+      {showOkeyGlow && (
+        <div className="absolute -top-1.5 -right-1.5 z-20 w-4 h-4 rounded-full bg-linear-to-br from-amber-300 to-amber-500 border border-amber-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.45)] flex items-center justify-center text-[8px] leading-none text-amber-950">
+          ★
+        </div>
+      )}
 
       <div className="relative z-10 flex flex-col items-center justify-center w-full h-full pb-0.5">
         {renderContent()}

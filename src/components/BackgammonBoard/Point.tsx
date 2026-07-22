@@ -19,17 +19,13 @@ export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted
         id: index.toString(),
     });
 
-    // Triangle Visuals
-    // Top row triangles point DOWN. Bottom row triangles point UP.
-    // Colors alternate. Even index might be one color, odd another.
-    // Standard: Point 1 (index 0) is usually Black's home, so color depends on setup.
-    // Let's stick to alternating colors.
-    const isDark = index % 2 === 1; // Arbitrary pattern
+    // Triangle tones — alternating deep emerald and warm sand, base-to-tip gradient.
+    const isDark = index % 2 === 1;
+    const tone = isDark
+        ? { from: '#13462f', to: '#0a231a', stroke: 'rgba(110, 231, 183, 0.14)' }
+        : { from: '#a89060', to: '#5c4e33', stroke: 'rgba(255, 244, 214, 0.16)' };
 
-    // const triangleColor = isDark ? 'border-b-slate-700/80' : 'border-b-indigo-500/20'; // Unused
-    // const triangleColorTop = isDark ? 'border-t-slate-700/80' : 'border-t-indigo-500/20'; // Unused
-
-    const highlightClass = (isOver || isHighlighted) ? 'bg-indigo-500/20 ring-2 ring-indigo-400/50' : '';
+    const isTargeted = isOver || isHighlighted;
 
     const absCount = Math.abs(count);
     const checkerColor = count > 0 ? 'white' : 'black';
@@ -68,11 +64,12 @@ export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted
     // Add count badge if there's overflow
     const countBadge = hasOverflow ? (
         <div
-            className={`absolute ${isTop ? 'bottom-1' : 'top-1'} left-1/2 -translate-x-1/2 z-20 
-                px-1.5 py-0.5 rounded-full text-[10px] font-bold shadow-lg
+            className={`absolute ${isTop ? 'bottom-1' : 'top-1'} left-1/2 -translate-x-1/2 z-20
+                min-w-[20px] px-1.5 py-0.5 rounded-full text-[10px] font-display font-bold text-center
+                shadow-[0_2px_5px_rgba(0,0,0,0.5)] anim-pop-in
                 ${checkerColor === 'white'
-                    ? 'bg-slate-100 text-slate-800 border border-slate-300'
-                    : 'bg-slate-800 text-slate-100 border border-slate-600'
+                    ? 'bg-linear-to-b from-white to-slate-200 text-slate-900 border border-amber-200/60'
+                    : 'bg-linear-to-b from-slate-700 to-slate-900 text-slate-100 border border-slate-500/60'
                 }`}
         >
             {absCount}
@@ -82,21 +79,51 @@ export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted
     return (
         <div
             ref={setNodeRef}
-            className={`relative flex-1 h-full flex ${isTop ? 'flex-col items-center justify-start' : 'flex-col-reverse items-center justify-start'} ${highlightClass} transition-colors rounded-sm`}
+            className={`relative flex-1 h-full flex ${isTop ? 'flex-col items-center justify-start' : 'flex-col-reverse items-center justify-start'} transition-colors duration-200 rounded-sm`}
         >
-            {/* The Triangle Background */}
-            <div
-                className={`absolute inset-0 pointer-events-none w-full h-full opacity-60`}
-                style={{
-                    // CSS Triangle hack or Clip Path
-                    // Clip path is better for responsive
-                    clipPath: isTop
-                        ? 'polygon(0 0, 50% 100%, 100% 0)'
-                        : 'polygon(0 100%, 50% 0, 100% 100%)',
-                    backgroundColor: isDark ? '#334155' : '#818cf8', // Slate-700 vs Indigo-400
-                    opacity: isDark ? 0.4 : 0.15
-                }}
-            />
+            {/* The Triangle — SVG for crisp gradient fill + thin outline */}
+            <svg
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+            >
+                <defs>
+                    <linearGradient
+                        id={`pt-grad-${index}`}
+                        x1="0" x2="0"
+                        y1={isTop ? '0' : '1'}
+                        y2={isTop ? '1' : '0'}
+                    >
+                        <stop offset="0%" stopColor={tone.from} />
+                        <stop offset="100%" stopColor={tone.to} />
+                    </linearGradient>
+                </defs>
+                <polygon
+                    points={isTop ? '2,0 50,96 98,0' : '2,100 50,4 98,100'}
+                    fill={`url(#pt-grad-${index})`}
+                    stroke={tone.stroke}
+                    strokeWidth="1.5"
+                    vectorEffect="non-scaling-stroke"
+                />
+            </svg>
+
+            {/* Valid-target highlight: soft emerald glow + pulsing ring */}
+            {isTargeted && (
+                <>
+                    <div
+                        className={`absolute inset-0 z-0 pointer-events-none rounded-sm ${isOver ? 'bg-emerald-400/20' : 'bg-emerald-500/10'}`}
+                        style={{ boxShadow: 'inset 0 0 22px rgba(16, 185, 129, 0.3)' }}
+                    />
+                    <div
+                        className={`absolute inset-0.5 z-20 pointer-events-none rounded-md border-2 animate-pulse ${isOver ? 'border-emerald-300/90' : 'border-emerald-400/60'}`}
+                        style={{ boxShadow: '0 0 20px -4px rgba(16, 185, 129, 0.6)' }}
+                    />
+                    <div
+                        className={`absolute ${isTop ? 'bottom-2' : 'top-2'} left-1/2 -translate-x-1/2 z-20 w-2 h-2 rounded-full bg-emerald-400/90 animate-ping pointer-events-none`}
+                    />
+                </>
+            )}
 
             {/* Checkers Container */}
             <div className={`z-10 w-full h-full flex ${isTop ? 'flex-col pt-2' : 'flex-col-reverse pb-2'} items-center overflow-hidden`}>
@@ -106,61 +133,83 @@ export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted
             {/* Count Badge for stacked checkers */}
             {countBadge}
 
-            {/* Hit Effect */}
-            {/* Hit Effect - Shattering Checker */}
+            {/* Hit Effect - Shattering Checker + emerald/red impact pulse */}
             {isHitTarget && (
                 <div className={`absolute ${isTop ? 'top-6' : 'bottom-6'} left-1/2 -translate-x-1/2 z-50 pointer-events-none`}>
                     <style>
                         {`
                         @keyframes shatter-left {
                             0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-                            100% { transform: translate(-20px, -10px) rotate(-15deg); opacity: 0; }
+                            100% { transform: translate(-22px, -12px) rotate(-18deg); opacity: 0; }
                         }
                         @keyframes shatter-right {
                             0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-                            100% { transform: translate(20px, -10px) rotate(15deg); opacity: 0; }
+                            100% { transform: translate(22px, -12px) rotate(18deg); opacity: 0; }
                         }
                         @keyframes impact-flash {
-                            0% { transform: scale(0.5); opacity: 0; }
-                            10% { transform: scale(1.2); opacity: 1; }
-                            100% { transform: scale(0); opacity: 0; }
+                            0% { transform: scale(0.4); opacity: 0; }
+                            15% { transform: scale(1.25); opacity: 1; }
+                            100% { transform: scale(1.6); opacity: 0; }
+                        }
+                        @keyframes impact-ring {
+                            0% { transform: scale(0.5); opacity: 1; }
+                            100% { transform: scale(2); opacity: 0; }
                         }
                         `}
                     </style>
                     <div className="relative w-10 h-10 md:w-12 md:h-12">
                         {(() => {
                             const victimColor = count > 0 ? 'black' : 'white';
-                            const baseClass = victimColor === 'white'
-                                ? 'bg-slate-200 border-slate-300 shadow-sm'
-                                : 'bg-slate-900 border-slate-700 shadow-xl';
-                            const innerBorder = victimColor === 'white' ? 'border-slate-300' : 'border-slate-700';
+                            const halfStyle: React.CSSProperties = victimColor === 'white'
+                                ? {
+                                    background: 'radial-gradient(circle at 32% 28%, #ffffff 0%, #f0ebdc 40%, #c9c0a4 100%)',
+                                    boxShadow: 'inset 0 -3px 5px rgba(94,77,44,0.4)',
+                                }
+                                : {
+                                    background: 'radial-gradient(circle at 32% 28%, #414c60 0%, #1c2331 45%, #05070c 100%)',
+                                    boxShadow: 'inset 0 -3px 5px rgba(0,0,0,0.8)',
+                                };
+                            const ringBorder = victimColor === 'white' ? 'border-amber-950/25' : 'border-slate-400/25';
 
                             return (
                                 <>
                                     {/* Left Half */}
                                     <div
-                                        className={`absolute inset-0 rounded-full border-4 ${baseClass} overflow-hidden`}
+                                        className="absolute inset-0 rounded-full overflow-hidden"
                                         style={{
+                                            ...halfStyle,
                                             clipPath: 'polygon(0% 0%, 55% 0%, 45% 100%, 0% 100%)',
-                                            animation: 'shatter-left 0.6s ease-out forwards'
+                                            animation: 'shatter-left 0.6s ease-out forwards',
                                         }}
                                     >
-                                        <div className={`absolute inset-2 rounded-full border-2 ${innerBorder} opacity-30`} />
+                                        <div className={`absolute inset-2 rounded-full border-2 ${ringBorder}`} />
                                     </div>
 
                                     {/* Right Half */}
                                     <div
-                                        className={`absolute inset-0 rounded-full border-4 ${baseClass} overflow-hidden`}
+                                        className="absolute inset-0 rounded-full overflow-hidden"
                                         style={{
+                                            ...halfStyle,
                                             clipPath: 'polygon(55% 0%, 100% 0%, 100% 100%, 45% 100%)',
-                                            animation: 'shatter-right 0.6s ease-out forwards'
+                                            animation: 'shatter-right 0.6s ease-out forwards',
                                         }}
                                     >
-                                        <div className={`absolute inset-2 rounded-full border-2 ${innerBorder} opacity-30`} />
+                                        <div className={`absolute inset-2 rounded-full border-2 ${ringBorder}`} />
                                     </div>
 
-                                    {/* Impact Flash */}
-                                    <div className="absolute inset-0 bg-white rounded-full mix-blend-overlay" style={{ animation: 'impact-flash 0.4s ease-out forwards' }} />
+                                    {/* Red impact flash */}
+                                    <div
+                                        className="absolute -inset-2 rounded-full"
+                                        style={{
+                                            background: 'radial-gradient(circle, rgba(239,68,68,0.6) 0%, rgba(239,68,68,0) 70%)',
+                                            animation: 'impact-flash 0.5s ease-out forwards',
+                                        }}
+                                    />
+                                    {/* Emerald shock ring */}
+                                    <div
+                                        className="absolute inset-0 rounded-full border-2 border-emerald-400/80"
+                                        style={{ animation: 'impact-ring 0.7s ease-out forwards' }}
+                                    />
                                 </>
                             );
                         })()}
@@ -168,8 +217,8 @@ export const Point: React.FC<PointProps> = ({ index, count, isTop, isHighlighted
                 </div>
             )}
 
-            {/* Point Number (Optional debugging or visual aid) */}
-            <span className={`absolute ${isTop ? 'top-0' : 'bottom-0'} text-[8px] text-slate-600 font-mono opacity-50`}>
+            {/* Point Number */}
+            <span className={`absolute ${isTop ? 'top-0.5' : 'bottom-0.5'} text-[8px] font-display text-white/25 pointer-events-none select-none`}>
                 {index + 1}
             </span>
         </div>

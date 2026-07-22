@@ -25,6 +25,20 @@ interface BackgammonBoardProps {
     validMoves: Move[];
 }
 
+// Dark leather/felt playing field inside the wood frame
+const feltFieldStyle: React.CSSProperties = {
+    background:
+        'radial-gradient(ellipse at 50% 22%, rgba(255, 255, 255, 0.05), transparent 55%), linear-gradient(165deg, #0e211a 0%, #0a1811 55%, #060e0a 100%)',
+    boxShadow:
+        'inset 0 2px 20px rgba(0, 0, 0, 0.7), inset 0 0 70px rgba(0, 0, 0, 0.45)',
+};
+
+// Inset channel shading for the wooden bar / tray shelves
+const woodInsetShadow: React.CSSProperties = {
+    boxShadow:
+        'inset 0 2px 10px rgba(0, 0, 0, 0.6), inset 0 0 24px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.05)',
+};
+
 export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
     gameState,
     playerColor,
@@ -38,7 +52,6 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
     const [isRollingDice, setIsRollingDice] = useState(false);
     const prevDice = React.useRef(gameState.dice);
 
-    // Optimized sensors for smoother drag
     // Optimized sensors for smoother drag
     const sensors = useSensors(
         useSensor(MouseSensor, {
@@ -166,7 +179,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
         }
 
         return (
-            <div className={`flex-1 flex ${isTop ? 'border-b-2' : 'border-t-2'} border-slate-700/30`}>
+            <div className={`flex-1 flex ${isTop ? 'border-b' : 'border-t'} border-white/5`}>
                 {points.map(i => (
                     <Point
                         key={i}
@@ -190,115 +203,129 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="flex flex-col md:flex-row w-full max-w-full md:max-w-7xl mx-auto gap-2 md:gap-4 items-stretch p-1 md:p-4">
 
-                {/* Main Board Area */}
-                <div className="relative flex-1 aspect-square md:aspect-[4/3] bg-slate-800/80 rounded-xl border-4 md:border-[12px] border-slate-900 shadow-2xl flex flex-col overflow-hidden">
+                {/* Main Board Area — wood frame around a dark felt field */}
+                <div
+                    className="relative flex-1 aspect-square md:aspect-[4/3] wood-surface rounded-2xl p-1.5 md:p-3 flex shadow-glass-lg"
+                >
+                    <div className="relative flex-1 rounded-lg md:rounded-xl overflow-hidden flex flex-col" style={feltFieldStyle}>
 
-                    {/* Top Half */}
-                    <div className="flex-1 flex">
-                        {renderQuadrant(
-                            playerColor === 'white' ? 11 : 12,
-                            playerColor === 'white' ? 6 : 17,
-                            true
-                        )}
+                        {/* Top Half */}
+                        <div className="flex-1 flex">
+                            {renderQuadrant(
+                                playerColor === 'white' ? 11 : 12,
+                                playerColor === 'white' ? 6 : 17,
+                                true
+                            )}
 
-                        {/* Bar (Middle) */}
-                        <div className="w-12 md:w-20 bg-slate-900/50 border-x-4 border-slate-900 flex flex-col items-center justify-center gap-1 py-2">
-                            {Array.from({ length: bar.white }).map((_, i) => (
-                                <div key={`bar-w-${i}`} className="w-10 md:w-12">
-                                    <Checker
-                                        id={`bar-white-${i}`}
-                                        color="white"
-                                        isDraggable={playerColor === 'white' && turn === 'white' && i === bar.white - 1}
-                                    />
-                                </div>
-                            ))}
-                            {Array.from({ length: bar.black }).map((_, i) => (
-                                <div key={`bar-b-${i}`} className="w-10 md:w-12">
-                                    <Checker
-                                        id={`bar-black-${i}`}
-                                        color="black"
-                                        isDraggable={playerColor === 'black' && turn === 'black' && i === bar.black - 1}
-                                    />
-                                </div>
-                            ))}
+                            {/* Bar (Middle) — wooden inset channel */}
+                            <div
+                                className="w-12 md:w-20 wood-surface border-x border-black/50 flex flex-col items-center justify-center gap-1 py-2"
+                                style={woodInsetShadow}
+                            >
+                                {Array.from({ length: bar.white }).map((_, i) => (
+                                    <div key={`bar-w-${i}`} className="w-10 md:w-12">
+                                        <Checker
+                                            id={`bar-white-${i}`}
+                                            color="white"
+                                            isDraggable={playerColor === 'white' && turn === 'white' && i === bar.white - 1}
+                                        />
+                                    </div>
+                                ))}
+                                {Array.from({ length: bar.black }).map((_, i) => (
+                                    <div key={`bar-b-${i}`} className="w-10 md:w-12">
+                                        <Checker
+                                            id={`bar-black-${i}`}
+                                            color="black"
+                                            isDraggable={playerColor === 'black' && turn === 'black' && i === bar.black - 1}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+
+                            {renderQuadrant(
+                                playerColor === 'white' ? 5 : 18,
+                                playerColor === 'white' ? 0 : 23,
+                                true
+                            )}
                         </div>
 
-                        {renderQuadrant(
-                            playerColor === 'white' ? 5 : 18,
-                            playerColor === 'white' ? 0 : 23,
-                            true
-                        )}
-                    </div>
+                        {/* Bottom Half */}
+                        <div className="flex-1 flex">
+                            {renderQuadrant(
+                                playerColor === 'white' ? 12 : 11,
+                                playerColor === 'white' ? 17 : 6,
+                                false
+                            )}
 
-                    {/* Bottom Half */}
-                    <div className="flex-1 flex">
-                        {renderQuadrant(
-                            playerColor === 'white' ? 12 : 11,
-                            playerColor === 'white' ? 17 : 6,
-                            false
-                        )}
+                            <div
+                                className="w-12 md:w-20 wood-surface border-x border-black/50 flex flex-col-reverse items-center justify-start gap-1 py-2"
+                                style={woodInsetShadow}
+                            />
 
-                        <div className="w-12 md:w-20 bg-slate-900/50 border-x-4 border-slate-900 flex flex-col-reverse items-center justify-start gap-1 py-2">
+                            {renderQuadrant(
+                                playerColor === 'white' ? 18 : 5,
+                                playerColor === 'white' ? 23 : 0,
+                                false
+                            )}
                         </div>
 
-                        {renderQuadrant(
-                            playerColor === 'white' ? 18 : 5,
-                            playerColor === 'white' ? 23 : 0,
-                            false
-                        )}
-                    </div>
+                        {/* Dice Display */}
+                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-50">
+                            <div className="flex gap-3 md:gap-4">
+                                {(() => {
+                                    // Track how many of each value we've already "marked" as used in this render
+                                    const usedCounts: Record<number, number> = {};
 
-                    {/* Dice Display */}
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-50">
-                        <div className="flex gap-4">
-                            {(() => {
-                                // Track how many of each value we've already "marked" as used in this render
-                                const usedCounts: Record<number, number> = {};
+                                    return gameState.dice.map((val, i) => {
+                                        // Count how many times this value appears in current movesLeft
+                                        const remainingCount = gameState.movesLeft.filter(m => m === val).length;
 
-                                return gameState.dice.map((val, i) => {
-                                    // Count how many times this value appears in current movesLeft
-                                    const remainingCount = gameState.movesLeft.filter(m => m === val).length;
+                                        // Increment how many times we've encountered this value in the loop
+                                        usedCounts[val] = (usedCounts[val] || 0) + 1;
 
-                                    // Increment how many times we've encountered this value in the loop
-                                    usedCounts[val] = (usedCounts[val] || 0) + 1;
+                                        // A die is "used" if its encounter index is greater than the remaining count
+                                        // Example for double 4:
+                                        // totalCount = 4, remainingCount = 2 (2 moves made)
+                                        // i=0: occurrence=1, used=false (since 1 <= 2)
+                                        // i=1: occurrence=2, used=false (since 2 <= 2)
+                                        // i=2: occurrence=3, used=true (since 3 > 2) -> DARKEN!
+                                        // i=3: occurrence=4, used=true (since 4 > 2) -> DARKEN!
+                                        const isUsed = usedCounts[val] > remainingCount;
 
-                                    // A die is "used" if its encounter index is greater than the remaining count
-                                    // Example for double 4:
-                                    // totalCount = 4, remainingCount = 2 (2 moves made)
-                                    // i=0: occurrence=1, used=false (since 1 <= 2)
-                                    // i=1: occurrence=2, used=false (since 2 <= 2)
-                                    // i=2: occurrence=3, used=true (since 3 > 2) -> DARKEN!
-                                    // i=3: occurrence=4, used=true (since 4 > 2) -> DARKEN!
-                                    const isUsed = usedCounts[val] > remainingCount;
-
-                                    return (
-                                        <div key={i} className={`transition-opacity duration-300 ${isUsed ? 'opacity-30 grayscale' : 'opacity-100'}`}>
-                                            <Dice
-                                                value={val}
-                                                isRolling={isRollingDice}
-                                                color={turn === 'white' ? 'white' : 'black'}
-                                            />
-                                        </div>
-                                    );
-                                });
-                            })()}
+                                        return (
+                                            <div
+                                                key={i}
+                                                className={`transition-all duration-500 ${isUsed ? 'opacity-30 saturate-0 scale-90' : 'opacity-100'}`}
+                                            >
+                                                <Dice
+                                                    value={val}
+                                                    isRolling={isRollingDice}
+                                                    color={turn === 'white' ? 'white' : 'black'}
+                                                />
+                                            </div>
+                                        );
+                                    });
+                                })()}
+                            </div>
                         </div>
-                    </div>
 
+                    </div>
                 </div>
 
                 {/* Off Tray Sidebar - Bottom on Mobile, Right on Desktop */}
-                <div className="w-full h-20 md:w-32 md:h-auto bg-slate-900/40 rounded-xl border-4 border-slate-800 flex flex-row md:flex-col relative overflow-hidden shrink-0">
-                    {/* Background Pattern or Label */}
-                    <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-slate-800/50 hidden md:block" />
-                    <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-slate-800/50 md:hidden" />
+                <div className="w-full h-20 md:w-32 md:h-auto wood-surface rounded-2xl p-1.5 md:p-2 flex flex-row md:flex-col gap-1.5 md:gap-2 relative overflow-hidden shrink-0 shadow-glass">
 
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:-rotate-90 text-slate-700 font-bold text-xs md:text-sm tracking-[0.5em] pointer-events-none whitespace-nowrap opacity-50 z-0">
+                    <div
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:-rotate-90 font-display text-amber-100/20 text-xs md:text-sm tracking-[0.5em] pointer-events-none whitespace-nowrap z-0"
+                    >
                         COLLECT
                     </div>
 
                     {/* Top Collection - Opponent's color (farther from player) */}
-                    <div className="flex-1 w-full p-2 flex flex-col gap-1 z-10 border-r md:border-r-0 md:border-b border-slate-800/50">
+                    <div
+                        className="flex-1 w-full p-2 flex flex-col gap-1 z-10 rounded-lg bg-black/35 border border-black/40"
+                        style={woodInsetShadow}
+                    >
                         <OffTray
                             playerColor={playerColor === 'white' ? 'black' : 'white'}
                             count={playerColor === 'white' ? off.black : off.white}
@@ -307,7 +334,10 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                     </div>
 
                     {/* Bottom Collection - Player's color (closer to player) */}
-                    <div className="flex-1 w-full p-2 flex flex-col-reverse gap-1 z-10">
+                    <div
+                        className="flex-1 w-full p-2 flex flex-col-reverse gap-1 z-10 rounded-lg bg-black/35 border border-black/40"
+                        style={woodInsetShadow}
+                    >
                         <OffTray
                             playerColor={playerColor === 'white' ? 'white' : 'black'}
                             count={playerColor === 'white' ? off.white : off.black}
@@ -325,7 +355,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
 
             <DragOverlay>
                 {activeId ? (
-                    <div className="w-12 h-12 md:w-14 md:h-14 cursor-grabbing">
+                    <div className="w-12 h-12 md:w-14 md:h-14 cursor-grabbing scale-110 rotate-3 drop-shadow-[0_14px_18px_rgba(0,0,0,0.55)]">
                         <CheckerVisual color={
                             (function () {
                                 if (activeId.startsWith('bar-white')) return 'white';
@@ -354,10 +384,12 @@ const OffTrayDroppable: React.FC<{ isHighlighted: boolean }> = ({ isHighlighted 
     return (
         <div
             ref={setNodeRef}
-            className={`w-full h-full flex items-center justify-center transition-all duration-300 ${isActive ? 'bg-indigo-500/30 backdrop-blur-sm border-2 border-dashed border-indigo-400' : ''}`}
+            className={`w-full h-full flex items-center justify-center rounded-2xl transition-all duration-300 ${isActive
+                ? 'bg-emerald-500/25 backdrop-blur-sm border-2 border-dashed border-emerald-400/80 shadow-[inset_0_0_30px_rgba(16,185,129,0.25)]'
+                : ''}`}
         >
             {isActive && (
-                <div className="text-indigo-200 font-bold text-xs rotate-90 whitespace-nowrap animate-pulse">
+                <div className="font-display text-emerald-200 font-bold text-xs tracking-[0.3em] md:rotate-90 whitespace-nowrap animate-pulse">
                     COLLECT
                 </div>
             )}
@@ -366,16 +398,31 @@ const OffTrayDroppable: React.FC<{ isHighlighted: boolean }> = ({ isHighlighted 
 };
 
 const OffTray: React.FC<{ playerColor: string; count: number, isTop: boolean }> = ({ playerColor, count, isTop }) => {
-    // This is purely visual now, droppable is separate
+    const isWhite = playerColor === 'white';
+
+    // Stacked side-view pucks resting on the shelf
+    const puckStyle: React.CSSProperties = isWhite
+        ? {
+            background: 'linear-gradient(180deg, #fdfbf3 0%, #e6dfca 60%, #bfb494 100%)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 1px 2px rgba(0,0,0,0.5)',
+        }
+        : {
+            background: 'linear-gradient(180deg, #39435a 0%, #171c29 60%, #05070c 100%)',
+            boxShadow: 'inset 0 1px 0 rgba(148,163,184,0.3), 0 1px 2px rgba(0,0,0,0.6)',
+        };
+
     return (
         <div
-            className={`w-full flex ${isTop ? 'flex-col' : 'flex-col-reverse'} gap-[2px] transition-colors rounded-lg p-1`}
+            className={`w-full flex ${isTop ? 'flex-col' : 'flex-col-reverse'} gap-[2px] rounded-lg`}
         >
-            {/* Show count if many? */}
-            {count > 0 && <div className={`text-[10px] text-center mb-1 font-bold ${playerColor === 'white' ? 'text-slate-400' : 'text-slate-600'}`}>{count}</div>}
+            {count > 0 && (
+                <div className={`text-[10px] text-center mb-1 font-display font-bold ${isWhite ? 'text-amber-100/70' : 'text-slate-400/80'}`}>
+                    {count}
+                </div>
+            )}
 
             {Array.from({ length: Math.min(count, 15) }).map((_, i) => (
-                <div key={i} className={`h-2 w-full rounded-sm opacity-80 ${playerColor === 'white' ? 'bg-slate-200 shadow-sm' : 'bg-slate-900 border border-slate-700 shadow-sm'}`} />
+                <div key={i} className="h-2 w-full rounded-[3px] anim-deal-in" style={puckStyle} />
             ))}
         </div>
     );

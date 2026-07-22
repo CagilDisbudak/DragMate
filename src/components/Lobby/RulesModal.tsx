@@ -17,6 +17,7 @@ const ACCENT: Record<RuleAccent, {
     headerGlow: string;
     objectiveBox: string;
     tipBox: string;
+    bar: string;
 }> = {
     indigo: {
         text: 'text-indigo-300',
@@ -26,6 +27,7 @@ const ACCENT: Record<RuleAccent, {
         headerGlow: 'shadow-indigo-500/20',
         objectiveBox: 'bg-indigo-500/10 border-indigo-500/30',
         tipBox: 'bg-indigo-500/5 border-indigo-500/20',
+        bar: 'from-indigo-500 via-indigo-400 to-transparent',
     },
     emerald: {
         text: 'text-emerald-300',
@@ -35,6 +37,7 @@ const ACCENT: Record<RuleAccent, {
         headerGlow: 'shadow-emerald-500/20',
         objectiveBox: 'bg-emerald-500/10 border-emerald-500/30',
         tipBox: 'bg-emerald-500/5 border-emerald-500/20',
+        bar: 'from-emerald-500 via-emerald-400 to-transparent',
     },
     amber: {
         text: 'text-amber-300',
@@ -44,6 +47,7 @@ const ACCENT: Record<RuleAccent, {
         headerGlow: 'shadow-amber-500/20',
         objectiveBox: 'bg-amber-500/10 border-amber-500/30',
         tipBox: 'bg-amber-500/5 border-amber-500/20',
+        bar: 'from-amber-500 via-amber-400 to-transparent',
     },
     rose: {
         text: 'text-rose-300',
@@ -53,6 +57,7 @@ const ACCENT: Record<RuleAccent, {
         headerGlow: 'shadow-rose-500/20',
         objectiveBox: 'bg-rose-500/10 border-rose-500/30',
         tipBox: 'bg-rose-500/5 border-rose-500/20',
+        bar: 'from-rose-500 via-rose-400 to-transparent',
     },
 };
 
@@ -81,23 +86,29 @@ export const RulesModal: React.FC<RulesModalProps> = ({ gameType, onClose }) => 
 
     return (
         <div
-            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 pb-4 sm:p-6 bg-slate-950/80 backdrop-blur-md"
             onClick={onClose}
         >
             <div
-                className={`liquid-glass relative w-full sm:max-w-2xl max-h-[85vh] sm:max-h-[80vh] flex flex-col rounded-t-3xl sm:rounded-3xl shadow-2xl ${a.headerGlow} animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300`}
+                role="dialog"
+                aria-modal="true"
+                aria-label={rules.title}
+                className={`liquid-glass relative w-full sm:max-w-2xl max-h-[85vh] sm:max-h-[80vh] flex flex-col overflow-hidden shadow-2xl ${a.headerGlow} anim-pop-in`}
                 onClick={(e) => e.stopPropagation()}
             >
+                {/* Accent bar */}
+                <div aria-hidden className={`h-1 shrink-0 bg-linear-to-r ${a.bar}`} />
+
                 {/* Header */}
-                <div className="flex items-start gap-4 p-6 pb-4 border-b border-white/10">
+                <div className="flex items-start gap-4 p-5 sm:p-6 pb-4 sm:pb-4 border-b border-white/10 bg-linear-to-b from-white/[0.04] to-transparent">
                     <div className={`shrink-0 p-3 rounded-2xl ${a.iconBg}`}>{GAME_ICON[gameType]}</div>
                     <div className="flex-1 min-w-0">
-                        <h2 className="text-2xl font-black text-white tracking-tight">{rules.title}</h2>
+                        <h2 className="font-display text-2xl font-bold text-white">{rules.title}</h2>
                         <p className="text-sm text-slate-400 font-medium mt-0.5">{rules.tagline}</p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="shrink-0 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                        className="shrink-0 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all active:scale-90"
                         aria-label="Kapat"
                     >
                         <X size={20} />
@@ -105,7 +116,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ gameType, onClose }) => 
                 </div>
 
                 {/* Scrollable body */}
-                <div className="flex-1 overflow-y-auto p-6 pt-4 space-y-5">
+                <div className="flex-1 overflow-y-auto p-5 sm:p-6 pt-4 sm:pt-4 space-y-5">
                     {/* Objective */}
                     <div className={`flex gap-3 p-4 rounded-2xl border ${a.objectiveBox}`}>
                         <Target size={18} className={`shrink-0 mt-0.5 ${a.text}`} />
@@ -116,12 +127,15 @@ export const RulesModal: React.FC<RulesModalProps> = ({ gameType, onClose }) => 
                     </div>
 
                     {/* Sections */}
-                    {rules.sections.map((section) => (
+                    {rules.sections.map((section, idx) => (
                         <div key={section.heading}>
-                            <h3 className="text-sm font-black uppercase tracking-wider text-white mb-2">
+                            <h3 className="flex items-center gap-2.5 text-sm font-black uppercase tracking-wider text-white mb-2.5">
+                                <span className={`shrink-0 w-6 h-6 rounded-lg flex items-center justify-center font-display text-[11px] ${a.iconBg}`}>
+                                    {idx + 1}
+                                </span>
                                 {section.heading}
                             </h3>
-                            <ul className="space-y-2">
+                            <ul className="space-y-2 pl-1">
                                 {section.items.map((item, i) => (
                                     <li key={i} className="flex gap-2.5 text-sm text-slate-300 leading-relaxed">
                                         <span className={`shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full ${a.bullet}`} />
@@ -152,10 +166,10 @@ export const RulesModal: React.FC<RulesModalProps> = ({ gameType, onClose }) => 
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t border-white/10">
+                <div className="p-4 border-t border-white/10 bg-slate-950/30">
                     <button
                         onClick={onClose}
-                        className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold transition-colors"
+                        className="w-full py-3 rounded-xl border border-white/10 bg-white/10 hover:bg-white/15 hover:border-white/20 text-white font-bold transition-all active:scale-[0.99]"
                     >
                         Anladım
                     </button>

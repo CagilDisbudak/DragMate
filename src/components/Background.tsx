@@ -1,28 +1,35 @@
 import React from 'react';
 
+/** Inline SVG fractal noise — no external requests, works offline. */
+const NOISE_URI =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E";
+
 export const Background: React.FC = () => {
     return (
         <div className="fixed inset-0 -z-50 overflow-hidden pointer-events-none bg-[#020617]">
-            {/* Deep Layer */}
-            <div className="bg-blob opacity-20 w-[800px] h-[800px] -top-96 -left-96 bg-indigo-600 blur-[120px]" />
-
-            {/* Mid Layer */}
+            {/* Aurora layers */}
+            <div className="bg-blob opacity-25 w-[900px] h-[900px] -top-96 -left-96 bg-indigo-600 blur-[130px]" />
             <div
-                className="bg-blob opacity-30 w-[600px] h-[600px] top-1/2 -right-48 bg-pink-600 blur-[100px]"
-                style={{ animationDelay: '-5s', animationDuration: '25s' }}
+                className="bg-blob opacity-25 w-[650px] h-[650px] top-1/2 -right-56 bg-fuchsia-600 blur-[110px]"
+                style={{ animationDelay: '-5s', animationDuration: '26s' }}
+            />
+            <div
+                className="bg-blob opacity-15 w-[520px] h-[520px] bottom-0 left-1/4 bg-cyan-400 blur-[90px]"
+                style={{ animationDelay: '-12s', animationDuration: '19s' }}
+            />
+            <div
+                className="bg-blob opacity-10 w-[420px] h-[420px] top-24 left-1/2 bg-emerald-500 blur-[100px]"
+                style={{ animationDelay: '-8s', animationDuration: '30s' }}
             />
 
-            {/* Surface Layer */}
-            <div
-                className="bg-blob opacity-10 w-[500px] h-[500px] bottom-0 left-1/4 bg-cyan-400 blur-[80px]"
-                style={{ animationDelay: '-12s', animationDuration: '18s' }}
-            />
-
-            {/* Subtle Gradient Overlay */}
+            {/* Vignette: keeps play areas readable */}
             <div className="absolute inset-0 bg-radial-at-t from-transparent via-slate-950/40 to-slate-950" />
 
-            {/* Noise Texture Overlay (Optional but premium) */}
-            <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+            {/* Fine grain for a premium finish */}
+            <div
+                className="absolute inset-0 opacity-[0.05] mix-blend-overlay"
+                style={{ backgroundImage: `url("${NOISE_URI}")` }}
+            />
         </div>
     );
 };

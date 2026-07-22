@@ -15,6 +15,12 @@ services:
     startCommand: npm start
     healthCheckPath: /healthz
     autoDeploy: true
+    # Only redeploy when the backend itself changes — client-only pushes
+    # (gh-pages frontend work) must not restart the server mid-game.
+    buildFilter:
+      paths:
+        - server/**
+        - render.yaml
     envVars:
       - key: NODE_VERSION
         value: "20"

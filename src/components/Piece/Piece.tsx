@@ -20,11 +20,27 @@ export const Piece: React.FC<PieceProps> = ({ id, type, color, isDraggable = tru
         }
     });
 
-    const style = {
+    const style: React.CSSProperties = {
         transform: CSS.Translate.toString(transform),
-        transition: isDragging ? 'none' : 'transform 120ms ease-out',
+        transition: isDragging ? 'none' : 'transform 120ms ease-out, scale 120ms ease-out',
         zIndex: isDragging ? 9999 : 20,
+        // Inline: `.chess-piece` sets `filter` in plain CSS, which outranks utility classes.
+        filter: isDragging ? 'drop-shadow(0 14px 18px rgba(2, 6, 23, 0.55))' : undefined,
     };
+
+    // Both colors render the solid glyph so the piece body can be tinted:
+    // ivory-white with a dark edge vs deep charcoal with a faint light edge.
+    const glyphStyle: React.CSSProperties = color === 'w'
+        ? {
+            color: '#f8f4e9',
+            WebkitTextStroke: '1px rgba(30, 27, 75, 0.55)',
+            textShadow: '0 2px 5px rgba(2, 6, 23, 0.4)',
+        }
+        : {
+            color: '#20222e',
+            WebkitTextStroke: '1px rgba(203, 213, 225, 0.28)',
+            textShadow: '0 2px 5px rgba(2, 6, 23, 0.55)',
+        };
 
     return (
         <div
@@ -32,18 +48,17 @@ export const Piece: React.FC<PieceProps> = ({ id, type, color, isDraggable = tru
             style={style}
             {...listeners}
             {...attributes}
-            className={`chess-piece transition-transform duration-120 ease-out ${
-                isDragging ? 'scale-112 drop-shadow-2xl z-[9999]' : 'hover:scale-103 z-20'
-            } ${isDraggable ? 'cursor-grab active:cursor-grabbing' : 'grayscale-[0.2] opacity-90 cursor-default'
-            } ${color === 'w' ? 'text-slate-950 drop-shadow-sm' : 'text-slate-950 drop-shadow-sm'
-            }`}
+            className={`chess-piece ${
+                isDragging
+                    ? 'scale-115'
+                    : isDraggable
+                        ? 'hover:scale-107 hover:-translate-y-0.5'
+                        : ''
+            } ${isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`}
         >
-            <div className={`
-        flex items-center justify-center w-full h-full 
-        ${color === 'w' ? 'drop-shadow-[0_2px_0_rgba(255,255,255,0.8)]' : 'drop-shadow-[0_2px_0_rgba(0,0,0,0.5)]'}
-      `}>
-                {pieceIcons[color][type]}
-            </div>
+            <span aria-hidden="true" style={glyphStyle}>
+                {pieceIcons.b[type]}
+            </span>
         </div>
     );
 };

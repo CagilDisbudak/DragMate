@@ -19,14 +19,20 @@ interface ChessBoardProps {
     isGameOver?: boolean;
     /** Bumped by the parent when a move is rejected, forcing a rollback to `initialFen`. */
     resyncSignal?: number;
+    /** Optional last played move — tinted on the board when provided. */
+    lastMove?: { from: string; to: string } | null;
 }
+
+const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
     onMove,
     initialFen,
     playerColor = 'w',
     isGameOver = false,
-    resyncSignal = 0
+    resyncSignal = 0,
+    lastMove = null
 }) => {
     const [game, setGame] = useState(() => createGame(initialFen));
     const [highlightedSquares, setHighlightedSquares] = useState<string[]>([]);
@@ -97,19 +103,18 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         [game, playerColor]
     );
 
+    // Orientation-aware order (flipped when playing black)
+    const displayRanks = playerColor === 'w' ? RANKS : [...RANKS].reverse();
+    const displayFiles = playerColor === 'w' ? FILES : [...FILES].reverse();
+
     const renderSquares = () => {
         const squares = [];
-        const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-        const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
-
-        const displayRanks = playerColor === 'w' ? ranks : [...ranks].reverse();
-        const displayFiles = playerColor === 'w' ? files : [...files].reverse();
 
         for (const rank of displayRanks) {
             for (const file of displayFiles) {
                 const squareName = `${file}${rank}`;
                 const piece = game.get(squareName as any);
-                const isLight = (files.indexOf(file) + ranks.indexOf(rank)) % 2 === 0;
+                const isLight = (FILES.indexOf(file) + RANKS.indexOf(rank)) % 2 === 0;
 
                 // Only allow dragging your own pieces, and only when it's your turn
                 const isDraggablePiece =
@@ -120,6 +125,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
                 const isHighlighted = highlightedSquares.includes(squareName);
                 const isActive = squareName === activeSquare;
+                const isLastMove = !!lastMove && (squareName === lastMove.from || squareName === lastMove.to);
 
                 squares.push(
                     <Square
@@ -128,6 +134,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                         isLight={isLight}
                         isHighlighted={isHighlighted}
                         isActive={isActive}
+                        isCapture={isHighlighted && !!piece}
+                        isLastMove={isLastMove}
                     >
                         {piece && (
                             <Piece
@@ -144,6 +152,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         return squares;
     };
 
+    const coordClass = 'font-display text-[9px] lg:text-[11px] font-bold uppercase text-slate-500';
+
     return (
         <DndContext
             sensors={sensors}
@@ -151,19 +161,50 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             onDragStart={(event) => handleDragStart(event.active.id as string)}
         >
             <div
-                className="p-3 lg:p-4 bg-slate-800 rounded-[2rem] lg:rounded-[2.5rem] shadow-[0_0_50px_-12px_rgba(99,102,241,0.25)] border-4 border-slate-700/50 ring-4 ring-slate-900/50"
+                className="p-2.5 lg:p-4 rounded-[1.75rem] lg:rounded-[2.5rem] bg-linear-to-br from-slate-800/90 via-slate-900 to-slate-950 border border-slate-700/60 ring-1 ring-slate-950/70 shadow-[0_24px_64px_-16px_rgba(2,6,23,0.8),0_0_70px_-24px_rgba(99,102,241,0.4)]"
                 style={{ touchAction: 'none' }}
             >
                 <div
-                    className="grid grid-cols-8 gap-0 rounded-2xl lg:rounded-3xl overflow-hidden border border-slate-700/30 shadow-inner"
+                    className="grid"
                     style={{
-                        // Mobilde ekrana göre, masaüstünde daha büyük tahta
-                        width: 'min(92vw, 720px)',
-                        height: 'min(92vw, 720px)',
-                        gridTemplateColumns: 'repeat(8, 1fr)'
+                        gridTemplateColumns: 'auto minmax(0, 1fr)',
+                        gridTemplateRows: 'minmax(0, 1fr) auto'
                     }}
                 >
-                    {renderSquares()}
+                    {/* Rank coordinates (flip-aware) */}
+                    <div className="flex flex-col pr-1.5 lg:pr-2.5 select-none" aria-hidden="true">
+                        {displayRanks.map((rank) => (
+                            <div key={rank} className={`flex-1 flex items-center justify-center ${coordClass}`}>
+                                {rank}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Board */}
+                    <div
+                        className="grid grid-cols-8 gap-0 rounded-xl lg:rounded-2xl overflow-hidden ring-1 ring-slate-950/60 shadow-[inset_0_2px_16px_rgba(0,0,0,0.45)]"
+                        style={{
+                            // Mobilde ekrana göre, masaüstünde daha büyük tahta
+                            // (92vw eksi çerçeve + koordinat sütunu payı)
+                            width: 'min(92vw - 44px, 720px)',
+                            height: 'min(92vw - 44px, 720px)',
+                            gridTemplateColumns: 'repeat(8, 1fr)'
+                        }}
+                    >
+                        {renderSquares()}
+                    </div>
+
+                    {/* Corner spacer */}
+                    <div />
+
+                    {/* File coordinates (flip-aware) */}
+                    <div className="flex pt-1 lg:pt-1.5 select-none" aria-hidden="true">
+                        {displayFiles.map((file) => (
+                            <div key={file} className={`flex-1 text-center ${coordClass}`}>
+                                {file}
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
         </DndContext>
