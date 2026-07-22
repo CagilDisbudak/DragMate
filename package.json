@@ -17,7 +17,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@tailwindcss/vite": "^4.1.18",
     "chess.js": "^1.4.0",
-    "firebase": "^12.7.0",
     "gh-pages": "^6.3.0",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",

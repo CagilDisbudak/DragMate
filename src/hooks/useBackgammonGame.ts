@@ -1,17 +1,13 @@
+import { useEffect, useRef, useState } from 'react';
+import { getSocket, getUserId, emitAck, EV, type RoomView } from '../lib/socket';
 
-import { useEffect, useState } from 'react';
-import {
-    collection,
-    doc,
-    onSnapshot,
-    runTransaction,
-    setDoc,
-    updateDoc
-} from 'firebase/firestore';
-import { getAuth, signInAnonymously } from 'firebase/auth';
-import { db, firebaseEnabled } from '../lib/firebase';
-import { type BackgammonState, createBackgammonGame } from '../logic/backgammonLogic';
-
+/**
+ * Backgammon room hook — backed by the authoritative Socket.IO server.
+ * Preserves the public shape (room/userId/loading/isAuthLoading +
+ * create/join/resign/reset/leave). The only change vs the old Firestore hook is
+ * `updateGameState(fullState)` → `makeMove(move)`: the client now sends only the
+ * move intent and the server owns dice RNG, turn advancement and win detection.
+ */
 export interface BackgammonRoom {
     board: number[];
     bar: { white: number; black: number };
@@ -22,206 +18,119 @@ export interface BackgammonRoom {
     whitePlayer: string;
     blackPlayer: string;
     winner: 'white' | 'black' | '';
-    status: 'active' | 'finished' | 'resigned';
-    lastMove?: any;
+    status: 'active' | 'finished' | 'resigned' | string;
+    lastMove?: unknown;
 }
 
-const generateRoomId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
+export interface BackgammonMoveIntent {
+    from: number | 'bar';
+    to: number | 'off';
+}
+
+interface BgStatePayload {
+    board: number[];
+    bar: { white: number; black: number };
+    off: { white: number; black: number };
+    dice: number[];
+    movesLeft: number[];
+}
+
+function viewToRoom(view: RoomView): BackgammonRoom {
+    const s = view.state as BgStatePayload;
+    return {
+        board: s.board,
+        bar: s.bar,
+        off: s.off,
+        dice: s.dice,
+        movesLeft: s.movesLeft,
+        turn: view.currentTurn === 0 ? 'white' : 'black',
+        whitePlayer: view.seats[0]?.userId ?? '',
+        blackPlayer: view.seats[1]?.userId ?? '',
+        winner: view.winner === 0 ? 'white' : view.winner === 1 ? 'black' : '',
+        status: view.status,
+        lastMove: view.lastMove,
+    };
+}
 
 export const useBackgammonGame = (roomId: string | null) => {
     const [room, setRoom] = useState<BackgammonRoom | null>(null);
-    const [userId, setUserId] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [userId] = useState<string>(() => getUserId());
+    const [loading, setLoading] = useState<boolean>(!!roomId);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
+    const versionRef = useRef(0);
 
-    // Firebase auth: anonymous sign-in
     useEffect(() => {
-        const auth = getAuth();
-        signInAnonymously(auth)
-            .then((cred) => {
-                setUserId(cred.user.uid);
-            })
-            .catch((err) => {
-                console.error('Auth failed', err);
-            })
-            .finally(() => setIsAuthLoading(false));
+        const socket = getSocket();
+        const onConnect = () => setIsAuthLoading(false);
+        if (socket.connected) setIsAuthLoading(false);
+        socket.on('connect', onConnect);
+        return () => {
+            socket.off('connect', onConnect);
+        };
     }, []);
 
-    const ensureUserReady = async () => {
-        if (userId) return userId;
-        const auth = getAuth();
-        const cred = await signInAnonymously(auth);
-        setUserId(cred.user.uid);
-        return cred.user.uid;
-    };
-
-    // Subscribe to room changes
     useEffect(() => {
-        if (!firebaseEnabled || !db) {
-            setLoading(false);
-            return;
-        }
-
         if (!roomId) {
             setRoom(null);
             setLoading(false);
             return;
         }
-
         setLoading(true);
-        const roomRef = doc(collection(db, 'rooms_bg'), roomId); // separate collection for safety
-        const unsubscribe = onSnapshot(
-            roomRef,
-            (snapshot) => {
-                if (snapshot.exists()) {
-                    setRoom(snapshot.data() as BackgammonRoom);
-                } else {
-                    setRoom(null);
-                }
-                setLoading(false);
-            },
-            (error) => {
-                console.error('Room subscription error', error);
-                setRoom(null);
-                setLoading(false);
-            }
-        );
+        const socket = getSocket();
 
-        return () => unsubscribe();
-    }, [roomId]);
-
-    const createRoom = async () => {
-        if (!firebaseEnabled || !db) throw new Error('Firebase not configured');
-
-        const uid = await ensureUserReady();
-        const id = generateRoomId();
-        const roomRef = doc(collection(db, 'rooms_bg'), id);
-
-        const initialGame = createBackgammonGame();
-
-        const roomData: BackgammonRoom = {
-            board: initialGame.board,
-            bar: initialGame.bar,
-            off: initialGame.off,
-            turn: initialGame.turn,
-            dice: initialGame.dice,
-            movesLeft: initialGame.movesLeft,
-            whitePlayer: uid,
-            blackPlayer: '',
-            winner: '',
-            status: 'active',
+        const onView = (view: RoomView) => {
+            if (view.roomId !== roomId || view.gameType !== 'backgammon') return;
+            versionRef.current = view.version;
+            setRoom(viewToRoom(view));
+            setLoading(false);
         };
 
-        await setDoc(roomRef, roomData);
-        return id;
-    };
-
-    const joinRoom = async (id: string) => {
-        if (!firebaseEnabled || !db) throw new Error('Firebase not configured');
-        const uid = await ensureUserReady();
-        const roomRef = doc(collection(db, 'rooms_bg'), id);
-
-        await runTransaction(db, async (transaction) => {
-            const snap = await transaction.get(roomRef);
-            if (!snap.exists()) throw new Error('Room not found');
-
-            const data = snap.data() as BackgammonRoom;
-            const nextData = { ...data };
-
-            if (!nextData.whitePlayer) {
-                nextData.whitePlayer = uid;
-            } else if (!nextData.blackPlayer && nextData.whitePlayer !== uid) {
-                nextData.blackPlayer = uid;
-            }
-
-            transaction.update(roomRef, nextData);
+        socket.on(EV.view, onView);
+        emitAck(EV.subscribe, { roomId }).then((ack) => {
+            if (!ack.ok) setLoading(false);
         });
+
+        return () => {
+            socket.off(EV.view, onView);
+        };
+    }, [roomId]);
+
+    const createRoom = async (): Promise<string> => {
+        const ack = await emitAck<{ roomId: string }>(EV.create, { gameType: 'backgammon' });
+        if (!ack.ok || !ack.data) throw new Error(ack.ok ? 'No room id' : ack.error);
+        return ack.data.roomId;
     };
 
-    const updateGameState = async (newState: BackgammonState) => {
-        if (!firebaseEnabled || !db) return;
-        if (!roomId) return;
+    const joinRoom = async (id: string): Promise<void> => {
+        const ack = await emitAck(EV.join, { roomId: id });
+        if (!ack.ok) throw new Error(ack.error);
+    };
 
-        const roomRef = doc(collection(db, 'rooms_bg'), roomId);
-
-        let status: BackgammonRoom['status'] = 'active';
-        let winner: BackgammonRoom['winner'] = '';
-
-        if (newState.winner) {
-            status = 'finished';
-            winner = newState.winner;
-        }
-
-        await updateDoc(roomRef, {
-            board: newState.board,
-            bar: newState.bar,
-            off: newState.off,
-            turn: newState.turn,
-            dice: newState.dice,
-            movesLeft: newState.movesLeft,
-            winner,
-            status
+    /** Send a move intent; returns true if the server accepted it. */
+    const makeMove = async (move: BackgammonMoveIntent): Promise<boolean> => {
+        if (!roomId) return false;
+        const ack = await emitAck(EV.move, {
+            roomId,
+            move: { from: move.from, to: move.to },
+            expectedVersion: versionRef.current,
         });
+        return ack.ok;
     };
 
-    const resignGame = async (color: 'white' | 'black') => {
-        if (!firebaseEnabled || !db) return;
+    const resignGame = async (_color?: 'white' | 'black'): Promise<void> => {
         if (!roomId) return;
-
-        const roomRef = doc(collection(db, 'rooms_bg'), roomId);
-        const winner = color === 'white' ? 'black' : 'white';
-        await updateDoc(roomRef, {
-            status: 'resigned',
-            winner,
-        });
+        await emitAck(EV.resign, { roomId });
     };
 
-    const resetGame = async () => {
-        if (!firebaseEnabled || !db) return;
+    const resetGame = async (): Promise<void> => {
         if (!roomId) return;
-
-        const initialGame = createBackgammonGame();
-        const roomRef = doc(collection(db, 'rooms_bg'), roomId);
-
-        await updateDoc(roomRef, {
-            board: initialGame.board,
-            bar: initialGame.bar,
-            off: initialGame.off,
-            turn: initialGame.turn,
-            dice: initialGame.dice,
-            movesLeft: initialGame.movesLeft,
-            status: 'active',
-            winner: '',
-        });
+        await emitAck(EV.rematch, { roomId });
     };
 
-    const leaveRoom = async () => {
-        if (!firebaseEnabled || !db) return;
+    const leaveRoom = async (): Promise<void> => {
         if (!roomId) return;
-
-        try {
-            const uid = await ensureUserReady();
-            const roomRef = doc(collection(db, 'rooms_bg'), roomId);
-
-            await runTransaction(db, async (transaction) => {
-                const snap = await transaction.get(roomRef);
-                if (!snap.exists()) return;
-
-                const data = snap.data() as BackgammonRoom;
-                const nextData = { ...data };
-
-                if (nextData.whitePlayer === uid) {
-                    nextData.whitePlayer = '';
-                } else if (nextData.blackPlayer === uid) {
-                    nextData.blackPlayer = '';
-                }
-
-                transaction.update(roomRef, nextData);
-            });
-        } catch (error) {
-            console.error("Error leaving room:", error);
-        }
+        await emitAck(EV.leave, { roomId });
     };
 
-    return { room, userId, loading, isAuthLoading, createRoom, joinRoom, updateGameState, resignGame, resetGame, leaveRoom };
+    return { room, userId, loading, isAuthLoading, createRoom, joinRoom, makeMove, resignGame, resetGame, leaveRoom };
 };

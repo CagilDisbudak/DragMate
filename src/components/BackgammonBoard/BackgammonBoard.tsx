@@ -11,7 +11,7 @@ import {
     useDroppable,
     DragOverlay
 } from '@dnd-kit/core';
-import { type BackgammonState, type Move, applyMove } from '../../logic/backgammonLogic';
+import { type BackgammonState, type Move } from '../../logic/backgammonLogic';
 import { Point } from './Point';
 import { Checker, CheckerVisual } from './Checker';
 import { Dice } from './Dice';
@@ -19,7 +19,8 @@ import { Dice } from './Dice';
 interface BackgammonBoardProps {
     gameState: BackgammonState;
     playerColor: 'white' | 'black';
-    onMove: (newState: BackgammonState) => void;
+    /** Emits the chosen move intent; the authority (server, or local engine) applies it. */
+    onMove: (move: Move) => void;
     onRollDice: (dice: number[]) => void;
     validMoves: Move[];
 }
@@ -151,9 +152,8 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
         const move = validMoves.find(m => m.from === fromIndex && m.to === toIndex);
 
         if (move) {
-            // Hit effect now handled by useEffect via state change
-            const nextState = applyMove(gameState, move);
-            onMove(nextState);
+            // Hit effect handled by useEffect via state change. The authority applies the move.
+            onMove(move);
         }
     };
 

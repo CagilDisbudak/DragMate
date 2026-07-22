@@ -4,6 +4,7 @@ import { BackgammonBoard } from '../BackgammonBoard/BackgammonBoard';
 import { useBackgammonGame } from '../../hooks/useBackgammonGame';
 import {
     type BackgammonState,
+    type Move,
     createBackgammonGame,
     getValidMoves,
     rollDice,
@@ -22,40 +23,22 @@ interface BackgammonGameProps {
 export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mode = 'online', aiDifficulty = 'Normal', onExit }) => {
     const gameRoom = useBackgammonGame(mode === 'online' ? roomId : null);
 
-    // Local State
+    // Local State (single-player vs AI stays fully client-side)
     const [localGame, setLocalGame] = useState<BackgammonState>(() => createBackgammonGame());
-    const [optimisticGame, setOptimisticGame] = useState<BackgammonState | null>(null);
 
     // Unified Access
     const isLocal = mode === 'local';
 
+    // Online: the server is authoritative and pushes the full state — no optimistic
+    // layer needed. Local: the client engine is the authority.
     const gameState = React.useMemo(() => {
         if (isLocal) return localGame;
-        if (optimisticGame) return optimisticGame; // Prefer optimistic state if available
         if (!gameRoom.room) return null;
         return {
             ...gameRoom.room,
             validMoves: []
         } as unknown as BackgammonState;
-    }, [isLocal, localGame, gameRoom.room, optimisticGame]);
-
-    // Sync Optimistic State with Server
-    useEffect(() => {
-        if (!gameRoom.room || !optimisticGame) return;
-
-        // If server state matches optimistic state, clear optimistic to relying on source of truth
-        // We check turn and board state. simple board comparison is fast for 24 ints.
-        const isSameTurn = gameRoom.room.turn === optimisticGame.turn;
-        const isSameBoard = JSON.stringify(gameRoom.room.board) === JSON.stringify(optimisticGame.board);
-        const isSameMoves = gameRoom.room.movesLeft.length === optimisticGame.movesLeft.length;
-
-        if (isSameTurn && isSameBoard && isSameMoves) {
-            setOptimisticGame(null);
-        } else if (!isSameTurn) {
-            // Turn changed on server (e.g. opponent moved or we finished turn), sync to server
-            setOptimisticGame(null);
-        }
-    }, [gameRoom.room, optimisticGame]);
+    }, [isLocal, localGame, gameRoom.room]);
 
     // Compute Valid Moves (only if gameState exists)
     const validMoves = React.useMemo(() => {
@@ -86,71 +69,65 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
     const isBlack = gameRoom.room?.blackPlayer === currentUserId;
     const isGameOver = gameState?.winner ? true : false;
 
-    // Handlers
-    const handleMove = (newState: BackgammonState) => {
-        let finalState = { ...newState };
-        if (finalState.movesLeft.length === 0) {
-            // End of turn
-            finalState.turn = finalState.turn === 'white' ? 'black' : 'white';
-            finalState.dice = rollDice();
-            finalState.movesLeft = [...finalState.dice];
-        } else {
-            // Check if any valid moves remain. If none, forfeiture remaining dice.
-            const remainingMoves = getValidMoves(finalState);
-            if (remainingMoves.length === 0) {
-                finalState.turn = finalState.turn === 'white' ? 'black' : 'white';
-                finalState.dice = rollDice();
-                finalState.movesLeft = [...finalState.dice];
+    // Apply a move locally (single-player), replicating the old end-of-turn logic.
+    const applyLocalMove = (move: Move) => {
+        let finalState = applyMove(localGame, move);
+        if (!finalState.winner) {
+            const endTurn =
+                finalState.movesLeft.length === 0 || getValidMoves(finalState).length === 0;
+            if (endTurn) {
+                const dice = rollDice();
+                finalState = {
+                    ...finalState,
+                    turn: finalState.turn === 'white' ? 'black' : 'white',
+                    dice,
+                    movesLeft: [...dice],
+                };
             }
         }
+        setLocalGame(finalState);
+    };
 
+    // Handler: the board emits a move intent. Local applies it via the engine;
+    // online sends it to the authoritative server (which owns dice + turns).
+    const handleMove = (move: Move) => {
         if (isLocal) {
-            setLocalGame(finalState);
+            applyLocalMove(move);
         } else {
-            setOptimisticGame(finalState); // Immediate local update
-            gameRoom.updateGameState(finalState); // Network update
+            gameRoom.makeMove({ from: move.from, to: move.to });
         }
     };
 
-    // Auto-skip turn if no moves possible
+    // Auto-skip turn if no moves possible — LOCAL only (server handles this online).
     useEffect(() => {
-        if (!gameState || !isOurTurn || gameState.winner) return;
+        if (!gameState || !isLocal || !isOurTurn || gameState.winner) return;
 
         if (gameState.movesLeft.length > 0 && validMoves.length === 0) {
             const timer = setTimeout(() => {
-                let finalState = { ...gameState };
-                // Switch turn
-                finalState.turn = finalState.turn === 'white' ? 'black' : 'white';
-                finalState.dice = rollDice();
-                finalState.movesLeft = [...finalState.dice];
-
-                if (isLocal) {
-                    setLocalGame(finalState);
-                } else {
-                    setOptimisticGame(finalState);
-                    gameRoom.updateGameState(finalState);
-                }
+                const dice = rollDice();
+                setLocalGame({
+                    ...gameState,
+                    turn: gameState.turn === 'white' ? 'black' : 'white',
+                    dice,
+                    movesLeft: [...dice],
+                });
             }, 1500);
             return () => clearTimeout(timer);
         }
     }, [gameState?.movesLeft, validMoves.length, gameState?.winner, gameState?.turn, isLocal, gameState, isOurTurn]);
 
-    // AI Trigger
+    // AI Trigger — LOCAL single-player only. Online AI (if any) runs server-side.
     useEffect(() => {
         if (!gameState) return;
         if (isLocal && gameState.turn === 'black' && !gameState.winner) {
             const timer = setTimeout(() => {
                 const bestMove = getBestBackgammonMove(gameState, aiDifficulty);
                 if (bestMove) {
-                    const stepState = applyMove(gameState, bestMove);
-                    handleMove(stepState);
+                    applyLocalMove(bestMove);
                 } else {
-                    // No moves possible for AI? Force turn switch.
-                    let finalState = { ...gameState };
-                    finalState.turn = 'white';
-                    finalState.dice = rollDice();
-                    finalState.movesLeft = [...finalState.dice];
-                    setLocalGame(finalState);
+                    // No moves possible for AI? Force turn switch back to the human.
+                    const dice = rollDice();
+                    setLocalGame({ ...gameState, turn: 'white', dice, movesLeft: [...dice] });
                 }
             }, 1500);
             return () => clearTimeout(timer);
@@ -248,7 +225,6 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                             playerColor={playerColor}
                             onRematch={() => {
                                 const newGame = createBackgammonGame();
-                                setOptimisticGame(null);
                                 if (isLocal) setLocalGame(newGame);
                                 else gameRoom.resetGame();
                             }}
@@ -334,7 +310,6 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                                 disabled={!isGameOver && !isLocal}
                                 onClick={() => {
                                     const newGame = createBackgammonGame();
-                                    setOptimisticGame(null);
                                     if (isLocal) setLocalGame(newGame);
                                     else gameRoom.resetGame();
                                 }}

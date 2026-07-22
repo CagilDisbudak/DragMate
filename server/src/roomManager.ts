@@ -213,8 +213,9 @@ export class RoomManager {
     }
     const seat = this.seatOf(room, userId);
     if (seat === -1) throw new GameError('not_seated', 'You are not a player in this room');
-    if (room.currentTurn !== seat) throw new GameError('not_your_turn', 'It is not your turn');
 
+    // Turn enforcement is delegated to the game module: most moves are turn-gated,
+    // but some (e.g. okey/101 rack reordering) are legal off-turn.
     const mod = this.module(room.gameType);
     const result = mod.applyMove(room, seat, move);
     await this.commitAndBroadcast(room, result);

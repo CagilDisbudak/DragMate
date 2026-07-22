@@ -66,17 +66,28 @@ export interface Meld {
   ownerPlayer: number;
 }
 
+export interface Player101Slot {
+  tiles: (OkeyTile | null)[];
+  score: number;
+  hasLaidDown: boolean;
+}
+
+/** Mirrors the client's Game101State (plus `kind`) so the pure engine ports 1:1. */
 export interface Game101StatePayload {
   kind: '101';
+  phase: 'dealing' | 'playing' | 'roundOver' | 'gameOver';
+  players: Player101Slot[];
   centerStack: OkeyTile[];
   discardPiles: OkeyTile[][];
   indicatorTile: OkeyTile | null;
   okeyTile: OkeyTile | null;
-  tableMelds: Meld[];
+  tableMelds: { [key: string]: Meld };
+  currentTurn: number;
+  roundWinner: number | null;
+  gameWinner: number | null;
   roundNumber: number;
-  scores: number[];
-  hasLaidDown: boolean[];
-  hands: (OkeyTile | null)[][];
+  /** Whether the current player has already drawn this turn (draw → meld → discard). */
+  drawnThisTurn: boolean;
 }
 
 export type GameState =

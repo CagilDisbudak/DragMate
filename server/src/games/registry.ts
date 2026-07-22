@@ -6,11 +6,15 @@
 import type { GameType } from '../types.js';
 import type { GameModule } from './GameModule.js';
 import { chessModule } from './chess.js';
+import { backgammonModule } from './backgammon.js';
+import { okeyModule } from './okey.js';
+import { game101Module } from './game101.js';
 
 const modules: Partial<Record<GameType, GameModule>> = {
   chess: chessModule,
-  // backgammon: (phase 2)
-  // okey / 101: (phase 3)
+  backgammon: backgammonModule,
+  okey: okeyModule,
+  '101': game101Module,
 };
 
 export function getModule(gameType: GameType): GameModule | undefined {

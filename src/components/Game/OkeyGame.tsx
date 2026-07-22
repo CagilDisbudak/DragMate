@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useOkeyGame } from '../../hooks/useOkeyGame';
 import { useOkeyRoom } from '../../hooks/useOkeyRoom';
 import type { OkeyRoom, DiscardPilesMap } from '../../hooks/useOkeyRoom';
@@ -46,7 +46,6 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
     const isOnline = mode === 'online';
     const room = roomHook.room;
     const mySlot = roomHook.getMySlot();
-    const isHost = roomHook.isHost();
 
     // Get game state - either from local or room - memoized
     const gameState: OkeyGameState | null = useMemo(() => {
@@ -55,66 +54,8 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
             : localGame.gameState;
     }, [isOnline, room, localGame.gameState]);
 
-    // AI turn handler for online mode
-    const handleAITurn = useCallback(async () => {
-        if (!room || !isHost) return;
-        if (room.phase !== 'playing') return;
-
-        const currentPlayer = room.players[room.currentTurn];
-        if (!currentPlayer?.adIsAI) return;
-
-        // AI logic: draw from center, then discard first tile
-        const newStack = [...room.centerStack];
-        const drawn = newStack.pop();
-
-        if (!drawn) return;
-
-        const newPlayers = [...room.players];
-        const rack = [...newPlayers[room.currentTurn].tiles];
-        const emptyIdx = rack.findIndex(s => s === null);
-        if (emptyIdx !== -1) rack[emptyIdx] = drawn;
-
-        // Discard first available tile
-        const firstTileIdx = rack.findIndex(s => s !== null);
-        const discarded = rack[firstTileIdx];
-        rack[firstTileIdx] = null;
-
-        newPlayers[room.currentTurn] = { ...newPlayers[room.currentTurn], tiles: rack };
-
-        // Update discard piles using map format
-        const pileKey = `pile${room.currentTurn}` as keyof DiscardPilesMap;
-        const currentPile = room.discardPiles[pileKey] || [];
-        const newDiscardPiles: DiscardPilesMap = {
-            ...room.discardPiles,
-            [pileKey]: discarded ? [...currentPile, discarded] : currentPile
-        };
-
-        const nextTurn = (room.currentTurn + 1) % 4;
-        const finalPhase = newStack.length === 0 ? 'stackEmpty' : 'playing';
-
-        await roomHook.updateGameState({
-            centerStack: newStack,
-            players: newPlayers,
-            discardPiles: newDiscardPiles,
-            currentTurn: nextTurn,
-            phase: finalPhase as any
-        });
-    }, [room, isHost, roomHook]);
-
-    // Run AI turns
-    useEffect(() => {
-        if (!isOnline || !room || !isHost) return;
-        if (room.phase !== 'playing') return;
-
-        const currentPlayer = room.players[room.currentTurn];
-        if (!currentPlayer?.adIsAI) return;
-
-        const timer = setTimeout(() => {
-            handleAITurn();
-        }, 1500);
-
-        return () => clearTimeout(timer);
-    }, [isOnline, room?.currentTurn, room?.phase, isHost, handleAITurn]);
+    // AI turns are driven entirely by the authoritative server now (no host-side
+    // timer), so a host disconnect no longer stalls bot players.
 
     // Handlers - route to appropriate hook
     const handleDraw = useCallback((index?: number) => {

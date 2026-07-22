@@ -1,7 +1,7 @@
 # DragMate ♟️🎲
 
-**DragMate** is a real-time multiplayer strategy playground built with **React**, **TypeScript**, **Vite**, and **TailwindCSS**.
-It features both **Chess** and **Backgammon** games with a premium "Liquid Glass" aesthetic, seamless drag-and-drop interactions, and optimized mobile experience.
+**DragMate** is a real-time multiplayer strategy playground built with **React**, **TypeScript**, **Vite**, and **TailwindCSS**, backed by an **authoritative Node + Socket.IO server**.
+It features **Chess**, **Backgammon**, **Okey**, and **101** with a premium "Liquid Glass" aesthetic, seamless drag-and-drop interactions, and optimized mobile experience.
 
 ## Features
 
@@ -24,11 +24,12 @@ It features both **Chess** and **Backgammon** games with a premium "Liquid Glass
 
 ## Tech Stack
 
-- **Frontend**: React + TypeScript + Vite
+- **Frontend**: React + TypeScript + Vite (deployed to GitHub Pages)
+- **Backend**: Node + Express + Socket.IO (authoritative game server, deployed to Render — see [`server/`](server/))
 - **Styling**: TailwindCSS + Custom CSS Variables
-- **State Management**: React Hooks + LocalStorage (for local/demo sync)
+- **Real-time**: Socket.IO (per-seat authoritative state push)
 - **Drag & Drop**: `@dnd-kit/core`
-- **Logic**: `chess.js` (Chess), Custom implementation (Backgammon)
+- **Logic**: `chess.js` (Chess), custom engines (Backgammon, Okey, 101) — shared by client (hints) and server (authority)
 - **Icons**: `lucide-react`
 
 ---
@@ -51,9 +52,17 @@ It features both **Chess** and **Backgammon** games with a premium "Liquid Glass
 
 ## How It Works
 
-- **Rooms**: Game state is synchronized via `localStorage` in this demo version (simulating a backend). Room IDs share state across tabs.
-- **Turns**: The game strictly enforces turn-based entry. You can only drag your own pieces/checkers when it's your turn.
-- **AI Mode**: In local/single-player mode, the standard opponent is an AI bot that responds after a brief "thinking" delay.
+- **Authoritative server**: For online play, the Node + Socket.IO server (in [`server/`](server/)) owns all game state, RNG (dice/deck), move validation, scoring and the AI. Clients send *intents* (e.g. `{from,to}`) and receive per-seat state pushes — so a client can't inject illegal moves, and in Okey/101 opponents' tiles and the draw order are never sent to your browser.
+- **Rooms**: The server allocates a 6-char room id. A durable session token in `localStorage` lets you refresh/reconnect and reclaim your seat.
+- **Turns**: Turn ownership is enforced server-side, not just in the UI.
+- **AI Mode**: Local single-player runs entirely client-side against a bot; online AI seats are driven by the server (so a host disconnect never stalls them).
+
+## Backend & Deployment
+
+- **Run the server locally**: `cd server && npm install && npm run dev` (listens on `:4000`).
+- **Client → server URL**: `VITE_WS_URL` (see [`.env.example`](.env.example)); defaults to `http://localhost:4000` in dev. The gh-pages production build reads [`.env.production`](.env.production).
+- **Deploy the server**: [`render.yaml`](render.yaml) is a Render Blueprint — free-tier Web Service, CORS allowing the gh-pages origin, WSS via Render's HTTPS domain.
+- **Deploy the client**: `npm run deploy` (builds and publishes `dist/` to GitHub Pages).
 
 ## Project Structure
 
