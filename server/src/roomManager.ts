@@ -96,6 +96,9 @@ export class RoomManager {
   private maybeScheduleAI(room: RoomEnvelope): void {
     this.clearAI(room.roomId);
     if (room.phase !== 'playing') return;
+    // Okey: when the draw pile is exhausted the HOST must decide (reshuffle or
+    // tie) — AI turns pause, otherwise the scheduler would spin on no-op turns.
+    if (room.status === 'stackEmpty') return;
     const seat = room.seats[room.currentTurn];
     if (!seat || !seat.isAI) return;
     const mod = this.module(room.gameType);

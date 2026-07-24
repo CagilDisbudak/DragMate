@@ -45,6 +45,19 @@ function rollDice(): number[] {
   return d1 === d2 ? [d1, d1, d1, d1] : [d1, d2];
 }
 
+// Real backgammon opening: each player rolls ONE die, rerolling ties.
+// Mapping: die #1 belongs to WHITE (seat 0), die #2 belongs to BLACK (seat 1) —
+// the owner of the higher die starts and plays BOTH dice as their first roll.
+function rollOpening(): { dice: number[]; turn: Color } {
+  let d1 = Math.floor(Math.random() * 6) + 1;
+  let d2 = Math.floor(Math.random() * 6) + 1;
+  while (d1 === d2) {
+    d1 = Math.floor(Math.random() * 6) + 1;
+    d2 = Math.floor(Math.random() * 6) + 1;
+  }
+  return { dice: [d1, d2], turn: d1 > d2 ? 'white' : 'black' };
+}
+
 function canBearOff(state: BgState, player: Color): boolean {
   const board = state.board;
   if (player === 'white') {
@@ -135,24 +148,68 @@ function getValidMoves(state: BgState): Move[] {
   };
 
   const baseMoves = getSingleStepMoves(state);
-  const allMoves = [...baseMoves];
+  if (baseMoves.length === 0) return [];
 
-  // Extend to depth-2 composites (sum of two dice).
-  if (state.movesLeft.length > 1) {
-    for (const m1 of baseMoves) {
-      const tempState = applyMove(state, m1);
-      const nextMoves = getSingleStepMoves(tempState);
-      if (m1.to !== 'off') {
-        const continuations = nextMoves.filter((m2) => m2.from === m1.to);
-        for (const m2 of continuations) {
-          allMoves.push({
-            from: m1.from,
-            to: m2.to,
-            roll: m1.roll + m2.roll,
-            isHit: m2.isHit,
-            subMoves: [m1, m2],
-          });
-        }
+  // --- Maximal dice usage (real backgammon rule) -----------------------------
+  // A player must use as many dice as legally possible. Enumerate move
+  // sequences recursively (doubles give up to 4 steps) to find the maximum
+  // number of dice usable from this state; only moves that begin at least
+  // one such maximal sequence are legal. Memoized for this call.
+  const memo = new Map<string, number>();
+  const keyOf = (s: BgState): string =>
+    s.board.join(',') + '|' + s.bar.white + ',' + s.bar.black + '|' + [...s.movesLeft].sort().join(',');
+  const maxPlayable = (s: BgState): number => {
+    if (s.movesLeft.length === 0) return 0;
+    const key = keyOf(s);
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+    let best = 0;
+    for (const m of getSingleStepMoves(s)) {
+      const used = 1 + maxPlayable(applyMove(s, m));
+      if (used > best) best = used;
+      if (best === s.movesLeft.length) break; // cannot do better
+    }
+    memo.set(key, best);
+    return best;
+  };
+
+  const maxUsable = maxPlayable(state);
+  if (maxUsable === 0) return [];
+
+  // Higher-die rule: when only ONE of two different dice can be played, the
+  // HIGHER die must be played if any higher-die move exists.
+  let forcedRoll: number | null = null;
+  if (maxUsable === 1 && state.movesLeft.length === 2 && state.movesLeft[0] !== state.movesLeft[1]) {
+    const higher = Math.max(state.movesLeft[0], state.movesLeft[1]);
+    if (baseMoves.some((m) => m.roll === higher)) forcedRoll = higher;
+  }
+
+  const allMoves: Move[] = [];
+
+  for (const m1 of baseMoves) {
+    if (forcedRoll !== null && m1.roll !== forcedRoll) continue;
+
+    const tempState = applyMove(state, m1);
+
+    // Keep the single step only if it still begins a maximal sequence.
+    if (1 + maxPlayable(tempState) !== maxUsable) continue;
+    allMoves.push(m1);
+
+    // Extend to depth-2 composites (sum of two dice). 'off' can't continue.
+    if (state.movesLeft.length > 1 && m1.to !== 'off') {
+      const continuations = getSingleStepMoves(tempState).filter((m2) => m2.from === m1.to);
+      for (const m2 of continuations) {
+        // The composite must itself begin a maximal sequence.
+        const afterBoth = applyMove(tempState, m2);
+        if (2 + maxPlayable(afterBoth) !== maxUsable) continue;
+
+        allMoves.push({
+          from: m1.from,
+          to: m2.to,
+          roll: m1.roll + m2.roll,
+          isHit: m2.isHit,
+          subMoves: [m1, m2],
+        });
       }
     }
   }
@@ -319,16 +376,16 @@ export const backgammonModule: GameModule = {
   aiDelayMs: 1200,
 
   init(): InitResult {
-    const dice = rollDice();
+    const opening = rollOpening();
     const state: BackgammonGameState = {
       kind: 'backgammon',
       board: [...INITIAL_BOARD],
       bar: { white: 0, black: 0 },
       off: { white: 0, black: 0 },
-      dice,
-      movesLeft: [...dice],
+      dice: opening.dice,
+      movesLeft: [...opening.dice],
     };
-    return { state, currentTurn: 0, phase: 'playing' };
+    return { state, currentTurn: opening.turn === 'white' ? 0 : 1, phase: 'playing' };
   },
 
   applyMove(room: RoomEnvelope, seat: number, move: unknown): ApplyResult {
@@ -373,14 +430,14 @@ export const backgammonModule: GameModule = {
   },
 
   rematch(): ApplyResult {
-    const dice = rollDice();
+    const opening = rollOpening();
     const bg: BgState = {
       board: [...INITIAL_BOARD],
       bar: { white: 0, black: 0 },
       off: { white: 0, black: 0 },
-      turn: 'white',
-      dice,
-      movesLeft: [...dice],
+      turn: opening.turn,
+      dice: opening.dice,
+      movesLeft: [...opening.dice],
       winner: null,
     };
     return toResult(bg, 'playing', 'active');

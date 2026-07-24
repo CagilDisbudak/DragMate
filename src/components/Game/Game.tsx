@@ -101,10 +101,11 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
         if (newGame.isCheckmate()) {
             setLocalStatus('checkmate');
             setLocalWinner(newGame.turn() === 'w' ? 'b' : 'w');
+        } else if (newGame.isStalemate()) {
+            // Must be checked before isDraw(): chess.js isDraw() also returns true for stalemate.
+            setLocalStatus('stalemate');
         } else if (newGame.isDraw()) {
             setLocalStatus('draw');
-        } else if ((newGame as any).isStalemate && (newGame as any).isStalemate()) {
-            setLocalStatus('stalemate');
         }
     };
 

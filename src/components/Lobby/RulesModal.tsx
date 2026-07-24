@@ -86,7 +86,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ gameType, onClose }) => 
 
     return (
         <div
-            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 pb-4 sm:p-6 bg-slate-950/80 backdrop-blur-md"
+            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 pb-4 sm:p-6 bg-[#050214]/85 backdrop-blur-md"
             onClick={onClose}
         >
             <div
@@ -100,7 +100,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ gameType, onClose }) => 
                 <div aria-hidden className={`h-1 shrink-0 bg-linear-to-r ${a.bar}`} />
 
                 {/* Header */}
-                <div className="flex items-start gap-4 p-5 sm:p-6 pb-4 sm:pb-4 border-b border-white/10 bg-linear-to-b from-white/[0.04] to-transparent">
+                <div className="flex items-start gap-4 p-5 sm:p-6 pb-4 sm:pb-4 border-b border-white/10 bg-linear-to-b from-white/[0.06] to-transparent">
                     <div className={`shrink-0 p-3 rounded-2xl ${a.iconBg}`}>{GAME_ICON[gameType]}</div>
                     <div className="flex-1 min-w-0">
                         <h2 className="font-display text-2xl font-bold text-white">{rules.title}</h2>
@@ -166,10 +166,10 @@ export const RulesModal: React.FC<RulesModalProps> = ({ gameType, onClose }) => 
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t border-white/10 bg-slate-950/30">
+                <div className="p-4 border-t border-white/10 bg-[#050214]/40">
                     <button
                         onClick={onClose}
-                        className="w-full py-3 rounded-xl border border-white/10 bg-white/10 hover:bg-white/15 hover:border-white/20 text-white font-bold transition-all active:scale-[0.99]"
+                        className="w-full py-3 rounded-xl border border-white/15 bg-white/10 hover:bg-white/15 hover:border-white/25 text-white font-bold transition-all active:scale-[0.99] shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
                     >
                         Anladım
                     </button>

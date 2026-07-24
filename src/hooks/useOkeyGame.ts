@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
-import { initializeOkeyGame, isWinningHand, arrangeTiles } from '../logic/okeyLogic';
-import type { OkeyGameState } from '../logic/okeyLogic';
+import { initializeOkeyGame, isWinningHand, arrangeTiles, shuffleDeck, chooseBotDraw, chooseBotFinish, chooseBotDiscard } from '../logic/okeyLogic';
+import type { OkeyGameState, OkeyTile, BotDifficulty } from '../logic/okeyLogic';
 
-export const useOkeyGame = (roomId: string | null) => {
+export const useOkeyGame = (roomId: string | null, aiDifficulty: BotDifficulty = 'Normal') => {
     const [gameState, setGameState] = useState<OkeyGameState | null>(null);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
 
@@ -162,7 +162,7 @@ export const useOkeyGame = (roomId: string | null) => {
             if (!prev) return null;
 
             // Collect all tiles from discard piles
-            const allDiscards: any[] = [];
+            const allDiscards: OkeyTile[] = [];
             prev.discardPiles.forEach(pile => {
                 allDiscards.push(...pile);
             });
@@ -172,8 +172,8 @@ export const useOkeyGame = (roomId: string | null) => {
                 return { ...prev, phase: 'roundOver', winner: null };
             }
 
-            // Shuffle them
-            const shuffled = [...allDiscards].sort(() => Math.random() - 0.5);
+            // Shuffle them (Fisher-Yates — the old sort(random) shuffle was biased)
+            const shuffled = shuffleDeck(allDiscards);
 
             return {
                 ...prev,
@@ -249,55 +249,82 @@ export const useOkeyGame = (roomId: string | null) => {
         });
     }, []);
 
-    // Simple AI Turn Simulation
+    // AI Turn Simulation — uses the shared engine bot heuristics.
     useEffect(() => {
         if (gameState && gameState.currentTurn !== 0 && gameState.phase === 'playing') {
             const timer = setTimeout(() => {
                 setGameState(prev => {
-                    if (!prev || prev.currentTurn === 0) return prev;
+                    // Phase guard too: the round may have ended between scheduling and firing.
+                    if (!prev || prev.currentTurn === 0 || prev.phase !== 'playing') return prev;
 
                     const currPlayer = prev.currentTurn;
                     const newPlayers = [...prev.players];
                     const nextTurn = (currPlayer + 1) % 4;
-
-                    // Simulating AI: Draw from center, then discard first tile
+                    const rack = [...newPlayers[currPlayer].tiles];
                     const newStack = [...prev.centerStack];
-                    const drawn = newStack.pop();
+                    const newDiscardPiles = prev.discardPiles.map(pile => [...pile]);
 
-                    if (drawn) {
-                        const rack = [...newPlayers[currPlayer].tiles];
-                        const emptyIdx = rack.findIndex(s => s === null);
-                        if (emptyIdx !== -1) rack[emptyIdx] = drawn;
+                    // Draw: take the previous player's discard when it is an
+                    // immediate meld-maker, otherwise draw from the center.
+                    const prevPlayer = (currPlayer + 3) % 4;
+                    const prevPile = newDiscardPiles[prevPlayer];
+                    const prevTop = prevPile.length > 0 ? prevPile[prevPile.length - 1] : null;
+                    let drawn: OkeyTile | null = null;
+                    if (prevTop && chooseBotDraw(rack, prevTop, prev.okeyTile) === 'discard') {
+                        drawn = prevPile.pop() ?? null;
+                    }
+                    if (!drawn) drawn = newStack.pop() ?? null;
 
-                        // Discard one (simple AI: just the first one)
-                        const firstTileIdx = rack.findIndex(s => s !== null);
-                        const discarded = rack[firstTileIdx];
-                        rack[firstTileIdx] = null;
+                    if (!drawn) {
+                        // Nothing to draw anywhere — surface the stackEmpty UI.
+                        return { ...prev, phase: 'stackEmpty', currentTurn: nextTurn };
+                    }
 
-                        newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
+                    const emptyIdx = rack.findIndex(s => s === null);
+                    if (emptyIdx !== -1) rack[emptyIdx] = drawn;
+                    newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
 
-                        const newDiscardPiles = [...prev.discardPiles];
-                        newDiscardPiles[currPlayer] = [...newDiscardPiles[currPlayer], discarded!];
-
-                        // Check if stack is empty after AI draw
-                        const finalPhase = newStack.length === 0 ? 'stackEmpty' : 'playing';
-
+                    // Win check BEFORE discarding: if one discard leaves a valid
+                    // 14-tile hand, the bot finishes and wins the round.
+                    const finishIdx = chooseBotFinish(rack, prev.okeyTile);
+                    if (finishIdx !== -1) {
+                        const winningTile = rack[finishIdx]!;
+                        rack[finishIdx] = null;
+                        newDiscardPiles[currPlayer].push(winningTile);
                         return {
                             ...prev,
                             centerStack: newStack,
                             players: newPlayers,
                             discardPiles: newDiscardPiles,
-                            currentTurn: nextTurn,
-                            phase: finalPhase
+                            phase: 'roundOver',
+                            winner: currPlayer
                         };
                     }
 
-                    return { ...prev, currentTurn: nextTurn };
+                    // Discard the least useful tile (difficulty-aware, never the okey unless forced).
+                    const discardIdx = chooseBotDiscard(rack, prev.okeyTile, aiDifficulty);
+                    if (discardIdx !== -1) {
+                        const discarded = rack[discardIdx]!;
+                        rack[discardIdx] = null;
+                        newDiscardPiles[currPlayer].push(discarded);
+                    }
+
+                    // Check if stack is empty after AI draw
+                    const finalPhase = newStack.length === 0 ? 'stackEmpty' : 'playing';
+
+                    return {
+                        ...prev,
+                        centerStack: newStack,
+                        players: newPlayers,
+                        discardPiles: newDiscardPiles,
+                        currentTurn: nextTurn,
+                        phase: finalPhase
+                    };
                 });
             }, 1500);
             return () => clearTimeout(timer);
         }
-    }, [gameState?.currentTurn, gameState?.phase]);
+    }, [gameState?.currentTurn, gameState?.phase, aiDifficulty]);
 
     // Placeholder for network methods
     const createRoom = async () => {

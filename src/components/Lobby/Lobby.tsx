@@ -336,9 +336,10 @@ export const Lobby: React.FC<LobbyProps> = ({
                         <button
                             key={g.key}
                             onClick={() => { onSelectGame(g.key); setStep('mode-select'); }}
-                            className={`group relative w-full aspect-square sm:aspect-[4/3] rounded-2xl sm:rounded-3xl border border-slate-700/60 bg-linear-to-br from-slate-800/90 to-slate-900 overflow-hidden text-left p-4 sm:p-5 flex flex-col justify-end transition-all duration-300 hover:-translate-y-1.5 active:translate-y-0 active:scale-[0.98] hover:shadow-2xl ${a.cardHover}`}
+                            className={`group relative hover-shine w-full aspect-square sm:aspect-[4/3] rounded-2xl sm:rounded-3xl border border-slate-700/60 bg-linear-to-br from-slate-800/80 via-slate-900/90 to-slate-950 overflow-hidden text-left p-4 sm:p-5 flex flex-col justify-end transition-all duration-300 hover:-translate-y-1.5 active:translate-y-0 active:scale-[0.98] hover:shadow-2xl ${a.cardHover}`}
                         >
-                            <div className={`pointer-events-none absolute -top-12 -right-12 w-36 h-36 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity duration-500 ${a.glow}`} />
+                            <div className={`pointer-events-none absolute -top-12 -right-12 w-36 h-36 rounded-full blur-3xl opacity-25 group-hover:opacity-60 transition-opacity duration-500 ${a.glow}`} />
+                            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-white/20 to-transparent" />
                             <Icon aria-hidden className={`pointer-events-none absolute -bottom-4 -right-4 w-24 h-24 sm:w-28 sm:h-28 opacity-[0.05] group-hover:opacity-10 group-hover:-rotate-6 transition-all duration-500 ${a.text}`} />
                             <RulesBadge game={g.key} onOpen={setRulesGameType} />
                             {g.badge && (
@@ -704,15 +705,16 @@ export const Lobby: React.FC<LobbyProps> = ({
     return (
         <div className="flex flex-col items-center justify-center min-h-[85vh] gap-8 lg:gap-10 relative px-4">
             {/* Hero */}
-            <header className="text-center space-y-4 anim-fade-up">
-                <h1 className="font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold pb-2 text-gradient-brand">
+            <header className="text-center space-y-3.5 anim-fade-up">
+                <h1 className="font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold pb-2 text-gradient-brand drop-shadow-[0_10px_40px_rgba(139,92,246,0.35)]">
                     DragMate
                 </h1>
+                <div aria-hidden className="mx-auto h-px w-44 sm:w-60 bg-linear-to-r from-transparent via-[#e9c877]/60 to-transparent" />
                 <p className="text-slate-400 text-sm sm:text-base font-medium max-w-md mx-auto">
                     Premium multiplayer board gaming — Chess, Tavla, Okey &amp; 101.
                 </p>
                 <div className="flex justify-center pt-1">
-                    <div className="glass-chip text-slate-300">
+                    <div className="glass-chip text-slate-200">
                         <span className={`w-2 h-2 rounded-full ${!isSupported ? 'bg-slate-600' : presenceOnline ? 'bg-emerald-400 animate-glow-pulse' : 'bg-amber-400 animate-pulse'}`} />
                         {!isSupported
                             ? 'Demo Mode'

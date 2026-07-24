@@ -330,6 +330,17 @@ export const endRound = (state: Game101State, winnerId: number): Game101State =>
 };
 
 /**
+ * End the current round in a DRAW — used when a player must draw but the center
+ * stack is exhausted. Nobody wins and nobody scores: hand points are NOT added,
+ * roundWinner stays null (startNewRound then falls back to dealer 0).
+ */
+export const endRoundInDraw = (state: Game101State): Game101State => ({
+    ...state,
+    phase: 'roundOver',
+    roundWinner: null
+});
+
+/**
  * Compute one full AI turn for the player whose turn it currently is.
  *
  * Pure function — takes the current game state and returns the next state after the
@@ -349,15 +360,46 @@ export const computeAIMove = (prev: Game101State): Game101State => {
     const newPlayers = prev.players.map(p => ({ ...p, tiles: [...p.tiles] }));
     const newTableMelds: { [key: string]: Meld } = { ...prev.tableMelds };
     const newStack = [...prev.centerStack];
-
-    // 1) Draw from the center stack.
-    const drawn = newStack.pop();
-    if (!drawn) {
-        // No tiles left to draw — just pass the turn.
-        return { ...prev, currentTurn: nextTurn };
-    }
+    const newDiscardPiles = prev.discardPiles.map(pile => [...pile]);
 
     const rack = newPlayers[currPlayer].tiles;
+
+    // 1) Draw. Prefer the previous player's top discard when it is immediately
+    // useful: it fits an existing table meld (only worth taking once the AI has
+    // laid down) or it completes a joker-free set/run with two tiles in hand.
+    // Otherwise draw from the center stack.
+    const prevPlayer = (currPlayer + playerCount - 1) % playerCount;
+    const prevPile = newDiscardPiles[prevPlayer] ?? [];
+    const topDiscard = prevPile.length > 0 ? prevPile[prevPile.length - 1] : undefined;
+
+    const discardIsUseful = (tile: Tile101): boolean => {
+        if (tile.isFakeOkey) return false;
+        if (newPlayers[currPlayer].hasLaidDown) {
+            for (const meld of Object.values(newTableMelds)) {
+                if (canAddToMeld(meld, tile)) return true;
+            }
+        }
+        const handTiles = rack.filter((t): t is Tile101 => t !== null && !t.isFakeOkey);
+        for (let i = 0; i < handTiles.length; i++) {
+            for (let j = i + 1; j < handTiles.length; j++) {
+                if (isValidMeld([handTiles[i], handTiles[j], tile]).valid) return true;
+            }
+        }
+        return false;
+    };
+
+    let drawn: Tile101 | undefined;
+    if (topDiscard && discardIsUseful(topDiscard)) {
+        prevPile.pop();
+        drawn = topDiscard;
+    } else {
+        drawn = newStack.pop();
+    }
+    if (!drawn) {
+        // Center stack exhausted — the round ends in a draw, nobody scores.
+        return endRoundInDraw(prev);
+    }
+
     const emptyIdx = rack.findIndex(s => s === null);
     if (emptyIdx !== -1) rack[emptyIdx] = drawn;
 
@@ -440,7 +482,7 @@ export const computeAIMove = (prev: Game101State): Game101State => {
 
         if (rack.filter(t => t !== null).length === 0) {
             newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack, hasLaidDown };
-            return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack }, currPlayer);
+            return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack, discardPiles: newDiscardPiles }, currPlayer);
         }
     }
     newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack, hasLaidDown };
@@ -456,7 +498,7 @@ export const computeAIMove = (prev: Game101State): Game101State => {
                     if (ti !== -1) rack[ti] = null;
                     newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
                     if (rack.filter(t => t !== null).length === 0) {
-                        return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack }, currPlayer);
+                        return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack, discardPiles: newDiscardPiles }, currPlayer);
                     }
                     break; // one tile per meld per turn
                 }
@@ -480,9 +522,7 @@ export const computeAIMove = (prev: Game101State): Game101State => {
         rack[low.idx] = null;
         newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
 
-        const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
-            idx === currPlayer ? (discarded ? [...pile, discarded] : [...pile]) : [...pile]
-        );
+        if (discarded) newDiscardPiles[currPlayer] = [...newDiscardPiles[currPlayer], discarded];
 
         return {
             ...prev,
@@ -494,7 +534,7 @@ export const computeAIMove = (prev: Game101State): Game101State => {
         };
     }
 
-    return { ...prev, centerStack: newStack, players: newPlayers, tableMelds: newTableMelds, currentTurn: nextTurn };
+    return { ...prev, centerStack: newStack, players: newPlayers, discardPiles: newDiscardPiles, tableMelds: newTableMelds, currentTurn: nextTurn };
 };
 
 export type SortMode = 'smart' | 'runs' | 'sets';

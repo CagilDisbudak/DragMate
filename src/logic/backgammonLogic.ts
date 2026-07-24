@@ -37,15 +37,28 @@ export const rollDice = (): number[] => {
     return [d1, d2];
 };
 
+// Real backgammon opening: each player rolls ONE die, rerolling ties.
+// Mapping: die #1 belongs to WHITE, die #2 belongs to BLACK — the owner of the
+// higher die starts and plays BOTH dice as their first roll.
+export const rollOpening = (): { dice: number[]; turn: PlayerColor } => {
+    let d1 = Math.floor(Math.random() * 6) + 1;
+    let d2 = Math.floor(Math.random() * 6) + 1;
+    while (d1 === d2) {
+        d1 = Math.floor(Math.random() * 6) + 1;
+        d2 = Math.floor(Math.random() * 6) + 1;
+    }
+    return { dice: [d1, d2], turn: d1 > d2 ? 'white' : 'black' };
+};
+
 export const createBackgammonGame = (): BackgammonState => {
-    const dice = rollDice();
+    const opening = rollOpening();
     return {
         board: [...INITIAL_BOARD],
         bar: { white: 0, black: 0 },
         off: { white: 0, black: 0 },
-        turn: 'white', // Standard is often roll for start, but let's simple start white
-        dice: dice,
-        movesLeft: [...dice],
+        turn: opening.turn, // Winner of the opening roll starts
+        dice: opening.dice,
+        movesLeft: [...opening.dice],
         validMoves: [], // Calculated externally or right after
         winner: null,
     };
@@ -160,36 +173,77 @@ export const getValidMoves = (state: BackgammonState): Move[] => {
 
     // 1. Get Base Moves for current state
     const baseMoves = getSingleStepMoves(state);
-    const allMoves = [...baseMoves];
+    if (baseMoves.length === 0) return [];
 
-    // 2. Try to extend each base move to form composite moves (depth 2 for now, covers sum of 2 dice)
-    // Only extend if there are dice left after the first move.
-    if (state.movesLeft.length > 1) {
-        for (const m1 of baseMoves) {
-            // Apply first move logically
-            const tempState = applyMove(state, m1);
+    // --- Maximal dice usage (real backgammon rule) ---------------------------
+    // A player must use as many dice as legally possible. Enumerate move
+    // sequences recursively (doubles give up to 4 steps) to find the maximum
+    // number of dice usable from this state; only moves that begin at least
+    // one such maximal sequence are legal. Memoized for this call.
+    const memo = new Map<string, number>();
+    const keyOf = (s: BackgammonState): string =>
+        s.board.join(',') + '|' + s.bar.white + ',' + s.bar.black + '|' + [...s.movesLeft].sort().join(',');
+    const maxPlayable = (s: BackgammonState): number => {
+        if (s.movesLeft.length === 0) return 0;
+        const key = keyOf(s);
+        const cached = memo.get(key);
+        if (cached !== undefined) return cached;
+        let best = 0;
+        for (const m of getSingleStepMoves(s)) {
+            const used = 1 + maxPlayable(applyMove(s, m));
+            if (used > best) best = used;
+            if (best === s.movesLeft.length) break; // cannot do better
+        }
+        memo.set(key, best);
+        return best;
+    };
 
-            // Get possible next steps
-            const nextMoves = getSingleStepMoves(tempState);
+    const maxUsable = maxPlayable(state);
+    if (maxUsable === 0) return [];
 
-            // Filter for moves that continue from where m1 ended
-            // If m1 went to 'off', it can't continue.
-            if (m1.to !== 'off') {
-                const continuations = nextMoves.filter(m2 => m2.from === m1.to);
+    // Higher-die rule: when only ONE of two different dice can be played, the
+    // HIGHER die must be played if any higher-die move exists.
+    let forcedRoll: number | null = null;
+    if (maxUsable === 1 && state.movesLeft.length === 2 && state.movesLeft[0] !== state.movesLeft[1]) {
+        const higher = Math.max(state.movesLeft[0], state.movesLeft[1]);
+        if (baseMoves.some(m => m.roll === higher)) forcedRoll = higher;
+    }
 
-                for (const m2 of continuations) {
-                    allMoves.push({
-                        from: m1.from,
-                        to: m2.to,
-                        roll: m1.roll + m2.roll, // Sum of rolls
-                        isHit: m2.isHit, // Hit check on final destination (intermediate hit is implicit in subMove action)
-                        subMoves: [m1, m2]
-                    });
+    const allMoves: Move[] = [];
 
-                    // Note: We could go deeper (Depth 3/4) for doubles here by recursing, 
-                    // but "sum of two dice" usually implies 2 steps. 
-                    // Let's stick to 2 to avoid clutter unless requested.
-                }
+    for (const m1 of baseMoves) {
+        if (forcedRoll !== null && m1.roll !== forcedRoll) continue;
+
+        // Apply first move logically
+        const tempState = applyMove(state, m1);
+
+        // Keep the single step only if it still begins a maximal sequence.
+        if (1 + maxPlayable(tempState) !== maxUsable) continue;
+        allMoves.push(m1);
+
+        // 2. Try to extend each base move to form composite moves (depth 2 for now, covers sum of 2 dice)
+        // Only extend if there are dice left after the first move.
+        // If m1 went to 'off', it can't continue.
+        if (state.movesLeft.length > 1 && m1.to !== 'off') {
+            // Get possible next steps, filtered for moves that continue from where m1 ended
+            const continuations = getSingleStepMoves(tempState).filter(m2 => m2.from === m1.to);
+
+            for (const m2 of continuations) {
+                // The composite must itself begin a maximal sequence.
+                const afterBoth = applyMove(tempState, m2);
+                if (2 + maxPlayable(afterBoth) !== maxUsable) continue;
+
+                allMoves.push({
+                    from: m1.from,
+                    to: m2.to,
+                    roll: m1.roll + m2.roll, // Sum of rolls
+                    isHit: m2.isHit, // Hit check on final destination (intermediate hit is implicit in subMove action)
+                    subMoves: [m1, m2]
+                });
+
+                // Note: We could go deeper (Depth 3/4) for doubles here by recursing,
+                // but "sum of two dice" usually implies 2 steps.
+                // Let's stick to 2 to avoid clutter unless requested.
             }
         }
     }
@@ -197,8 +251,6 @@ export const getValidMoves = (state: BackgammonState): Move[] => {
     // Deduplicate? (e.g. 3 then 4 vs 4 then 3 arriving at same spot)
     // Usually in BG, 3-then-4 and 4-then-3 are distinct in *how* they get there (intermediate point might be blocked for one)
     // But if both valid, they result in same final state.
-    // For UI simplicity, if we have multiple composite moves to same target from components, maybe just keep one?
-    // Actually letting the user pick either path is "correct", but UI might just show one dot.
     // We'll leave all valid variations in the array. The Board UI will highlight the target 'to'.
     // If user drops on 'to', we pick the first matching valid move.
 

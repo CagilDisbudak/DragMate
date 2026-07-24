@@ -1,30 +1,33 @@
 @import "tailwindcss";
 
 /* ============================================================
-   DragMate Design System — "Liquid Glass" v2
-   Dark, premium, per-game accent identities:
+   DragMate Design System — "Liquid Glass" v3 · Midnight Casino
+   Deep black-violet night, champagne-gold glint, luminous glass.
+   Per-game accent identities:
    chess = indigo · backgammon = emerald · okey = amber · 101 = rose
    ============================================================ */
 
 @theme {
-  /* Surfaces */
-  --color-canvas: #020617;
-  --color-surface-0: #0b1120;
-  --color-surface-1: #0f172a;
-  --color-surface-2: #1e293b;
+  /* Surfaces — black-violet night */
+  --color-canvas: #050214;
+  --color-surface-0: #0b0926;
+  --color-surface-1: #131030;
+  --color-surface-2: #211d45;
 
   /* Glass */
-  --color-glass: rgba(255, 255, 255, 0.05);
-  --color-glass-strong: rgba(255, 255, 255, 0.09);
-  --color-glass-border: rgba(255, 255, 255, 0.1);
-  --color-glass-border-strong: rgba(255, 255, 255, 0.18);
-  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  --shadow-glass-lg: 0 24px 64px -16px rgba(0, 0, 0, 0.6);
+  --color-glass: rgba(255, 255, 255, 0.055);
+  --color-glass-strong: rgba(255, 255, 255, 0.1);
+  --color-glass-border: rgba(255, 255, 255, 0.12);
+  --color-glass-border-strong: rgba(255, 255, 255, 0.22);
+  --shadow-glass: 0 8px 32px 0 rgba(2, 0, 12, 0.45);
+  --shadow-glass-lg: 0 24px 64px -16px rgba(2, 0, 12, 0.68);
 
   /* Brand */
   --color-primary: #6366f1;
   --color-secondary: #ec4899;
   --color-accent: #8b5cf6;
+  --color-gold: #e9c877;
+  --color-gold-soft: #f5e3ae;
 
   /* Fonts */
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
@@ -38,6 +41,8 @@
   --animate-shimmer: shimmer 2.8s linear infinite;
   --animate-deal-in: deal-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-float-soft: float-soft 5s ease-in-out infinite;
+  --animate-spotlight-spin: spotlight-spin 90s linear infinite;
+  --animate-brand-shift: brand-shift 9s ease-in-out infinite alternate;
 }
 
 @keyframes blob-float {
@@ -75,10 +80,28 @@
   50%      { transform: translateY(-6px); }
 }
 
+/* Slow "casino spotlight" rotation (Background conic layer) */
+@keyframes spotlight-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Slow gradient-position drift for the brand wordmark */
+@keyframes brand-shift {
+  from { background-position: 0% 50%; }
+  to   { background-position: 100% 50%; }
+}
+
+/* One-shot hover shine sweep (see .hover-shine) */
+@keyframes shine-sweep {
+  from { transform: translateX(-140%) skewX(-8deg); }
+  to   { transform: translateX(140%) skewX(-8deg); }
+}
+
 /* ---------- Base ---------- */
 
 :root {
-  background-color: #020617;
+  background-color: #050214;
   color: #f8fafc;
   font-family: var(--font-sans);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -94,12 +117,12 @@ body {
 }
 
 ::selection {
-  background: rgba(99, 102, 241, 0.4);
+  background: rgba(139, 92, 246, 0.45);
   color: #fff;
 }
 
 *:focus-visible {
-  outline: 2px solid rgba(129, 140, 248, 0.8);
+  outline: 2px solid rgba(129, 140, 248, 0.85);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -135,39 +158,116 @@ body {
   @apply text-transparent bg-clip-text bg-linear-to-br from-white via-slate-200 to-slate-400;
 }
 
+/* Luminous brand wordmark: champagne-gold → violet → sky, slowly drifting.
+   The global prefers-reduced-motion rule freezes the drift to a static gradient. */
 .text-gradient-brand {
-  @apply text-transparent bg-clip-text bg-linear-to-r from-sky-300 via-indigo-300 to-fuchsia-300;
+  @apply text-transparent bg-clip-text;
+  background-image: linear-gradient(
+    100deg,
+    #f7ead0 0%,
+    #e9c877 16%,
+    #d8b4fe 38%,
+    #a78bfa 55%,
+    #818cf8 70%,
+    #7dd3fc 86%,
+    #f0abfc 100%
+  );
+  background-size: 250% 100%;
+  background-position: 0% 50%;
+  animation: brand-shift 9s ease-in-out infinite alternate;
+}
+
+/* Champagne-gold accent text (new in v3) */
+.text-gradient-gold {
+  @apply text-transparent bg-clip-text;
+  background-image: linear-gradient(115deg, #f7ead0 0%, #e9c877 45%, #c8a24e 100%);
 }
 
 /* ---------- Glass primitives ---------- */
 
+/* v3: gradient ring (border-box gradient under a transparent border),
+   inner top-light and a faint violet depth shadow. */
 .liquid-glass {
-  @apply bg-glass backdrop-blur-xl border border-glass-border shadow-glass rounded-3xl;
-  background-image: linear-gradient(
-    145deg,
-    rgba(255, 255, 255, 0.07) 0%,
-    rgba(255, 255, 255, 0.02) 40%,
-    rgba(255, 255, 255, 0) 100%
-  );
+  @apply backdrop-blur-xl rounded-3xl;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(
+      150deg,
+      rgba(255, 255, 255, 0.085) 0%,
+      rgba(255, 255, 255, 0.03) 38%,
+      rgba(139, 92, 246, 0.045) 72%,
+      rgba(255, 255, 255, 0.015) 100%
+    ) padding-box,
+    linear-gradient(
+      170deg,
+      rgba(255, 255, 255, 0.34) 0%,
+      rgba(233, 200, 119, 0.2) 20%,
+      rgba(255, 255, 255, 0.07) 42%,
+      rgba(139, 92, 246, 0.3) 74%,
+      rgba(255, 255, 255, 0.1) 100%
+    ) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 8px 32px 0 rgba(2, 0, 12, 0.45),
+    0 24px 64px -24px rgba(88, 28, 135, 0.28);
 }
 
 .glass-chip {
   @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-glass-border bg-glass backdrop-blur-md text-xs font-bold uppercase tracking-widest;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 4px 16px -6px rgba(2, 0, 12, 0.5);
 }
 
 .glass-inset {
-  @apply rounded-2xl border border-slate-800/80 bg-slate-900/50;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), inset 0 0 24px rgba(0, 0, 0, 0.25);
+  @apply rounded-2xl border border-slate-800/80 bg-slate-950/50;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 0 28px rgba(2, 0, 12, 0.35);
 }
 
 .bg-blob {
   @apply absolute rounded-full blur-[100px] -z-10 animate-blob-float;
 }
 
+/* One-shot diagonal shine that sweeps across on hover/focus.
+   Pair with any card that already clips overflow (it enforces both). */
+.hover-shine {
+  position: relative;
+  overflow: hidden;
+}
+.hover-shine::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.13) 48%,
+    rgba(233, 200, 119, 0.17) 53%,
+    transparent 63%
+  );
+  transform: translateX(-140%) skewX(-8deg);
+}
+.hover-shine:hover::after,
+.hover-shine:focus-visible::after {
+  animation: shine-sweep 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* ---------- Buttons ---------- */
 
 .btn-premium {
-  @apply relative overflow-hidden px-6 py-3 bg-linear-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white font-bold rounded-xl transition-all duration-300 shadow-lg shadow-violet-500/25 hover:shadow-xl hover:shadow-violet-500/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98];
+  @apply relative overflow-hidden px-6 py-3 text-white font-bold rounded-xl transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98];
+  background-image: linear-gradient(135deg, #4f46e5 0%, #7c3aed 48%, #a21caf 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 8px 24px -8px rgba(124, 58, 237, 0.55);
+}
+.btn-premium:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 14px 36px -10px rgba(139, 92, 246, 0.6),
+    0 4px 18px -6px rgba(233, 200, 119, 0.35);
 }
 .btn-premium::after {
   content: "";
@@ -181,52 +281,55 @@ body {
 
 .btn-ghost {
   @apply px-5 py-2.5 rounded-xl border border-slate-700/80 bg-slate-900/60 text-slate-200 font-bold transition-all duration-200 hover:border-slate-500 hover:bg-slate-800/80 hover:text-white active:scale-[0.98];
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .btn-danger {
   @apply px-5 py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-200 font-bold transition-all duration-200 hover:border-red-400/60 hover:bg-red-500/20 active:scale-[0.98];
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .btn-success {
   @apply px-5 py-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 text-emerald-100 font-bold transition-all duration-200 hover:border-emerald-400/70 hover:bg-emerald-500/25 active:scale-[0.98];
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* ---------- Game surface materials ---------- */
 
-/* Rich emerald-teal felt (okey / card tables) */
+/* Rich emerald felt, a shade deeper for the midnight room (okey / card tables) */
 .felt-surface {
   background:
-    radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.06), transparent 55%),
-    radial-gradient(ellipse at center, #0e5c46 0%, #0a4433 55%, #062e22 100%);
+    radial-gradient(ellipse at 30% 18%, rgba(255, 255, 255, 0.07), transparent 55%),
+    radial-gradient(ellipse at center, #0d5f46 0%, #084231 55%, #04291d 100%);
   box-shadow:
-    inset 0 2px 24px rgba(0, 0, 0, 0.55),
-    inset 0 0 90px rgba(0, 0, 0, 0.35);
+    inset 0 2px 24px rgba(0, 0, 0, 0.58),
+    inset 0 0 100px rgba(0, 0, 0, 0.4);
 }
 
-/* Warm walnut wood (backgammon frame, racks) */
+/* Warm chestnut-walnut wood (backgammon frame, racks) */
 .wood-surface {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%),
-    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.1) 0 2px, transparent 2px 7px),
-    linear-gradient(135deg, #452a15 0%, #7a4a24 45%, #331e0e 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 30%),
+    repeating-linear-gradient(92deg, rgba(0, 0, 0, 0.11) 0 2px, transparent 2px 7px),
+    linear-gradient(135deg, #4b2b12 0%, #855026 45%, #35200c 100%);
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.09),
-    inset 0 -6px 24px rgba(0, 0, 0, 0.5);
+    inset 0 2px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -6px 24px rgba(0, 0, 0, 0.52);
 }
 
-/* Ivory tile face (okey / 101 taşları) */
+/* Creamy ivory tile face (okey / 101 taşları) */
 .tile-ivory {
-  background: linear-gradient(160deg, #fdfcf8 0%, #f1ede2 55%, #e2dccb 100%);
+  background: linear-gradient(160deg, #fffdf6 0%, #f5efdf 55%, #e8e0c9 100%);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -3px 6px rgba(120, 100, 60, 0.25),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -3px 6px rgba(125, 102, 58, 0.24),
     0 3px 6px rgba(0, 0, 0, 0.45);
 }
 
 .tile-back {
   background:
-    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.08), transparent 60%),
-    linear-gradient(160deg, #7f1d1d 0%, #991b1b 50%, #6f1414 100%);
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.09), transparent 60%),
+    linear-gradient(160deg, #8a1c1c 0%, #a32020 50%, #731212 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.15),
     inset 0 -2px 5px rgba(0, 0, 0, 0.4),
@@ -237,7 +340,7 @@ body {
 
 .chip-turn-active {
   @apply bg-emerald-500/10 text-emerald-300 border border-emerald-500/30;
-  box-shadow: 0 0 18px -4px rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 22px -4px rgba(16, 185, 129, 0.55);
 }
 
 .chip-turn-waiting {
@@ -246,13 +349,14 @@ body {
 
 .chip-game-over {
   @apply bg-indigo-500/10 text-indigo-200 border border-indigo-500/30;
+  box-shadow: 0 0 18px -6px rgba(99, 102, 241, 0.45);
 }
 
 /* ---------- Overlays ---------- */
 
 .overlay-backdrop {
   @apply absolute inset-0 z-50 flex flex-col items-center justify-center p-6 text-center;
-  background: rgba(2, 6, 23, 0.78);
+  background: rgba(5, 2, 20, 0.8);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }

@@ -37,7 +37,7 @@ const roomToGameState = (room: OkeyRoom): OkeyGameState => {
 
 export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, onExit }) => {
     // Use local game hook for local mode
-    const localGame = useOkeyGame(mode === 'local' ? roomId : null);
+    const localGame = useOkeyGame(mode === 'local' ? roomId : null, aiDifficulty);
 
     // Use room hook for online mode
     const roomHook = useOkeyRoom(mode === 'online' ? roomId : null);

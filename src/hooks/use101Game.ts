@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import {
     initialize101Game,
     endRound,
+    endRoundInDraw,
     startNewRound,
     isValidMeld,
     canAddToMeld,
@@ -22,6 +23,9 @@ export const use101Game = (roomId: string | null) => {
     const [gameState, setGameState] = useState<Game101State | null>(null);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
     const [selectedTileIndices, setSelectedTileIndices] = useState<number[]>([]);
+    // Turn discipline: draw → (meld) → discard. The dealer starts with 15 tiles,
+    // so they count as having already drawn.
+    const [drawnThisTurn, setDrawnThisTurn] = useState(true);
 
     // Initialize game
     useEffect(() => {
@@ -30,6 +34,7 @@ export const use101Game = (roomId: string | null) => {
                 const initial = initialize101Game(4);
                 console.log("101 Game Initialized", initial);
                 setGameState(initial);
+                setDrawnThisTurn(true); // player 0 deals with the extra tile
             } catch (e) {
                 console.error("Failed to initialize 101 game", e);
             }
@@ -53,148 +58,168 @@ export const use101Game = (roomId: string | null) => {
 
     // Draw from center stack
     const drawFromCenter = useCallback((targetSlot?: number) => {
-        setGameState(prev => {
-            if (!prev) return null;
-            if (prev.currentTurn !== 0) return prev;
+        const prev = gameState;
+        if (!prev || prev.currentTurn !== 0 || prev.phase !== 'playing') return;
+        if (drawnThisTurn) return; // Already drew this turn
 
-            const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
-            if (currentTilesCount >= 15) return prev; // Can't draw if hand is full
+        const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
+        if (currentTilesCount >= 15) return; // Can't draw if hand is full
 
-            const newStack = [...prev.centerStack];
-            const drawnTile = newStack.pop();
-            if (!drawnTile) return prev;
+        const newStack = [...prev.centerStack];
+        const drawnTile = newStack.pop();
+        if (!drawnTile) {
+            // Yığın bitti — tur berabere biter, kimse el puanı yazmaz.
+            setGameState(endRoundInDraw(prev));
+            return;
+        }
 
-            const newPlayers = [...prev.players];
-            const newRack = [...newPlayers[0].tiles];
+        const newPlayers = [...prev.players];
+        const newRack = [...newPlayers[0].tiles];
 
-            let finalSlot = -1;
-            if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
-                if (newRack[targetSlot] === null) {
-                    finalSlot = targetSlot;
-                } else {
-                    for (let dist = 1; dist < newRack.length; dist++) {
-                        const right = targetSlot + dist;
-                        const left = targetSlot - dist;
-                        if (right < newRack.length && newRack[right] === null) {
-                            finalSlot = right;
-                            break;
-                        }
-                        if (left >= 0 && newRack[left] === null) {
-                            finalSlot = left;
-                            break;
-                        }
+        let finalSlot = -1;
+        if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
+            if (newRack[targetSlot] === null) {
+                finalSlot = targetSlot;
+            } else {
+                for (let dist = 1; dist < newRack.length; dist++) {
+                    const right = targetSlot + dist;
+                    const left = targetSlot - dist;
+                    if (right < newRack.length && newRack[right] === null) {
+                        finalSlot = right;
+                        break;
+                    }
+                    if (left >= 0 && newRack[left] === null) {
+                        finalSlot = left;
+                        break;
                     }
                 }
             }
+        }
 
-            if (finalSlot === -1) {
-                finalSlot = newRack.findIndex(s => s === null);
-            }
+        if (finalSlot === -1) {
+            finalSlot = newRack.findIndex(s => s === null);
+        }
 
-            if (finalSlot !== -1) {
-                newRack[finalSlot] = drawnTile;
-            }
+        if (finalSlot !== -1) {
+            newRack[finalSlot] = drawnTile;
+        }
 
-            newPlayers[0] = { ...newPlayers[0], tiles: newRack };
+        newPlayers[0] = { ...newPlayers[0], tiles: newRack };
 
-            return { ...prev, players: newPlayers, centerStack: newStack };
-        });
-    }, []);
+        setGameState({ ...prev, players: newPlayers, centerStack: newStack });
+        setDrawnThisTurn(true);
+    }, [gameState, drawnThisTurn]);
 
     // Draw from previous player's discard pile (counter-clockwise)
     const drawFromDiscard = useCallback((targetSlot?: number) => {
-        setGameState(prev => {
-            if (!prev || prev.currentTurn !== 0) return prev;
+        const prev = gameState;
+        if (!prev || prev.currentTurn !== 0 || prev.phase !== 'playing') return;
+        if (drawnThisTurn) return; // Already drew this turn
 
-            const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
-            if (currentTilesCount >= 15) return prev;
+        const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
+        if (currentTilesCount >= 15) return;
 
-            // Draw from previous player's discard (counter-clockwise, so player 3)
-            const prevPlayerIdx = 3; // In single player, we are player 0, prev is 3
-            const prevPlayerDiscard = prev.discardPiles[prevPlayerIdx] || [];
-            if (prevPlayerDiscard.length === 0) return prev;
+        // Draw from previous player's discard (counter-clockwise, so player 3)
+        const prevPlayerIdx = 3; // In single player, we are player 0, prev is 3
+        const prevPlayerDiscard = prev.discardPiles[prevPlayerIdx] || [];
+        if (prevPlayerDiscard.length === 0) return;
 
-            const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
-                idx === prevPlayerIdx ? pile.slice(0, -1) : [...pile]
-            );
-            const drawnTile = prevPlayerDiscard[prevPlayerDiscard.length - 1];
+        const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
+            idx === prevPlayerIdx ? pile.slice(0, -1) : [...pile]
+        );
+        const drawnTile = prevPlayerDiscard[prevPlayerDiscard.length - 1];
 
-            const newPlayers = [...prev.players];
-            const newRack = [...newPlayers[0].tiles];
+        const newPlayers = [...prev.players];
+        const newRack = [...newPlayers[0].tiles];
 
-            let finalSlot = -1;
-            if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
-                if (newRack[targetSlot] === null) {
-                    finalSlot = targetSlot;
-                } else {
-                    for (let dist = 1; dist < newRack.length; dist++) {
-                        const right = targetSlot + dist;
-                        const left = targetSlot - dist;
-                        if (right < newRack.length && newRack[right] === null) {
-                            finalSlot = right;
-                            break;
-                        }
-                        if (left >= 0 && newRack[left] === null) {
-                            finalSlot = left;
-                            break;
-                        }
+        let finalSlot = -1;
+        if (targetSlot !== undefined && targetSlot >= 0 && targetSlot < newRack.length) {
+            if (newRack[targetSlot] === null) {
+                finalSlot = targetSlot;
+            } else {
+                for (let dist = 1; dist < newRack.length; dist++) {
+                    const right = targetSlot + dist;
+                    const left = targetSlot - dist;
+                    if (right < newRack.length && newRack[right] === null) {
+                        finalSlot = right;
+                        break;
+                    }
+                    if (left >= 0 && newRack[left] === null) {
+                        finalSlot = left;
+                        break;
                     }
                 }
             }
+        }
 
-            if (finalSlot === -1) {
-                finalSlot = newRack.findIndex(s => s === null);
-            }
+        if (finalSlot === -1) {
+            finalSlot = newRack.findIndex(s => s === null);
+        }
 
-            if (finalSlot !== -1) {
-                newRack[finalSlot] = drawnTile;
-            }
+        if (finalSlot !== -1) {
+            newRack[finalSlot] = drawnTile;
+        }
 
-            newPlayers[0] = { ...newPlayers[0], tiles: newRack };
-            return { ...prev, players: newPlayers, discardPiles: newDiscardPiles };
-        });
-    }, []);
+        newPlayers[0] = { ...newPlayers[0], tiles: newRack };
+        setGameState({ ...prev, players: newPlayers, discardPiles: newDiscardPiles });
+        setDrawnThisTurn(true);
+    }, [gameState, drawnThisTurn]);
 
     // Discard a tile to own pile and end turn
     const discardTile = useCallback((index: number) => {
-        setGameState(prev => {
-            if (!prev || prev.currentTurn !== 0) return prev;
+        const prev = gameState;
+        if (!prev || prev.currentTurn !== 0 || prev.phase !== 'playing') return;
 
-            const playerTiles = prev.players[0].tiles.filter(t => t !== null);
-            if (playerTiles.length !== 15) {
-                console.log("Must have 15 tiles to discard");
-                return prev;
-            }
+        if (!drawnThisTurn) {
+            console.log("Must draw before discarding");
+            return;
+        }
 
-            const newPlayers = [...prev.players];
-            const newRack = [...prev.players[0].tiles];
-            const discardedTile = newRack[index];
+        const newPlayers = [...prev.players];
+        const newRack = [...prev.players[0].tiles];
+        const discardedTile = newRack[index];
 
-            if (!discardedTile) return prev;
+        if (!discardedTile) return;
 
-            newRack[index] = null;
-            newPlayers[0] = { ...newPlayers[0], tiles: newRack };
+        newRack[index] = null;
+        newPlayers[0] = { ...newPlayers[0], tiles: newRack };
 
-            // Discard to own pile (player 0)
-            const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
-                idx === 0 ? [...pile, discardedTile] : [...pile]
-            );
-            const nextTurn = (prev.currentTurn + 1) % prev.players.length;
+        // Discard to own pile (player 0)
+        const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
+            idx === 0 ? [...pile, discardedTile] : [...pile]
+        );
 
-            return {
-                ...prev,
-                players: newPlayers,
-                discardPiles: newDiscardPiles,
-                currentTurn: nextTurn
-            };
+        // Discarding the last tile wins the round
+        if (newRack.filter(t => t !== null).length === 0) {
+            setGameState(endRound(
+                { ...prev, players: newPlayers, discardPiles: newDiscardPiles },
+                0
+            ));
+            clearSelection();
+            return;
+        }
+
+        const nextTurn = (prev.currentTurn + 1) % prev.players.length;
+
+        setGameState({
+            ...prev,
+            players: newPlayers,
+            discardPiles: newDiscardPiles,
+            currentTurn: nextTurn
         });
+        setDrawnThisTurn(false);
         clearSelection();
-    }, [clearSelection]);
+    }, [gameState, drawnThisTurn, clearSelection]);
 
     // Lay down selected tiles as a new meld
     const layDownMeld = useCallback(() => {
         if (selectedTileIndices.length < 3) {
             alert("En az 3 taş seçmelisiniz!");
+            return;
+        }
+
+        if (!drawnThisTurn) {
+            alert("Önce taş çekmelisiniz!");
             return;
         }
 
@@ -262,10 +287,15 @@ export const use101Game = (roomId: string | null) => {
             };
         });
         clearSelection();
-    }, [selectedTileIndices, clearSelection]);
+    }, [selectedTileIndices, drawnThisTurn, clearSelection]);
 
     // Add a tile to an existing meld
     const addToMeld = useCallback((tileIndex: number, meldId: string) => {
+        if (!drawnThisTurn) {
+            alert("Önce taş çekmelisiniz!");
+            return;
+        }
+
         setGameState(prev => {
             if (!prev || prev.currentTurn !== 0) return prev;
 
@@ -314,7 +344,7 @@ export const use101Game = (roomId: string | null) => {
                 tableMelds: newMelds
             };
         });
-    }, []);
+    }, [drawnThisTurn]);
 
     // Move tile within rack
     const moveTileInRack = useCallback((fromIndex: number, toIndex: number) => {
@@ -409,20 +439,27 @@ export const use101Game = (roomId: string | null) => {
     // Reset/restart game
     const resetGame = useCallback(() => {
         setGameState(initialize101Game(4));
+        setDrawnThisTurn(true); // player 0 deals with the extra tile
         clearSelection();
     }, [clearSelection]);
 
-    // Start new round
+    // Start new round (works after a drawn round too: dealer falls back to 0)
     const newRound = useCallback(() => {
-        setGameState(prev => {
-            if (!prev || prev.phase !== 'roundOver') return prev;
-            return startNewRound(prev);
-        });
+        const prev = gameState;
+        if (!prev || prev.phase !== 'roundOver') return;
+        const next = startNewRound(prev);
+        setGameState(next);
+        setDrawnThisTurn(next.currentTurn === 0); // dealer already holds the extra tile
         clearSelection();
-    }, [clearSelection]);
+    }, [gameState, clearSelection]);
 
     // Finish game (when player has 0 tiles and discards)
     const finishGame = useCallback((discardIndex: number) => {
+        if (!drawnThisTurn) {
+            alert("Önce taş çekmelisiniz!");
+            return;
+        }
+
         setGameState(prev => {
             if (!prev || prev.currentTurn !== 0) return prev;
 
@@ -454,7 +491,7 @@ export const use101Game = (roomId: string | null) => {
                 0
             );
         });
-    }, []);
+    }, [drawnThisTurn]);
 
     // Smart AI Turn Simulation — delegates to the shared engine so local & online match.
     useEffect(() => {

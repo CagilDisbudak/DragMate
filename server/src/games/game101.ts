@@ -16,6 +16,7 @@ import {
   initialize101Game,
   startNewRound as startNewRound101,
   endRound,
+  endRoundInDraw,
   computeAIMove,
   isValidMeld,
   canAddToMeld,
@@ -177,7 +178,10 @@ export const game101Module: GameModule = {
         if (prevDrawn) throw new GameError('already_drew', 'You already drew this turn');
         if (count(hand) >= 15) throw new GameError('too_many', 'Discard before drawing');
         const tile = g.centerStack.pop();
-        if (!tile) throw new GameError('stack_empty', 'Center stack is empty');
+        if (!tile) {
+          // Stack exhausted — the round ends in a draw, nobody scores.
+          return toResult(endRoundInDraw(g), false, { roundDraw: true, seat });
+        }
         placeInRack(hand, tile, slot);
         return toResult(g, true, { draw: 'center', seat });
       }

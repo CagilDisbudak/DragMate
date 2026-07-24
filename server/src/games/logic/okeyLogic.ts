@@ -457,3 +457,169 @@ export const initializeOkeyGame = (): OkeyGameState => {
         winner: null,
     };
 };
+
+// ---------------------------------------------------------------------------
+// Bot (AI) helpers — pure functions shared by the local single-player hook and
+// the authoritative server module.
+// ---------------------------------------------------------------------------
+
+export type BotDifficulty = 'Easy' | 'Normal' | 'Hard';
+
+/** True when the tile is the round's actual okey (the wild card). */
+const isRealOkeyTile = (tile: OkeyTile, okeyTile: OkeyTile | null): boolean =>
+    !tile.isFakeOkey && okeyTile !== null && tile.color === okeyTile.color && tile.value === okeyTile.value;
+
+/** Fake okeys play as the round's okey tile; everything else plays as itself. */
+const effectiveTile = (tile: OkeyTile, okeyTile: OkeyTile | null): { value: number; color: OkeyColor | null } =>
+    tile.isFakeOkey && okeyTile
+        ? { value: okeyTile.value, color: okeyTile.color }
+        : { value: tile.value, color: tile.color };
+
+/** Circular distance between tile values (1 neighbours 13 via the 12-13-1 wrap). */
+const valueDistance = (a: number, b: number): number => {
+    const d = Math.abs(a - b);
+    return Math.min(d, 13 - d);
+};
+
+/** Deterministic small hash of a tile id, used as a noise tiebreak (no Math.random). */
+const hashTileId = (id: string): number => {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+    return Math.abs(h);
+};
+
+/**
+ * Heuristic usefulness of a tile given the rest of the hand:
+ * - run potential: same-colour neighbours at ±1 (strong) / ±2 (weak),
+ * - set potential: same value in other colours,
+ * - pair: an exact duplicate already held (only 2 of each exist, so capped at one),
+ * - the round's okey (wild) and fake okeys are maximally valuable.
+ */
+export const scoreTileUsefulness = (
+    tile: OkeyTile,
+    hand: (OkeyTile | null)[],
+    okeyTile: OkeyTile | null
+): number => {
+    if (isRealOkeyTile(tile, okeyTile)) return 1000;
+    if (tile.isFakeOkey) return 900;
+
+    const self = effectiveTile(tile, okeyTile);
+    if (self.color === null) return 0;
+
+    let score = 0;
+    let setMates = 0;
+    let duplicates = 0;
+
+    for (const other of hand) {
+        if (other === null || other.id === tile.id) continue;
+        if (isRealOkeyTile(other, okeyTile)) continue; // wilds help every tile equally
+        const eff = effectiveTile(other, okeyTile);
+        if (eff.color === null) continue;
+
+        if (eff.color === self.color) {
+            const dist = valueDistance(eff.value, self.value);
+            if (dist === 1) score += 4;
+            else if (dist === 2) score += 2;
+            else if (dist === 0) duplicates++;
+        } else if (eff.value === self.value) {
+            setMates++;
+        }
+    }
+
+    score += Math.min(setMates, 3) * 4; // set partners (at most 3 other colours)
+    score += Math.min(duplicates, 1) * 3; // pair bonus — a 2nd duplicate cannot exist
+
+    return score;
+};
+
+/**
+ * Where should the bot draw from? Takes the previous player's discard only when
+ * that tile immediately completes/extends a meld or strong pair structure
+ * (usefulness >= 6, i.e. at least two run/set connections); otherwise the
+ * unknown centre draw is preferred. Wilds on the pile are always taken.
+ */
+export const chooseBotDraw = (
+    hand14: (OkeyTile | null)[],
+    prevDiscardTop: OkeyTile | null,
+    okeyTile: OkeyTile | null
+): 'center' | 'discard' => {
+    if (!prevDiscardTop) return 'center';
+    return scoreTileUsefulness(prevDiscardTop, hand14, okeyTile) >= 6 ? 'discard' : 'center';
+};
+
+/**
+ * If discarding a single tile leaves a winning 14-tile hand, return that tile's
+ * rack index (the bot should finish). Returns -1 when no winning discard exists.
+ */
+export const chooseBotFinish = (
+    hand15: (OkeyTile | null)[],
+    okeyTile: OkeyTile | null
+): number => {
+    if (hand15.filter(t => t !== null).length !== 15) return -1;
+
+    const tested = new Set<string>();
+    for (let i = 0; i < hand15.length; i++) {
+        const tile = hand15[i];
+        if (!tile) continue;
+        const key = tile.isFakeOkey ? 'fake' : `${tile.color}-${tile.value}`;
+        if (tested.has(key)) continue; // an identical tile was already tested
+        tested.add(key);
+
+        const remaining = [...hand15];
+        remaining[i] = null;
+        if (isWinningHand(remaining, okeyTile)) return i;
+    }
+    return -1;
+};
+
+/**
+ * Pick the rack index to discard: the least useful tile, never the okey or a
+ * fake okey unless the hand holds nothing else. Easy throws a random non-okey
+ * tile ~60% of the time; Hard additionally holds tiles adjacent to the okey's
+ * value. `rand` defaults to Math.random — never call this from a React render
+ * path (event handlers / timers / server code are fine).
+ */
+export const chooseBotDiscard = (
+    hand15: (OkeyTile | null)[],
+    okeyTile: OkeyTile | null,
+    difficulty: BotDifficulty = 'Normal',
+    rand: () => number = Math.random
+): number => {
+    const occupied: number[] = [];
+    for (let i = 0; i < hand15.length; i++) {
+        if (hand15[i] !== null) occupied.push(i);
+    }
+    if (occupied.length === 0) return -1;
+
+    const nonOkey = occupied.filter(i => {
+        const t = hand15[i]!;
+        return !t.isFakeOkey && !isRealOkeyTile(t, okeyTile);
+    });
+    const candidates = nonOkey.length > 0 ? nonOkey : occupied; // forced only when all tiles are wild
+
+    if (difficulty === 'Easy' && rand() < 0.6) {
+        return candidates[Math.floor(rand() * candidates.length)];
+    }
+
+    let bestIdx = candidates[0];
+    let bestScore = Infinity;
+    for (const i of candidates) {
+        const tile = hand15[i]!;
+        let score = scoreTileUsefulness(tile, hand15, okeyTile);
+        if (
+            difficulty === 'Hard' &&
+            okeyTile !== null &&
+            !tile.isFakeOkey &&
+            tile.color === okeyTile.color &&
+            valueDistance(tile.value, okeyTile.value) <= 1
+        ) {
+            score += 1; // hold tiles adjacent to the okey's value
+        }
+        score += (hashTileId(tile.id) % 97) / 1000; // deterministic noise tiebreak
+        if (score < bestScore) {
+            bestScore = score;
+            bestIdx = i;
+        }
+    }
+    return bestIdx;
+};

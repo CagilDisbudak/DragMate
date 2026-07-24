@@ -12,7 +12,15 @@
  */
 import type { ApplyResult, OkeyTile, RoomEnvelope } from '../types.js';
 import { GameError, type GameModule, type InitResult } from './GameModule.js';
-import { initializeOkeyGame, isWinningHand, arrangeTiles, shuffleDeck } from './logic/okeyLogic.js';
+import {
+  initializeOkeyGame,
+  isWinningHand,
+  arrangeTiles,
+  shuffleDeck,
+  chooseBotDraw,
+  chooseBotFinish,
+  chooseBotDiscard,
+} from './logic/okeyLogic.js';
 
 type OkeyPhase = 'waiting' | 'playing' | 'roundOver' | 'stackEmpty';
 
@@ -206,13 +214,19 @@ export const okeyModule: GameModule = {
     const hand = p.hands[turn];
     const nextTurn = (turn + 1) % SEATS;
 
-    // Draw: prefer the center, fall back to the previous player's discard.
+    // Draw: the engine heuristic takes the previous player's discard when that
+    // tile is an immediate meld-maker, otherwise the center (with fallbacks
+    // when either source is empty).
     if (countTiles(hand) < 15) {
-      let tile = p.centerStack.pop();
-      if (!tile) {
-        const prev = (turn + 3) % SEATS;
-        tile = p.discardPiles[prev].pop();
+      const prev = (turn + 3) % SEATS;
+      const prevPile = p.discardPiles[prev];
+      const prevTop = prevPile.length > 0 ? prevPile[prevPile.length - 1] : null;
+      let tile: OkeyTile | undefined;
+      if (prevTop && chooseBotDraw(hand, prevTop, p.okeyTile) === 'discard') {
+        tile = prevPile.pop();
       }
+      if (!tile) tile = p.centerStack.pop();
+      if (!tile) tile = prevPile.pop();
       if (!tile) {
         // Nothing to draw anywhere — pass the turn to avoid a deadlock.
         return result(p, 'playing', 'stackEmpty', nextTurn, null, { ai: true, pass: true });
@@ -220,8 +234,18 @@ export const okeyModule: GameModule = {
       placeInRack(hand, tile);
     }
 
-    // Discard the first tile.
-    const idx = hand.findIndex((t) => t !== null);
+    // Win check BEFORE discarding: if one discard leaves a valid 14-tile hand,
+    // the bot finishes and wins the round.
+    const finishIdx = chooseBotFinish(hand, p.okeyTile);
+    if (finishIdx !== -1) {
+      const tile = hand[finishIdx]!;
+      hand[finishIdx] = null;
+      p.discardPiles[turn].push(tile);
+      return result(p, 'roundOver', 'roundOver', turn, turn, { finish: turn, ai: true });
+    }
+
+    // Discard the least useful tile (difficulty-aware, never the okey unless forced).
+    const idx = chooseBotDiscard(hand, p.okeyTile, room.aiDifficulty);
     if (idx !== -1) {
       const tile = hand[idx]!;
       hand[idx] = null;
