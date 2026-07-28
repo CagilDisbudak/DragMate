@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSocket, getUserId, emitAck, EV, type RoomView } from '../lib/socket';
-import { findRunIndices, findSetIndices } from '../logic/101Logic';
+import { findRunIndices, findPairIndices, PAIR_OPEN_MINIMUM } from '../logic/101Logic';
 import type { Tile101, Meld } from '../logic/101Logic';
 
 /**
@@ -21,6 +21,7 @@ export interface Player101 {
     tiles: (Tile101 | null)[];
     score: number;
     hasLaidDown: boolean;
+    openedWithPairs: boolean;
 }
 
 export type Room101Phase = 'waiting' | 'playing' | 'roundOver' | 'gameOver';
@@ -29,7 +30,7 @@ export interface MeldMap {
     [key: string]: {
         id: string;
         tiles: Tile101[];
-        type: 'set' | 'run';
+        type: 'set' | 'run' | 'pair';
         ownerPlayer: number;
     };
 }
@@ -56,7 +57,7 @@ export interface Room101 {
 }
 
 interface Projection101 {
-    players: { tiles: (Tile101 | null)[]; score: number; hasLaidDown: boolean }[];
+    players: { tiles: (Tile101 | null)[]; score: number; hasLaidDown: boolean; openedWithPairs?: boolean }[];
     centerStackCount: number;
     discardPiles: Tile101[][];
     indicatorTile: Tile101 | null;
@@ -82,6 +83,7 @@ function viewToRoom(view: RoomView): Room101 {
             tiles: s.players[i]?.tiles ?? [],
             score: s.players[i]?.score ?? 0,
             hasLaidDown: s.players[i]?.hasLaidDown ?? false,
+            openedWithPairs: s.players[i]?.openedWithPairs ?? false,
         })),
         centerStack: Array(s.centerStackCount).fill(HIDDEN),
         discardPiles: {
@@ -208,6 +210,14 @@ export const use101Room = (roomId: string | null) => {
         setSelectedTileIndices([]);
     };
 
+    const layDownPairs = () => {
+        void move({
+            action: 'layDownPairs',
+            indices: selectedTileIndices.length > 0 ? selectedTileIndices : undefined,
+        });
+        setSelectedTileIndices([]);
+    };
+
     const startNewRound = () => void move({ action: 'startNewRound' });
     const resetGame = async (): Promise<void> => {
         if (!roomId) return;
@@ -226,8 +236,10 @@ export const use101Room = (roomId: string | null) => {
         if (runs.length > 0) setSelectedTileIndices(runs[0]);
     };
     const selectSets = () => {
-        const sets = findSetIndices(myTiles());
-        if (sets.length > 0) setSelectedTileIndices(sets[0]);
+        const pairs = findPairIndices(myTiles());
+        if (pairs.length > 0) {
+            setSelectedTileIndices(pairs.slice(0, PAIR_OPEN_MINIMUM).flat());
+        }
     };
 
     return {
@@ -246,6 +258,7 @@ export const use101Room = (roomId: string | null) => {
         drawFromDiscard,
         discardTile,
         layDownMeld,
+        layDownPairs,
         addToMeld,
         moveTileInRack,
         sortTilesByRuns,

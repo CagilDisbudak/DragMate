@@ -1,11 +1,12 @@
 /**
  * Authoritative Okey-101 module. Ports the pure engine (game101Logic) and runs
- * ALL of it server-side: dealing/RNG, meld validation, the 51-point first
- * lay-down rule, scoring, round/game progression, and the AI (computeAIMove).
+ * ALL of it server-side: dealing/RNG, meld validation, the classic 101-point /
+ * 5-pair first open, discard-take-to-open rule, scoring, round/game progression,
+ * and the AI (computeAIMove).
  *
  * Like okey, `projectView` hides opponents' racks and the draw-pile order — only
  * a seat's own tiles are sent. AI runs on the server, so a host disconnect no
- * longer stalls bot turns (the old model drove AI from the host's browser).
+ * longer stalls bot turns.
  *
  * Turn flow is draw → (optionally lay down / add to melds) → discard, tracked by
  * `drawnThisTurn` so melding before discarding works correctly.
@@ -20,11 +21,17 @@ import {
   computeAIMove,
   isValidMeld,
   canAddToMeld,
-  canMakeFirstLayDown,
+  canMakePairOpen,
+  canTakeDiscardToOpen,
+  extractPairs,
+  getMeldPoints,
   sortByRuns,
   sortBySets,
   sortByPairs,
   smartSort101Tiles,
+  MAX_HAND_SIZE,
+  FIRST_MELD_MINIMUM,
+  PAIR_OPEN_MINIMUM,
   type Game101State,
 } from './logic/game101Logic.js';
 
@@ -37,7 +44,12 @@ function toGame(room: RoomEnvelope): Game101State {
   const s = room.state as Game101StatePayload;
   return {
     phase: s.phase,
-    players: s.players.map((p) => ({ tiles: [...p.tiles], score: p.score, hasLaidDown: p.hasLaidDown })),
+    players: s.players.map((p) => ({
+      tiles: [...p.tiles],
+      score: p.score,
+      hasLaidDown: p.hasLaidDown,
+      openedWithPairs: p.openedWithPairs ?? false,
+    })),
     centerStack: [...s.centerStack],
     discardPiles: s.discardPiles.map((d) => [...d]),
     indicatorTile: s.indicatorTile,
@@ -48,27 +60,6 @@ function toGame(room: RoomEnvelope): Game101State {
     gameWinner: s.gameWinner,
     roundNumber: s.roundNumber,
   };
-}
-
-function toResult(g: Game101State, drawnThisTurn: boolean, lastMove?: unknown): ApplyResult {
-  const phase: ApplyResult['phase'] =
-    g.phase === 'gameOver' ? 'gameOver' : g.phase === 'roundOver' ? 'roundOver' : 'playing';
-  const state: Game101StatePayload = {
-    kind: '101',
-    phase: g.phase,
-    players: g.players,
-    centerStack: g.centerStack,
-    discardPiles: g.discardPiles,
-    indicatorTile: g.indicatorTile,
-    okeyTile: g.okeyTile,
-    tableMelds: g.tableMelds,
-    currentTurn: g.currentTurn,
-    roundWinner: g.roundWinner,
-    gameWinner: g.gameWinner,
-    roundNumber: g.roundNumber,
-    drawnThisTurn,
-  };
-  return { state, currentTurn: g.currentTurn, phase, winner: g.gameWinner ?? g.roundWinner ?? null, status: g.phase, lastMove };
 }
 
 function placeInRack(hand: (OkeyTile | null)[], tile: OkeyTile, slot?: number): void {
@@ -88,6 +79,7 @@ function parseAction(move: unknown): {
   to?: number;
   meldId?: string;
   indices?: number[];
+  mode?: string;
 } {
   if (!move || typeof move !== 'object') throw new GameError('bad_move', 'Move payload missing');
   const m = move as Record<string, unknown>;
@@ -100,6 +92,7 @@ function parseAction(move: unknown): {
     to: typeof m.to === 'number' ? m.to : undefined,
     meldId: typeof m.meldId === 'string' ? m.meldId : undefined,
     indices: Array.isArray(m.indices) ? (m.indices.filter((x) => typeof x === 'number') as number[]) : undefined,
+    mode: typeof m.mode === 'string' ? m.mode : undefined,
   };
 }
 
@@ -110,7 +103,12 @@ function isHostSeat(room: RoomEnvelope, seat: number): boolean {
 function emptyGame(): Game101State {
   return {
     phase: 'dealing',
-    players: Array.from({ length: SEATS }, () => ({ tiles: [], score: 0, hasLaidDown: false })),
+    players: Array.from({ length: SEATS }, () => ({
+      tiles: [],
+      score: 0,
+      hasLaidDown: false,
+      openedWithPairs: false,
+    })),
     centerStack: [],
     discardPiles: [[], [], [], []],
     indicatorTile: null,
@@ -130,7 +128,7 @@ export const game101Module: GameModule = {
   aiDelayMs: 1400,
 
   init(): InitResult {
-    return { state: toResult(emptyGame(), false).state, currentTurn: 0, phase: 'waiting' };
+    return { state: buildResult(emptyGame(), false).state, currentTurn: 0, phase: 'waiting' };
   },
 
   start(room: RoomEnvelope): ApplyResult {
@@ -143,12 +141,14 @@ export const game101Module: GameModule = {
       }
     }
     const g = initialize101Game(SEATS);
-    return toResult(g, true); // dealer holds the extra tile → already "drawn"
+    return buildResult(g, true); // starter holds 22 tiles → already "drawn"
   },
 
   applyMove(room: RoomEnvelope, seat: number, move: unknown): ApplyResult {
-    const { action, slot, index, from, to, meldId, indices } = parseAction(move);
-    const prevDrawn = (room.state as Game101StatePayload).drawnThisTurn;
+    const { action, slot, index, from, to, meldId, indices, mode } = parseAction(move);
+    const prevState = room.state as Game101StatePayload;
+    const prevDrawn = prevState.drawnThisTurn;
+    let openingPoints = prevState.openingPointsThisTurn ?? 0;
     const g = toGame(room);
     const isTurn = seat === g.currentTurn;
     const hand = g.players[seat].tiles;
@@ -158,82 +158,160 @@ export const game101Module: GameModule = {
         if (from === undefined || to === undefined) throw new GameError('bad_move', 'reorder needs from/to');
         if (from < 0 || from >= hand.length || to < 0 || to >= hand.length) throw new GameError('bad_move', 'out of range');
         [hand[from], hand[to]] = [hand[to], hand[from]];
-        return toResult(g, prevDrawn);
+        return buildResult(g, prevDrawn, undefined, openingPoints);
       }
       case 'sortRuns':
         g.players[seat].tiles = sortByRuns(hand);
-        return toResult(g, prevDrawn);
+        return buildResult(g, prevDrawn, undefined, openingPoints);
       case 'sortSets':
         g.players[seat].tiles = sortBySets(hand);
-        return toResult(g, prevDrawn);
+        return buildResult(g, prevDrawn, undefined, openingPoints);
       case 'sortPairs':
         g.players[seat].tiles = sortByPairs(hand);
-        return toResult(g, prevDrawn);
+        return buildResult(g, prevDrawn, undefined, openingPoints);
       case 'smartSort':
         g.players[seat].tiles = smartSort101Tiles(hand);
-        return toResult(g, prevDrawn);
+        return buildResult(g, prevDrawn, undefined, openingPoints);
 
       case 'drawCenter': {
         if (!isTurn) throw new GameError('not_your_turn', 'Not your turn');
         if (prevDrawn) throw new GameError('already_drew', 'You already drew this turn');
-        if (count(hand) >= 15) throw new GameError('too_many', 'Discard before drawing');
+        if (count(hand) >= MAX_HAND_SIZE) throw new GameError('too_many', 'Discard before drawing');
         const tile = g.centerStack.pop();
         if (!tile) {
-          // Stack exhausted — the round ends in a draw, nobody scores.
-          return toResult(endRoundInDraw(g), false, { roundDraw: true, seat });
+          return buildResult(endRoundInDraw(g), false, { roundDraw: true, seat });
         }
         placeInRack(hand, tile, slot);
-        return toResult(g, true, { draw: 'center', seat });
+        return buildResult(g, true, { draw: 'center', seat }, 0);
       }
       case 'drawDiscard': {
         if (!isTurn) throw new GameError('not_your_turn', 'Not your turn');
         if (prevDrawn) throw new GameError('already_drew', 'You already drew this turn');
-        if (count(hand) >= 15) throw new GameError('too_many', 'Discard before drawing');
+        if (count(hand) >= MAX_HAND_SIZE) throw new GameError('too_many', 'Discard before drawing');
         const prev = (seat + 3) % SEATS;
-        const tile = g.discardPiles[prev].pop();
+        const pile = g.discardPiles[prev];
+        const tile = pile[pile.length - 1];
         if (!tile) throw new GameError('empty_pile', 'No tile to take');
+        // Classic: unopened players may take discard only if it enables opening.
+        if (!g.players[seat].hasLaidDown && !canTakeDiscardToOpen(hand, tile)) {
+          throw new GameError('cant_take', 'Yan taşı yalnızca onunla açabileceksen alabilirsin');
+        }
+        pile.pop();
         placeInRack(hand, tile, slot);
-        return toResult(g, true, { draw: 'discard', seat });
+        return buildResult(g, true, { draw: 'discard', seat }, 0);
       }
       case 'discard': {
         if (!isTurn) throw new GameError('not_your_turn', 'Not your turn');
         if (!prevDrawn) throw new GameError('draw_first', 'Draw before discarding');
+        if (!g.players[seat].hasLaidDown && openingPoints > 0 && openingPoints < FIRST_MELD_MINIMUM) {
+          throw new GameError('finish_open', 'Açılışı 101 puana tamamlamadan taş atamazsın');
+        }
         if (index === undefined) throw new GameError('bad_move', 'discard needs index');
         const tile = hand[index];
         if (!tile) throw new GameError('empty_slot', 'No tile at that slot');
+        // Discarding the okey (joker) is a classic foul — reject rather than silent +101 UI.
+        if (tile.isFakeOkey || (g.okeyTile && tile.color === g.okeyTile.color && tile.value === g.okeyTile.value && !tile.isFakeOkey)) {
+          // Real okey tiles match indicator+1; fake okey is the joker piece.
+          // Only block the true okey face and fake-okey jokers.
+        }
+        const isRealOkey =
+          !!g.okeyTile &&
+          !tile.isFakeOkey &&
+          tile.color === g.okeyTile.color &&
+          tile.value === g.okeyTile.value;
+        if (tile.isFakeOkey || isRealOkey) {
+          throw new GameError('okey_discard', 'Okey taşını yere atamazsın (+101)');
+        }
         hand[index] = null;
         g.discardPiles[seat].push(tile);
+        if (count(hand) === 0) {
+          return buildResult(endRound(g, seat), false, { discard: tile.id, seat, win: true });
+        }
         g.currentTurn = (seat + 1) % SEATS;
-        return toResult(g, false, { discard: tile.id, seat });
+        return buildResult(g, false, { discard: tile.id, seat }, 0);
       }
+      case 'layDownPairs':
       case 'layDown': {
         if (!isTurn) throw new GameError('not_your_turn', 'Not your turn');
         if (!prevDrawn) throw new GameError('draw_first', 'Draw before laying down');
+
+        const wantPairs = action === 'layDownPairs' || mode === 'pairs';
+
+        if (wantPairs) {
+          if (g.players[seat].hasLaidDown) throw new GameError('already_open', 'Zaten açtın');
+          const sourceTiles =
+            indices && indices.length > 0
+              ? indices.map((i) => hand[i]).filter((t): t is OkeyTile => t != null)
+              : hand.filter((t): t is OkeyTile => t != null);
+          if (!canMakePairOpen(sourceTiles)) {
+            throw new GameError('need_pairs', `Çift açış için en az ${PAIR_OPEN_MINIMUM} çift gerekli`);
+          }
+          const pairs = extractPairs(sourceTiles, Math.max(PAIR_OPEN_MINIMUM, countCompletePairsSafe(sourceTiles)));
+          if (pairs.length < PAIR_OPEN_MINIMUM) {
+            throw new GameError('need_pairs', `Çift açış için en az ${PAIR_OPEN_MINIMUM} çift gerekli`);
+          }
+          for (const pairTiles of pairs) {
+            const meldId2 = `meld-${seat}-r${g.roundNumber}-pair-${Object.keys(g.tableMelds).length}-${Math.floor(Math.random() * 1e6)}`;
+            g.tableMelds[meldId2] = { id: meldId2, tiles: pairTiles, type: 'pair', ownerPlayer: seat };
+            for (const t of pairTiles) {
+              const i = hand.findIndex((h) => h?.id === t.id);
+              if (i !== -1) hand[i] = null;
+            }
+          }
+          g.players[seat].hasLaidDown = true;
+          g.players[seat].openedWithPairs = true;
+          if (count(hand) === 0) {
+            return buildResult(endRound(g, seat), prevDrawn, { layDownPairs: seat, win: true });
+          }
+          return buildResult(g, prevDrawn, { layDownPairs: seat }, 0);
+        }
+
         if (!indices || indices.length < 3) throw new GameError('bad_meld', 'Select at least 3 tiles');
         const tiles = indices.map((i) => hand[i]).filter((t): t is OkeyTile => t != null);
         if (tiles.length !== indices.length || tiles.length < 3) throw new GameError('bad_meld', 'Invalid selection');
         const validation = isValidMeld(tiles);
         if (!validation.valid || !validation.type) throw new GameError('invalid_meld', 'Not a valid set or run');
-        if (!g.players[seat].hasLaidDown && !canMakeFirstLayDown([tiles])) {
-          throw new GameError('need_51', 'First lay-down must be at least 51 points');
+
+        const meldPoints = getMeldPoints(tiles, validation.type);
+
+        if (!g.players[seat].hasLaidDown) {
+          // Progressive open within the turn: accumulate until ≥101.
+          openingPoints += meldPoints;
+          const meldId2 = `meld-${seat}-r${g.roundNumber}-${Object.keys(g.tableMelds).length}-${Math.floor(Math.random() * 1e6)}`;
+          g.tableMelds[meldId2] = { id: meldId2, tiles, type: validation.type, ownerPlayer: seat };
+          for (const t of tiles) {
+            const i = hand.findIndex((h) => h?.id === t.id);
+            if (i !== -1) hand[i] = null;
+          }
+          if (openingPoints >= FIRST_MELD_MINIMUM) {
+            g.players[seat].hasLaidDown = true;
+            openingPoints = 0;
+          }
+          if (count(hand) === 0) {
+            if (!g.players[seat].hasLaidDown) {
+              throw new GameError('need_101', `İlk açış en az ${FIRST_MELD_MINIMUM} puan olmalı`);
+            }
+            return buildResult(endRound(g, seat), prevDrawn, { layDown: seat, win: true }, 0);
+          }
+          return buildResult(g, prevDrawn, { layDown: seat }, openingPoints);
         }
+
         const meldId2 = `meld-${seat}-r${g.roundNumber}-${Object.keys(g.tableMelds).length}-${Math.floor(Math.random() * 1e6)}`;
         g.tableMelds[meldId2] = { id: meldId2, tiles, type: validation.type, ownerPlayer: seat };
         for (const t of tiles) {
           const i = hand.findIndex((h) => h?.id === t.id);
           if (i !== -1) hand[i] = null;
         }
-        g.players[seat].hasLaidDown = true;
         if (count(hand) === 0) {
-          return toResult(endRound(g, seat), prevDrawn, { layDown: seat, win: true });
+          return buildResult(endRound(g, seat), prevDrawn, { layDown: seat, win: true });
         }
-        return toResult(g, prevDrawn, { layDown: seat });
+        return buildResult(g, prevDrawn, { layDown: seat }, openingPoints);
       }
       case 'addToMeld': {
         if (!isTurn) throw new GameError('not_your_turn', 'Not your turn');
         if (!prevDrawn) throw new GameError('draw_first', 'Draw before adding');
         if (index === undefined || !meldId) throw new GameError('bad_move', 'addToMeld needs index + meldId');
-        if (!g.players[seat].hasLaidDown) throw new GameError('not_open', 'Lay down 51 first');
+        if (!g.players[seat].hasLaidDown) throw new GameError('not_open', 'Önce elini açmalısın (101 veya 5 çift)');
         const meld = g.tableMelds[meldId];
         if (!meld) throw new GameError('no_meld', 'Meld not found');
         const tile = hand[index];
@@ -242,14 +320,14 @@ export const game101Module: GameModule = {
         g.tableMelds[meldId] = { ...meld, tiles: [...meld.tiles, tile] };
         hand[index] = null;
         if (count(hand) === 0) {
-          return toResult(endRound(g, seat), prevDrawn, { addToMeld: seat, win: true });
+          return buildResult(endRound(g, seat), prevDrawn, { addToMeld: seat, win: true });
         }
-        return toResult(g, prevDrawn, { addToMeld: seat });
+        return buildResult(g, prevDrawn, { addToMeld: seat }, openingPoints);
       }
       case 'startNewRound': {
         if (!isHostSeat(room, seat)) throw new GameError('not_host', 'Only the host can start a new round');
         if (g.phase !== 'roundOver') throw new GameError('bad_phase', 'Round is not over');
-        return toResult(startNewRound101(g), true);
+        return buildResult(startNewRound101(g), true, undefined, 0);
       }
       default:
         throw new GameError('bad_action', `Unknown action ${action}`);
@@ -258,18 +336,18 @@ export const game101Module: GameModule = {
 
   aiTurn(room: RoomEnvelope): ApplyResult {
     const next = computeAIMove(toGame(room));
-    return toResult(next, false, { ai: true });
+    return buildResult(next, false, { ai: true }, 0);
   },
 
   resign(room: RoomEnvelope, seat: number): ApplyResult {
     const g = toGame(room);
     g.phase = 'roundOver';
     g.roundWinner = null;
-    return toResult(g, false, { resigned: seat });
+    return buildResult(g, false, { resigned: seat }, 0);
   },
 
   rematch(): ApplyResult {
-    return toResult(initialize101Game(SEATS), true);
+    return buildResult(initialize101Game(SEATS), true, undefined, 0);
   },
 
   projectView(room: RoomEnvelope, seat: number) {
@@ -278,6 +356,7 @@ export const game101Module: GameModule = {
       tiles: i === seat ? p.tiles : (Array(count(p.tiles)).fill(HIDDEN) as (OkeyTile | null)[]),
       score: p.score,
       hasLaidDown: p.hasLaidDown,
+      openedWithPairs: p.openedWithPairs ?? false,
     }));
     return {
       state: {
@@ -291,7 +370,55 @@ export const game101Module: GameModule = {
         roundWinner: s.roundWinner,
         gameWinner: s.gameWinner,
         roundNumber: s.roundNumber,
+        drawnThisTurn: s.drawnThisTurn,
+        openingPointsThisTurn: s.openingPointsThisTurn ?? 0,
       },
     };
   },
 };
+
+function countCompletePairsSafe(tiles: OkeyTile[]): number {
+  const counts = new Map<string, number>();
+  for (const t of tiles) {
+    if (t.isFakeOkey || !t.color) continue;
+    const k = `${t.color}-${t.value}`;
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  let pairs = 0;
+  for (const n of counts.values()) pairs += Math.floor(n / 2);
+  return pairs;
+}
+
+function buildResult(
+  g: Game101State,
+  drawnThisTurn: boolean,
+  lastMove?: unknown,
+  openingPointsThisTurn = 0,
+): ApplyResult {
+  const phase: ApplyResult['phase'] =
+    g.phase === 'gameOver' ? 'gameOver' : g.phase === 'roundOver' ? 'roundOver' : 'playing';
+  const state: Game101StatePayload = {
+    kind: '101',
+    phase: g.phase,
+    players: g.players,
+    centerStack: g.centerStack,
+    discardPiles: g.discardPiles,
+    indicatorTile: g.indicatorTile,
+    okeyTile: g.okeyTile,
+    tableMelds: g.tableMelds,
+    currentTurn: g.currentTurn,
+    roundWinner: g.roundWinner,
+    gameWinner: g.gameWinner,
+    roundNumber: g.roundNumber,
+    drawnThisTurn,
+    openingPointsThisTurn,
+  };
+  return {
+    state,
+    currentTurn: g.currentTurn,
+    phase,
+    winner: g.gameWinner ?? g.roundWinner ?? null,
+    status: g.phase,
+    lastMove,
+  };
+}

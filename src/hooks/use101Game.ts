@@ -6,14 +6,20 @@ import {
     startNewRound,
     isValidMeld,
     canAddToMeld,
-    canMakeFirstLayDown,
+    canMakePairOpen,
+    canTakeDiscardToOpen,
+    extractPairs,
+    getMeldPoints,
+    findPairIndices,
     computeAIMove,
     smartSort101Tiles,
     sortByRuns,
     sortBySets,
     sortByPairs,
     findRunIndices,
-    findSetIndices
+    MAX_HAND_SIZE,
+    FIRST_MELD_MINIMUM,
+    PAIR_OPEN_MINIMUM,
 } from '../logic/101Logic';
 import type { Game101State, Tile101, Meld } from '../logic/101Logic';
 
@@ -23,9 +29,10 @@ export const use101Game = (roomId: string | null) => {
     const [gameState, setGameState] = useState<Game101State | null>(null);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
     const [selectedTileIndices, setSelectedTileIndices] = useState<number[]>([]);
-    // Turn discipline: draw → (meld) → discard. The dealer starts with 15 tiles,
-    // so they count as having already drawn.
+    // Turn discipline: draw → (meld) → discard. Starter begins with 22 tiles.
     const [drawnThisTurn, setDrawnThisTurn] = useState(true);
+    /** Progressive normal-open points laid this turn before reaching 101. */
+    const [openingPointsThisTurn, setOpeningPointsThisTurn] = useState(0);
 
     // Initialize game
     useEffect(() => {
@@ -34,7 +41,8 @@ export const use101Game = (roomId: string | null) => {
                 const initial = initialize101Game(4);
                 console.log("101 Game Initialized", initial);
                 setGameState(initial);
-                setDrawnThisTurn(true); // player 0 deals with the extra tile
+                setDrawnThisTurn(true); // player 0 starts with 22 tiles
+                setOpeningPointsThisTurn(0);
             } catch (e) {
                 console.error("Failed to initialize 101 game", e);
             }
@@ -63,7 +71,7 @@ export const use101Game = (roomId: string | null) => {
         if (drawnThisTurn) return; // Already drew this turn
 
         const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
-        if (currentTilesCount >= 15) return; // Can't draw if hand is full
+        if (currentTilesCount >= MAX_HAND_SIZE) return; // Can't draw if hand is full
 
         const newStack = [...prev.centerStack];
         const drawnTile = newStack.pop();
@@ -108,6 +116,7 @@ export const use101Game = (roomId: string | null) => {
 
         setGameState({ ...prev, players: newPlayers, centerStack: newStack });
         setDrawnThisTurn(true);
+        setOpeningPointsThisTurn(0);
     }, [gameState, drawnThisTurn]);
 
     // Draw from previous player's discard pile (counter-clockwise)
@@ -117,17 +126,24 @@ export const use101Game = (roomId: string | null) => {
         if (drawnThisTurn) return; // Already drew this turn
 
         const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
-        if (currentTilesCount >= 15) return;
+        if (currentTilesCount >= MAX_HAND_SIZE) return;
 
         // Draw from previous player's discard (counter-clockwise, so player 3)
         const prevPlayerIdx = 3; // In single player, we are player 0, prev is 3
         const prevPlayerDiscard = prev.discardPiles[prevPlayerIdx] || [];
         if (prevPlayerDiscard.length === 0) return;
 
+        const drawnTile = prevPlayerDiscard[prevPlayerDiscard.length - 1];
+
+        // Classic: unopened players may take discard only if it enables opening.
+        if (!prev.players[0].hasLaidDown && !canTakeDiscardToOpen(prev.players[0].tiles, drawnTile)) {
+            alert('Yan taşı yalnızca onunla elini açabileceksen alabilirsin!');
+            return;
+        }
+
         const newDiscardPiles = prev.discardPiles.map((pile, idx) =>
             idx === prevPlayerIdx ? pile.slice(0, -1) : [...pile]
         );
-        const drawnTile = prevPlayerDiscard[prevPlayerDiscard.length - 1];
 
         const newPlayers = [...prev.players];
         const newRack = [...newPlayers[0].tiles];
@@ -163,6 +179,7 @@ export const use101Game = (roomId: string | null) => {
         newPlayers[0] = { ...newPlayers[0], tiles: newRack };
         setGameState({ ...prev, players: newPlayers, discardPiles: newDiscardPiles });
         setDrawnThisTurn(true);
+        setOpeningPointsThisTurn(0);
     }, [gameState, drawnThisTurn]);
 
     // Discard a tile to own pile and end turn
@@ -175,11 +192,27 @@ export const use101Game = (roomId: string | null) => {
             return;
         }
 
+        if (!prev.players[0].hasLaidDown && openingPointsThisTurn > 0 && openingPointsThisTurn < FIRST_MELD_MINIMUM) {
+            alert(`Açılışı ${FIRST_MELD_MINIMUM} puana tamamlamadan taş atamazsın!`);
+            return;
+        }
+
         const newPlayers = [...prev.players];
         const newRack = [...prev.players[0].tiles];
         const discardedTile = newRack[index];
 
         if (!discardedTile) return;
+
+        const okey = prev.okeyTile;
+        const isRealOkey =
+            !!okey &&
+            !discardedTile.isFakeOkey &&
+            discardedTile.color === okey.color &&
+            discardedTile.value === okey.value;
+        if (discardedTile.isFakeOkey || isRealOkey) {
+            alert('Okey taşını yere atamazsın! (+101 ceza)');
+            return;
+        }
 
         newRack[index] = null;
         newPlayers[0] = { ...newPlayers[0], tiles: newRack };
@@ -196,6 +229,7 @@ export const use101Game = (roomId: string | null) => {
                 0
             ));
             clearSelection();
+            setOpeningPointsThisTurn(0);
             return;
         }
 
@@ -208,10 +242,11 @@ export const use101Game = (roomId: string | null) => {
             currentTurn: nextTurn
         });
         setDrawnThisTurn(false);
+        setOpeningPointsThisTurn(0);
         clearSelection();
-    }, [gameState, drawnThisTurn, clearSelection]);
+    }, [gameState, drawnThisTurn, openingPointsThisTurn, clearSelection]);
 
-    // Lay down selected tiles as a new meld
+    // Lay down selected tiles as a new meld (normal open ≥101, progressive within turn)
     const layDownMeld = useCallback(() => {
         if (selectedTileIndices.length < 3) {
             alert("En az 3 taş seçmelisiniz!");
@@ -243,12 +278,19 @@ export const use101Game = (roomId: string | null) => {
                 return prev;
             }
 
-            // Check first lay down requirement (51+ points)
-            if (!player.hasLaidDown) {
-                if (!canMakeFirstLayDown([selectedTiles])) {
-                    alert("İlk indiriş için en az 51 puan gerekli!");
-                    return prev;
+            const meldPoints = getMeldPoints(selectedTiles, validation.type);
+            let nextOpening = openingPointsThisTurn;
+            let hasLaidDown = player.hasLaidDown;
+            let openedWithPairs = player.openedWithPairs;
+
+            if (!hasLaidDown) {
+                nextOpening += meldPoints;
+                if (nextOpening >= FIRST_MELD_MINIMUM) {
+                    hasLaidDown = true;
+                    nextOpening = 0;
                 }
+                // Defer setOpeningPointsThisTurn after state update
+                queueMicrotask(() => setOpeningPointsThisTurn(nextOpening));
             }
 
             // Create meld
@@ -269,7 +311,8 @@ export const use101Game = (roomId: string | null) => {
             newPlayers[0] = {
                 ...newPlayers[0],
                 tiles: newRack,
-                hasLaidDown: true
+                hasLaidDown,
+                openedWithPairs,
             };
 
             // Check if player wins (no tiles left)
@@ -277,6 +320,10 @@ export const use101Game = (roomId: string | null) => {
             const newTableMelds = { ...prev.tableMelds, [newMeld.id]: newMeld };
 
             if (remainingTiles === 0) {
+                if (!hasLaidDown) {
+                    alert(`İlk açış en az ${FIRST_MELD_MINIMUM} puan olmalı!`);
+                    return prev;
+                }
                 return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds }, 0);
             }
 
@@ -286,6 +333,66 @@ export const use101Game = (roomId: string | null) => {
                 tableMelds: newTableMelds
             };
         });
+        clearSelection();
+    }, [selectedTileIndices, drawnThisTurn, openingPointsThisTurn, clearSelection]);
+
+    /** Classic çift açış: lay ≥5 identical pairs in one action. */
+    const layDownPairs = useCallback(() => {
+        if (!drawnThisTurn) {
+            alert('Önce taş çekmelisiniz!');
+            return;
+        }
+
+        setGameState(prev => {
+            if (!prev || prev.currentTurn !== 0) return prev;
+            const player = prev.players[0];
+            if (player.hasLaidDown) {
+                alert('Zaten açtın!');
+                return prev;
+            }
+
+            const source =
+                selectedTileIndices.length > 0
+                    ? selectedTileIndices.map(i => player.tiles[i]).filter((t): t is Tile101 => t !== null)
+                    : player.tiles.filter((t): t is Tile101 => t !== null);
+
+            if (!canMakePairOpen(source)) {
+                alert(`Çift açış için en az ${PAIR_OPEN_MINIMUM} çift gerekli!`);
+                return prev;
+            }
+
+            const pairs = extractPairs(source, 99);
+            if (pairs.length < PAIR_OPEN_MINIMUM) {
+                alert(`Çift açış için en az ${PAIR_OPEN_MINIMUM} çift gerekli!`);
+                return prev;
+            }
+
+            const newRack = [...player.tiles];
+            const newTableMelds = { ...prev.tableMelds };
+            for (const pairTiles of pairs) {
+                const id = `meld-${meldIdCounter++}`;
+                newTableMelds[id] = { id, tiles: pairTiles, type: 'pair', ownerPlayer: 0 };
+                for (const t of pairTiles) {
+                    const i = newRack.findIndex(h => h?.id === t.id);
+                    if (i !== -1) newRack[i] = null;
+                }
+            }
+
+            const newPlayers = [...prev.players];
+            newPlayers[0] = {
+                ...newPlayers[0],
+                tiles: newRack,
+                hasLaidDown: true,
+                openedWithPairs: true,
+            };
+
+            if (newRack.filter(t => t !== null).length === 0) {
+                return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds }, 0);
+            }
+
+            return { ...prev, players: newPlayers, tableMelds: newTableMelds };
+        });
+        setOpeningPointsThisTurn(0);
         clearSelection();
     }, [selectedTileIndices, drawnThisTurn, clearSelection]);
 
@@ -301,7 +408,7 @@ export const use101Game = (roomId: string | null) => {
 
             const player = prev.players[0];
             if (!player.hasLaidDown) {
-                alert("Önce kendi perinizi indirmelisiniz!");
+                alert("Önce elini açmalısın (101 puan veya 5 çift)!");
                 return prev;
             }
 
@@ -426,20 +533,22 @@ export const use101Game = (roomId: string | null) => {
         }
     }, [gameState]);
 
-    // Select all sets (for laying down)
+    // Select identical pairs for pair-open (çift açış)
     const selectSets = useCallback(() => {
         if (!gameState) return;
-        const setGroups = findSetIndices(gameState.players[0].tiles);
-        if (setGroups.length > 0) {
-            // Select the first valid set found
-            setSelectedTileIndices(setGroups[0]);
+        const pairGroups = findPairIndices(gameState.players[0].tiles);
+        if (pairGroups.length > 0) {
+            // Select first PAIR_OPEN_MINIMUM pairs (or all if fewer)
+            const flat = pairGroups.slice(0, PAIR_OPEN_MINIMUM).flat();
+            setSelectedTileIndices(flat);
         }
     }, [gameState]);
 
     // Reset/restart game
     const resetGame = useCallback(() => {
         setGameState(initialize101Game(4));
-        setDrawnThisTurn(true); // player 0 deals with the extra tile
+        setDrawnThisTurn(true); // player 0 starts with 22 tiles
+        setOpeningPointsThisTurn(0);
         clearSelection();
     }, [clearSelection]);
 
@@ -449,7 +558,8 @@ export const use101Game = (roomId: string | null) => {
         if (!prev || prev.phase !== 'roundOver') return;
         const next = startNewRound(prev);
         setGameState(next);
-        setDrawnThisTurn(next.currentTurn === 0); // dealer already holds the extra tile
+        setDrawnThisTurn(next.currentTurn === 0); // starter already holds the extra tile
+        setOpeningPointsThisTurn(0);
         clearSelection();
     }, [gameState, clearSelection]);
 
@@ -530,6 +640,7 @@ export const use101Game = (roomId: string | null) => {
         drawFromDiscard,
         discardTile,
         layDownMeld,
+        layDownPairs,
         addToMeld,
         finishGame,
         resetGame,

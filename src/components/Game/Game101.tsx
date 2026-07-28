@@ -36,7 +36,8 @@ const roomToGameState = (room: Room101): Game101State => {
         players: room.players.map(p => ({
             tiles: p.tiles,
             score: p.score,
-            hasLaidDown: p.hasLaidDown
+            hasLaidDown: p.hasLaidDown,
+            openedWithPairs: p.openedWithPairs ?? false,
         })),
         centerStack: room.centerStack,
         discardPiles: discardPiles,
@@ -130,6 +131,14 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
             roomHook.layDownMeld();
         } else {
             localGame.layDownMeld();
+        }
+    }, [isOnline, roomHook, localGame]);
+
+    const handleLayDownPairs = useCallback(() => {
+        if (isOnline) {
+            roomHook.layDownPairs();
+        } else {
+            localGame.layDownPairs();
         }
     }, [isOnline, roomHook, localGame]);
 
@@ -378,6 +387,7 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
                 onMoveTile={handleMoveTile}
                 onDiscard={handleDiscard}
                 onLayDownMeld={handleLayDownMeld}
+                onLayDownPairs={handleLayDownPairs}
                 onAddToMeld={handleAddToMeld}
                 onSortByRuns={handleSortByRuns}
                 onSortByPairs={handleSortByPairs}

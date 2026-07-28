@@ -62,7 +62,7 @@ export interface OkeyGameStatePayload {
 export interface Meld {
   id: string;
   tiles: OkeyTile[];
-  type: 'set' | 'run';
+  type: 'set' | 'run' | 'pair';
   ownerPlayer: number;
 }
 
@@ -70,6 +70,7 @@ export interface Player101Slot {
   tiles: (OkeyTile | null)[];
   score: number;
   hasLaidDown: boolean;
+  openedWithPairs: boolean;
 }
 
 /** Mirrors the client's Game101State (plus `kind`) so the pure engine ports 1:1. */
@@ -88,6 +89,8 @@ export interface Game101StatePayload {
   roundNumber: number;
   /** Whether the current player has already drawn this turn (draw → meld → discard). */
   drawnThisTurn: boolean;
+  /** Points from melds laid this turn toward a normal 101 open (before hasLaidDown). */
+  openingPointsThisTurn?: number;
 }
 
 export type GameState =

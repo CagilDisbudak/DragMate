@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { Game101State, Meld, Tile101 } from '../../logic/101Logic';
 import { OkeyTile } from '../OkeyBoard/OkeyTile';
 import {
@@ -17,6 +18,7 @@ import {
 import {
     DndContext,
     closestCenter,
+    pointerWithin,
     KeyboardSensor,
     PointerSensor,
     useSensor,
@@ -25,8 +27,20 @@ import {
     useDraggable,
     DragOverlay,
 } from '@dnd-kit/core';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import type { CollisionDetection, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+
+// Prefer the droppable under the actual pointer. closestCenter alone compares
+// against the DragOverlay's rect, which is offset from the cursor (ancestors
+// with animation transforms break its position:fixed), so drops landed on the
+// wrong slot. Exclude the active item itself (rack slots share one id for
+// drag + drop). closestCenter remains as fallback (e.g. keyboard drags).
+const pointerFirstCollision: CollisionDetection = (args) => {
+    const notSelf = (c: { id: string | number }) => c.id !== args.active.id;
+    const pointerCollisions = pointerWithin(args).filter(notSelf);
+    if (pointerCollisions.length > 0) return pointerCollisions;
+    return closestCenter(args).filter(notSelf);
+};
 
 interface PlayerInfo {
     name: string;
@@ -51,6 +65,7 @@ interface Board101Props {
     onMoveTile: (fromIndex: number, toIndex: number) => void;
     onDiscard: (index: number) => void;
     onLayDownMeld: () => void;
+    onLayDownPairs?: () => void;
     onAddToMeld: (tileIndex: number, meldId: string) => void;
     onSortByRuns: () => void;
     onSortByPairs: () => void;
@@ -150,11 +165,11 @@ const DiscardZone101: React.FC<{
     onDrawDiscard: () => void;
 }> = React.memo(({ playerId, discardPile, currentTurn, userTileCount, mySlot, isDraggingRackTile, onDrawDiscard }) => {
     // Can drop to own discard when it's your turn and you have 15 tiles
-    const canDropHere = playerId === mySlot && currentTurn === mySlot && userTileCount === 15 && isDraggingRackTile;
+    const canDropHere = playerId === mySlot && currentTurn === mySlot && userTileCount === 22 && isDraggingRackTile;
 
     // Can draw from previous player's discard (counter-clockwise)
     const prevPlayerIdx = (mySlot + 3) % 4;
-    const canDrawHere = playerId === prevPlayerIdx && currentTurn === mySlot && userTileCount === 14 && discardPile.length > 0;
+    const canDrawHere = playerId === prevPlayerIdx && currentTurn === mySlot && userTileCount === 21 && discardPile.length > 0;
 
     const { setNodeRef, isOver } = useDroppable({
         id: `discard-${playerId}`
@@ -190,7 +205,7 @@ const DiscardZone101: React.FC<{
                     ref={setDraggableRef}
                     {...attributes}
                     {...listeners}
-                    className={`rotate-2 transition-transform ${canDrawHere && !isDragging ? 'hover:scale-105' : ''} ${isDragging ? 'opacity-20' : ''}`}
+                    className={`rotate-2 transition-transform touch-none ${canDrawHere && !isDragging ? 'hover:scale-105' : ''} ${isDragging ? 'opacity-20' : ''}`}
                 >
                     <OkeyTile tile={lastTile} okeyTile={null} size="sm" />
                 </div>
@@ -268,9 +283,10 @@ const RackSlot101: React.FC<RackSlot101Props> = React.memo(({ tile, index, isSel
                     {...attributes}
                     {...listeners}
                     className={`
-                        relative w-full h-full transition-all duration-150
+                        relative w-full h-full transition-all duration-150 touch-none
                         ${isDragging ? 'opacity-30' : ''}
                         ${isSelected ? '-translate-y-2' : ''}
+                        ${tile ? 'cursor-grab active:cursor-grabbing' : ''}
                     `}
                 >
                     <div className={`w-full h-full rounded-lg ${isSelected ? 'ring-2 ring-rose-400 shadow-[0_0_16px_rgba(251,113,133,0.6)]' : ''}`}>
@@ -486,7 +502,7 @@ const DrawPile101: React.FC<{
     mySlot: number;
     onDraw: () => void;
 }> = React.memo(({ count, currentTurn, userTileCount, mySlot, onDraw }) => {
-    const canDraw = currentTurn === mySlot && userTileCount < 15;
+    const canDraw = currentTurn === mySlot && userTileCount < 22;
 
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: 'draw-pile',
@@ -505,8 +521,8 @@ const DrawPile101: React.FC<{
                 {...listeners}
                 onClick={() => canDraw && onDraw()}
                 className={`
-                    relative w-16 h-24 tile-back rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer
-                    ${canDraw ? 'hover:scale-105 hover:-translate-y-1 ring-2 ring-rose-400/90 shadow-[0_0_24px_rgba(244,63,94,0.45)]' : 'opacity-80'}
+                    relative w-16 h-24 tile-back rounded-lg flex items-center justify-center transition-all duration-200 touch-none
+                    ${canDraw ? 'cursor-grab active:cursor-grabbing hover:scale-105 hover:-translate-y-1 ring-2 ring-rose-400/90 shadow-[0_0_24px_rgba(244,63,94,0.45)]' : 'cursor-pointer opacity-80'}
                     ${isDragging ? 'opacity-30' : ''}
                 `}
             >
@@ -572,6 +588,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
     onMoveTile,
     onDiscard,
     onLayDownMeld,
+    onLayDownPairs,
     onAddToMeld,
     onSortByRuns,
     onSortByPairs,
@@ -586,12 +603,20 @@ export const Board101: React.FC<Board101Props> = React.memo(({
     const [activeId, setActiveId] = useState<string | null>(null);
 
     const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
+        // PointerSensor covers mouse + touch. touch-none on draggables prevents
+        // the browser from stealing the gesture for scroll before activation.
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
     const handleDragStart = useCallback((event: DragStartEvent) => {
         setActiveId(event.active.id as string);
+    }, []);
+
+    // Without this, a cancelled drag (Escape, pointercancel on touch, tab
+    // switch) leaves activeId set forever and the board stays in "dragging" UI.
+    const handleDragCancel = useCallback(() => {
+        setActiveId(null);
     }, []);
 
     const handleDragEnd = useCallback((event: DragEndEvent) => {
@@ -793,7 +818,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
     }));
 
     return (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={pointerFirstCollision} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
             <div className="relative w-full max-w-[1400px] mx-auto wood-surface rounded-[2rem] p-1.5 sm:p-2.5 shadow-glass-lg anim-fade-up">
                 <div className="relative felt-surface rounded-[1.5rem] sm:rounded-[1.7rem] overflow-hidden">
                     {/* Main game area */}
@@ -954,10 +979,18 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                 />
                                 <ToolbarButton
                                     onClick={onSelectSets}
-                                    title="Tüm çiftleri seç"
-                                    label="Çift Aç"
+                                    title="Çiftleri seç (aynı renk+sayı); sonra Çift İndir"
+                                    label="Çift Seç"
                                     icon={<CopyCheck size={14} />}
                                 />
+                                {onLayDownPairs && (
+                                    <ToolbarButton
+                                        onClick={onLayDownPairs}
+                                        title="En az 5 çiftle el aç (101 şartı yok)"
+                                        label="Çift İndir"
+                                        icon={<Layers size={14} />}
+                                    />
+                                )}
                             </div>
 
                             <button
@@ -973,7 +1006,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                 <ScoreBadge score={currentPlayer?.score || 0} />
                                 {currentPlayer?.hasLaidDown && (
                                     <span className="px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-[9px] font-black uppercase tracking-wider anim-pop-in">
-                                        Açıldın
+                                        {currentPlayer.openedWithPairs ? 'Çift Açıldı' : 'Açıldın'}
                                     </span>
                                 )}
                             </div>
@@ -1015,13 +1048,13 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         {/* Instructions */}
                         <div className="text-emerald-100/70 text-xs sm:text-sm font-semibold text-center px-4">
                             {gameState.currentTurn === mySlot ? (
-                                userTileCount === 14 ? (
-                                    "Desteden veya soldaki oyuncunun ıskartasından çekin"
-                                ) : userTileCount === 15 ? (
+                                userTileCount === 21 ? (
+                                    "Desteden veya soldaki oyuncunun ıskartasından çekin (yan taş yalnız açış için)"
+                                ) : userTileCount === 22 ? (
                                     selectedTileIndices.length >= 3 ? (
-                                        "İNDİR butonuna basın veya taş seçmeye devam edin"
+                                        "İNDİR ile normal aç (101+) veya Çift Aç ile 5 çift indirin"
                                     ) : (
-                                        "Per için taş seçin veya kendi ıskartanıza taş atın"
+                                        "Per için taş seçin, çift açın veya kendi ıskartanıza taş atın"
                                     )
                                 ) : "Oyun devam ediyor"
                             ) : (
@@ -1046,16 +1079,21 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         </div>
                     )}
 
-                    <DragOverlay dropAnimation={null}>
-                        <div style={{
-                            willChange: 'transform',
-                            transform: 'translateZ(0)',
-                            pointerEvents: 'none',
-                            filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.3))',
-                        }}>
-                            {renderDragOverlay()}
-                        </div>
-                    </DragOverlay>
+                    {/* Portal the overlay to <body>: ancestors with animation
+                        transforms (anim-fade-up) break position:fixed and made
+                        the dragged tile render away from the cursor. */}
+                    {createPortal(
+                        <DragOverlay dropAnimation={null}>
+                            <div style={{
+                                willChange: 'transform',
+                                pointerEvents: 'none',
+                                filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.3))',
+                            }}>
+                                {renderDragOverlay()}
+                            </div>
+                        </DragOverlay>,
+                        document.body
+                    )}
                 </div>
             </div>
         </DndContext>

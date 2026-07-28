@@ -218,6 +218,10 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
             collisionDetection={pointerFirstCollision}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onDragCancel={() => {
+                setActiveId(null);
+                setHighlightedPoints([]);
+            }}
         >
             <div className="flex flex-col md:flex-row w-full max-w-full md:max-w-7xl mx-auto gap-2 md:gap-4 items-stretch p-1 md:p-4">
 

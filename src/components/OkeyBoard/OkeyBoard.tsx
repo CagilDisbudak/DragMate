@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { OkeyGameState } from '../../logic/okeyLogic';
 import { PlayerRack } from './PlayerRack';
 import { OkeyTile } from './OkeyTile';
@@ -6,6 +7,7 @@ import { Bot, Wand2 } from 'lucide-react';
 import {
     DndContext,
     closestCenter,
+    pointerWithin,
     KeyboardSensor,
     PointerSensor,
     useSensor,
@@ -14,8 +16,18 @@ import {
     useDraggable,
     DragOverlay,
 } from '@dnd-kit/core';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import type { CollisionDetection, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+
+// Prefer the droppable under the actual pointer. closestCenter alone compares
+// against the DragOverlay's rect, which can be offset from the cursor
+// (ancestors with animation transforms break its position:fixed), so drops
+// could land on the wrong slot. closestCenter remains as fallback.
+const pointerFirstCollision: CollisionDetection = (args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) return pointerCollisions;
+    return closestCenter(args);
+};
 
 // Default player info for local mode
 const DEFAULT_PLAYER_INFO = [
@@ -295,6 +307,9 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
 
     // All hooks must be called before any conditional returns
     const handleDragStart = useCallback((event: DragStartEvent) => setActiveId(event.active.id as string), []);
+    // Without this, a cancelled drag (Escape, pointercancel on touch, tab
+    // switch) leaves activeId set forever and the board stays in "dragging" UI.
+    const handleDragCancel = useCallback(() => setActiveId(null), []);
     const handleDragEnd = useCallback((event: DragEndEvent) => {
         setActiveId(null);
         const { active, over } = event;
@@ -360,7 +375,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
     };
 
     return (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={pointerFirstCollision} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
             {/* Wooden table rim */}
             <div className="relative w-full mx-auto rounded-[24px] shadow-glass-lg anim-fade-up">
                 <div className="wood-surface rounded-[24px] p-1.5 sm:p-2.5">
@@ -546,25 +561,30 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
                 </div>
             </div>
 
-            <DragOverlay
-                dropAnimation={null}
-                style={{
-                    cursor: 'grabbing',
-                    touchAction: 'none',
-                }}
-                modifiers={[]}
-            >
-                <div
+            {/* Portal the overlay to <body>: ancestors with animation transforms
+                (anim-fade-up) break position:fixed and offset the dragged tile
+                from the cursor. */}
+            {createPortal(
+                <DragOverlay
+                    dropAnimation={null}
                     style={{
-                        willChange: 'transform',
-                        transform: 'translateZ(0)',
-                        pointerEvents: 'none',
-                        filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.25))',
+                        cursor: 'grabbing',
+                        touchAction: 'none',
                     }}
+                    modifiers={[]}
                 >
-                    {renderDragOverlay()}
-                </div>
-            </DragOverlay>
+                    <div
+                        style={{
+                            willChange: 'transform',
+                            pointerEvents: 'none',
+                            filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.25))',
+                        }}
+                    >
+                        {renderDragOverlay()}
+                    </div>
+                </DragOverlay>,
+                document.body
+            )}
         </DndContext>
     );
 });
