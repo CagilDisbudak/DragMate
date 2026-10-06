@@ -163,7 +163,7 @@ const StepHeader: React.FC<{
 const OrDivider: React.FC = () => (
     <div className="relative flex items-center gap-4">
         <div className="flex-1 h-px bg-linear-to-r from-transparent to-slate-700/80" />
-        <span className="text-slate-600 text-[10px] font-black uppercase tracking-[0.3em]">OR JOIN</span>
+        <span className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em]">OR JOIN</span>
         <div className="flex-1 h-px bg-linear-to-l from-transparent to-slate-700/80" />
     </div>
 );
@@ -321,7 +321,7 @@ export const Lobby: React.FC<LobbyProps> = ({
         <div className="space-y-5 sm:space-y-6 anim-fade-up">
             <div className="text-center space-y-1.5">
                 <h2 className="font-display text-2xl sm:text-3xl font-bold text-white">Choose Your Game</h2>
-                <p className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-[0.3em]">Solo &amp; Online Tables</p>
+                <p className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase tracking-[0.3em]">Solo &amp; Online Tables</p>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:gap-4 stagger-children">
                 {GAME_CARDS.map((g) => {
@@ -382,7 +382,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     </div>
                     <div className="text-center">
                         <div className="font-display text-lg sm:text-xl font-bold text-white">Single Player</div>
-                        <div className="text-xs sm:text-sm text-slate-500 mt-1">Vs Computer</div>
+                        <div className="text-xs sm:text-sm text-slate-400 mt-1">Vs Computer</div>
                     </div>
                 </button>
 
@@ -399,7 +399,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     </div>
                     <div className="text-center">
                         <div className="font-display text-lg sm:text-xl font-bold text-white">Multiplayer</div>
-                        <div className="text-xs sm:text-sm text-slate-500 mt-1">{(selectedGame === 'okey' || selectedGame === '101') ? '1-4 Players' : 'Online PvP'}</div>
+                        <div className="text-xs sm:text-sm text-slate-400 mt-1">{(selectedGame === 'okey' || selectedGame === '101') ? '1-4 Players' : 'Online PvP'}</div>
                     </div>
                 </button>
             </div>
@@ -430,10 +430,10 @@ export const Lobby: React.FC<LobbyProps> = ({
                                 </div>
                                 <div className="text-left">
                                     <div className="font-display text-lg font-bold text-white">{d.level}</div>
-                                    <div className="text-xs text-slate-500">{d.desc}</div>
+                                    <div className="text-xs text-slate-400">{d.desc}</div>
                                 </div>
                             </div>
-                            <ChevronRight size={18} className="text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all duration-200" />
+                            <ChevronRight size={18} className="text-slate-500 group-hover:text-white group-hover:translate-x-1 transition-all duration-200" />
                         </button>
                     );
                 })}
@@ -473,7 +473,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                         value={roomIdInput}
                         onChange={(e) => setRoomIdInput(e.target.value)}
                         aria-label="Room ID"
-                        className={`flex-1 min-w-0 bg-surface-0 border border-line-strong rounded-xl px-4 py-3.5 font-mono text-lg tracking-wider placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all ${currentAccent.inputRing}`}
+                        className={`flex-1 min-w-0 bg-surface-0 border border-line-strong rounded-xl px-4 py-3.5 font-mono text-lg tracking-wider placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-500 focus:outline-none focus:ring-2 transition-all ${currentAccent.inputRing}`}
                     />
                     <button
                         onClick={() => onJoinRoom(roomIdInput)}
@@ -518,7 +518,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                             value={playerName}
                             onChange={(e) => setPlayerName(e.target.value)}
                             maxLength={20}
-                            className={`w-full bg-surface-0 border border-line-strong rounded-xl px-4 py-3.5 text-lg placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all ${a.inputRing}`}
+                            className={`w-full bg-surface-0 border border-line-strong rounded-xl px-4 py-3.5 text-lg placeholder:text-slate-500 focus:outline-none focus:ring-2 transition-all ${a.inputRing}`}
                         />
                     </div>
 
@@ -543,7 +543,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                             onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
                             maxLength={10}
                             aria-label="Room ID"
-                            className={`flex-1 min-w-0 bg-surface-0 border border-line-strong rounded-xl px-4 py-3.5 font-mono text-lg tracking-[0.25em] uppercase placeholder:font-sans placeholder:tracking-normal placeholder:normal-case placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all ${a.inputRing}`}
+                            className={`flex-1 min-w-0 bg-surface-0 border border-line-strong rounded-xl px-4 py-3.5 font-mono text-lg tracking-[0.25em] uppercase placeholder:font-sans placeholder:tracking-normal placeholder:normal-case placeholder:text-slate-500 focus:outline-none focus:ring-2 transition-all ${a.inputRing}`}
                         />
                         <button
                             onClick={onJoin}
@@ -555,7 +555,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                         </button>
                     </div>
 
-                    <p className="text-xs text-slate-600 text-center">
+                    <p className="text-xs text-slate-400 text-center">
                         Create a room and share the ID with friends. Empty slots will be filled with AI.
                     </p>
                 </div>
@@ -595,7 +595,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                 {/* Room code */}
                 <div className="surface-inset p-4 sm:p-5 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                        <p className="text-[10px] text-slate-500 uppercase tracking-[0.25em] font-black">Room ID</p>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-[0.25em] font-black">Room ID</p>
                         <p className={`font-display text-2xl sm:text-3xl font-bold tracking-[0.2em] truncate ${a.text}`}>{room.roomId}</p>
                     </div>
                     <button
@@ -617,7 +617,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                             <Users size={15} />
                             Players ({playerCount}/4)
                         </p>
-                        <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                             <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${a.dotStrong}`} />
                             Waiting
                         </span>
@@ -656,10 +656,10 @@ export const Lobby: React.FC<LobbyProps> = ({
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className={`font-bold truncate text-sm ${isEmpty ? 'text-slate-600' : isCurrentUser ? a.text : 'text-white'}`}>
+                                            <p className={`font-bold truncate text-sm ${isEmpty ? 'text-slate-500' : isCurrentUser ? a.text : 'text-white'}`}>
                                                 {isEmpty ? 'Waiting...' : player.adPlayerName}
                                             </p>
-                                            <p className="text-[11px] text-slate-500">
+                                            <p className="text-[11px] text-slate-400">
                                                 {isPlayerHost ? 'Host' : isEmpty ? 'Will be AI' : `Seat ${index + 1}`}
                                             </p>
                                         </div>
@@ -688,7 +688,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     </div>
                 )}
 
-                <p className="text-xs text-slate-600 text-center">
+                <p className="text-xs text-slate-400 text-center">
                     Share the Room ID with friends. Empty seats will be filled with AI players.
                 </p>
             </div>

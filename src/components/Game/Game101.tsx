@@ -342,7 +342,7 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
                             );
                         })}
                         {Array.from({ length: emptySeats }).map((_, i) => (
-                            <div key={`empty-${i}`} className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-white/10 text-slate-500">
+                            <div key={`empty-${i}`} className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed border-white/10 text-slate-400">
                                 <div className="w-9 h-9 rounded-full border border-dashed border-white/15 flex items-center justify-center shrink-0">
                                     <Bot size={16} className="opacity-40" />
                                 </div>
@@ -352,7 +352,7 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
                     </div>
 
                     {room.players.length < 4 && (
-                        <p className="text-slate-500 text-xs text-center">
+                        <p className="text-slate-400 text-xs text-center">
                             Boş slotlar AI ile doldurulacak
                         </p>
                     )}

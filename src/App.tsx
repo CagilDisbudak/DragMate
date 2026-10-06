@@ -251,7 +251,7 @@ function App() {
         <footer className="relative mt-auto py-8 flex flex-col items-center gap-1.5 text-center">
           <div aria-hidden className="w-24 h-px mb-2 bg-linear-to-r from-transparent via-slate-700 to-transparent" />
           <span className="font-display text-sm font-bold tracking-[0.2em] uppercase text-slate-400">DragMate</span>
-          <span className="text-[11px] font-medium text-slate-600">Premium Multiplayer Board Gaming</span>
+          <span className="text-[11px] font-medium text-slate-400">Premium Multiplayer Board Gaming</span>
         </footer>
       )}
 

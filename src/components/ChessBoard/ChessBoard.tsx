@@ -201,7 +201,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         return squares;
     };
 
-    const coordClass = 'font-display text-[9px] lg:text-[11px] font-bold uppercase text-slate-500';
+    const coordClass = 'font-display text-[9px] lg:text-[11px] font-bold uppercase text-slate-400';
 
     return (
         <DndContext

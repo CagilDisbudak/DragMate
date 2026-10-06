@@ -478,7 +478,7 @@ const ScoreTable: React.FC<{
                             {idx === 0 ? (
                                 <Crown size={12} className="text-amber-400 shrink-0" />
                             ) : (
-                                <span className="w-3 text-center text-[9px] font-bold text-slate-500 shrink-0">{idx + 1}</span>
+                                <span className="w-3 text-center text-[9px] font-bold text-slate-400 shrink-0">{idx + 1}</span>
                             )}
                             <span className={`text-[11px] font-bold truncate ${player.isYou ? 'text-rose-300' : 'text-slate-200'}`}>
                                 {player.name}
@@ -781,7 +781,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                             {rank === 0 ? (
                                                 <Crown size={14} className="text-amber-400 shrink-0" />
                                             ) : (
-                                                <span className="w-3.5 text-center text-[10px] font-bold text-slate-500 shrink-0">{rank + 1}</span>
+                                                <span className="w-3.5 text-center text-[10px] font-bold text-slate-400 shrink-0">{rank + 1}</span>
                                             )}
                                             <span className={`text-sm font-bold truncate ${isWinner ? 'text-rose-200' : info?.isYou ? 'text-slate-100' : 'text-slate-300'}`}>
                                                 {info?.name}{info?.isYou ? ' (Sen)' : ''}

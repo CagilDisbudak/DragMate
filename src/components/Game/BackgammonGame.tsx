@@ -145,7 +145,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                 </div>
                 <div className="text-center space-y-2 anim-fade-up">
                     <h2 className="font-display text-xl font-bold text-gradient uppercase tracking-widest">Entering Arena</h2>
-                    <p className="text-slate-500 font-medium">Synchronizing with the global lattice...</p>
+                    <p className="text-slate-400 font-medium">Synchronizing with the global lattice...</p>
                 </div>
             </div>
         );
@@ -180,7 +180,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                         if (!isLocal && gameRoom.leaveRoom) gameRoom.leaveRoom();
                         onExit();
                     }}
-                    className="group flex items-center gap-3 text-slate-500 hover:text-white transition-all font-bold uppercase tracking-widest text-xs"
+                    className="group flex items-center gap-3 text-slate-400 hover:text-white transition-all font-bold uppercase tracking-widest text-xs"
                 >
                     <div className="p-2 rounded-xl bg-slate-900 border border-slate-800 group-hover:border-emerald-500/40 group-hover:-translate-x-1 transition-all">
                         <ArrowLeft size={18} />
@@ -191,7 +191,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                 {!isLocal && (
                     <div className="surface px-4 lg:px-5 py-2 flex items-center gap-4 lg:gap-5">
                         <div className="flex flex-col gap-0.5 min-w-0">
-                            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-black">Arena ID</span>
+                            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-400 font-black">Arena ID</span>
                             <code className="font-display text-emerald-300 font-bold truncate">{roomId}</code>
                         </div>
                         <div className="h-8 w-px bg-slate-800 shrink-0" />
@@ -200,7 +200,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                             aria-label="Copy room code"
                             className={`flex items-center gap-2 p-2 rounded-lg transition-all ${copied
                                 ? 'text-emerald-300 bg-emerald-500/10'
-                                : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}
+                                : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                         >
                             {copied ? <Check size={18} /> : <Copy size={18} />}
                             <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest">
@@ -249,7 +249,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                 <div className="w-full side:w-[clamp(16rem,26vw,24rem)] shrink-0 side:min-h-0 side:overflow-y-auto flex flex-col justify-center-safe gap-4 stagger-children">
                     <div className="surface p-4 lg:p-6 space-y-4 lg:space-y-5 border-l-4 border-l-emerald-500/70">
                         <div className="flex items-center justify-between gap-3">
-                            <h3 className="text-xs lg:text-sm font-black text-slate-500 uppercase tracking-[0.3em]">
+                            <h3 className="text-xs lg:text-sm font-black text-slate-400 uppercase tracking-[0.3em]">
                                 Game Status
                             </h3>
                             <div
@@ -292,7 +292,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-xs lg:text-sm font-bold text-white uppercase tracking-wide">White Player</div>
-                                            <div className={`text-[10px] lg:text-xs font-medium ${gameRoom.room?.whitePlayer === currentUserId ? 'text-emerald-300' : 'text-slate-500'}`}>
+                                            <div className={`text-[10px] lg:text-xs font-medium ${gameRoom.room?.whitePlayer === currentUserId ? 'text-emerald-300' : 'text-slate-400'}`}>
                                                 {gameRoom.room?.whitePlayer === currentUserId ? 'Connected (You)' : (gameRoom.room?.whitePlayer ? 'Opponent Ready' : 'Awaiting Entry...')}
                                             </div>
                                         </div>
@@ -313,7 +313,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-xs lg:text-sm font-bold text-white uppercase tracking-wide">Black Player</div>
-                                            <div className={`text-[10px] lg:text-xs font-medium ${gameRoom.room?.blackPlayer === currentUserId ? 'text-emerald-300' : 'text-slate-500'}`}>
+                                            <div className={`text-[10px] lg:text-xs font-medium ${gameRoom.room?.blackPlayer === currentUserId ? 'text-emerald-300' : 'text-slate-400'}`}>
                                                 {gameRoom.room?.blackPlayer === currentUserId ? 'Connected (You)' : (gameRoom.room?.blackPlayer ? 'Opponent Ready' : 'Awaiting Entry...')}
                                             </div>
                                         </div>
@@ -362,7 +362,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                                 <div className="font-display text-xl font-bold text-white tabular-nums">
                                     {connectedCount}
                                 </div>
-                                <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Connected</div>
+                                <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Connected</div>
                             </div>
                             <button
                                 onClick={copyRoomId}
@@ -373,7 +373,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                                     ? <Check size={20} className="mx-auto text-emerald-400" />
                                     : <Copy size={20} className="mx-auto text-slate-600 group-hover:text-emerald-300 transition-colors" />}
                                 <div className="font-display text-xl font-bold text-white truncate">{roomId}</div>
-                                <div className={`text-[10px] font-black uppercase tracking-widest transition-colors ${copied ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                <div className={`text-[10px] font-black uppercase tracking-widest transition-colors ${copied ? 'text-emerald-400' : 'text-slate-400'}`}>
                                     {copied ? 'Copied!' : 'Copy Code'}
                                 </div>
                             </button>
@@ -427,15 +427,15 @@ const GameTimer: React.FC<{ gameState: BackgammonState }> = ({ gameState }) => {
     return (
         <div className="grid grid-cols-3 gap-2 md:gap-3 p-3 md:p-4 surface-inset text-[9px] lg:text-[10px] font-bold uppercase tracking-widest">
             <div className="space-y-1">
-                <div className="text-slate-500">Time</div>
+                <div className="text-slate-400">Time</div>
                 <div className="font-display tabular-nums text-white text-base lg:text-lg">{formatTime(totalSeconds)}</div>
             </div>
             <div className="space-y-1">
-                <div className="text-slate-500">White</div>
+                <div className="text-slate-400">White</div>
                 <div className={`font-display tabular-nums text-base lg:text-lg ${gameState.turn === 'white' && !gameState.winner ? 'text-emerald-300' : 'text-slate-400'}`}>{formatTime(whiteSeconds)}</div>
             </div>
             <div className="space-y-1">
-                <div className="text-slate-500">Black</div>
+                <div className="text-slate-400">Black</div>
                 <div className={`font-display tabular-nums text-base lg:text-lg ${gameState.turn === 'black' && !gameState.winner ? 'text-emerald-300' : 'text-slate-400'}`}>{formatTime(blackSeconds)}</div>
             </div>
         </div>

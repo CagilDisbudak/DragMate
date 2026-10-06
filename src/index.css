@@ -15,13 +15,13 @@
    ============================================================ */
 
 @theme {
-  /* Surfaces — neutral near-black */
-  --color-canvas: #09090b;
-  --color-surface-0: #0f0f12;
-  --color-surface-1: #151519;
-  --color-surface-2: #1d1d22;
-  --color-line: rgba(255, 255, 255, 0.08);
-  --color-line-strong: rgba(255, 255, 255, 0.14);
+  /* Surfaces — dim slate (lifted from near-black for readability) */
+  --color-canvas: #1b1e25;
+  --color-surface-0: #1f232b;
+  --color-surface-1: #262a33;
+  --color-surface-2: #2f3440;
+  --color-line: rgba(255, 255, 255, 0.09);
+  --color-line-strong: rgba(255, 255, 255, 0.16);
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
   --shadow-card-lg: 0 1px 2px rgba(0, 0, 0, 0.4), 0 24px 48px -20px rgba(0, 0, 0, 0.75);
@@ -71,7 +71,7 @@
 /* ---------- Base ---------- */
 
 :root {
-  background-color: #09090b;
+  background-color: var(--color-canvas);
   color: #f8fafc;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -80,7 +80,7 @@
 
 body {
   margin: 0;
-  background-color: #09090b;
+  background-color: var(--color-canvas);
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;

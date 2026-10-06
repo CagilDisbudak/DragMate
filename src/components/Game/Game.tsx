@@ -15,7 +15,7 @@ interface GameProps {
 
 const ClockCell: React.FC<{ label: string; value: string; active?: boolean }> = ({ label, value, active = false }) => (
     <div className={`space-y-1 rounded-xl py-2 transition-colors ${active ? 'bg-emerald-500/10' : ''}`}>
-        <div className={`text-[9px] lg:text-[10px] font-black uppercase tracking-widest ${active ? 'text-emerald-400' : 'text-slate-500'}`}>
+        <div className={`text-[9px] lg:text-[10px] font-black uppercase tracking-widest ${active ? 'text-emerald-400' : 'text-slate-400'}`}>
             {label}
         </div>
         <div className={`font-display text-lg lg:text-xl font-bold tabular-nums ${active ? 'text-emerald-300' : 'text-slate-200'}`}>
@@ -52,7 +52,7 @@ const SeatCard: React.FC<{
                     </span>
                 )}
             </div>
-            <div className="text-xs text-slate-500 font-medium truncate">{subtitle}</div>
+            <div className="text-xs text-slate-400 font-medium truncate">{subtitle}</div>
         </div>
         <span
             className={`w-2 h-2 rounded-full shrink-0 ${
@@ -190,7 +190,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                 </div>
                 <div className="text-center space-y-2 anim-fade-up">
                     <h2 className="font-display text-xl font-black text-white uppercase tracking-widest">Entering Arena</h2>
-                    <p className="text-slate-500 font-medium">Synchronizing with the global lattice...</p>
+                    <p className="text-slate-400 font-medium">Synchronizing with the global lattice...</p>
                 </div>
             </div>
         );
@@ -267,7 +267,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
             <header className="shrink-0 w-full flex items-center justify-between gap-3 px-4 lg:px-8 py-3 lg:py-4 anim-fade-up">
                 <button
                     onClick={handleExit}
-                    className="group flex items-center gap-3 text-slate-500 hover:text-white transition-colors font-bold uppercase tracking-widest text-xs"
+                    className="group flex items-center gap-3 text-slate-400 hover:text-white transition-colors font-bold uppercase tracking-widest text-xs"
                     aria-label="Back to lobby"
                 >
                     <span className="p-2 rounded-xl bg-slate-900 border border-slate-800 group-hover:border-slate-600 group-hover:-translate-x-1 transition-all">
@@ -346,7 +346,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                 <div className="w-full side:w-[clamp(16rem,26vw,24rem)] shrink-0 side:min-h-0 side:overflow-y-auto flex flex-col justify-center-safe gap-4 stagger-children">
                     <div className="surface p-5 lg:p-6 space-y-5 border-l-4 border-l-indigo-500">
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.25em]">
+                            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">
                                 Game Status
                             </h3>
                             <div className={`chip ${
@@ -444,11 +444,11 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                     {!isLocal && (
                         <div className="grid grid-cols-2 gap-4">
                             <div className="rounded-2xl lg:rounded-3xl border border-line bg-white/5 p-4 lg:p-5 text-center space-y-1.5">
-                                <Users size={18} className="mx-auto text-slate-500" />
+                                <Users size={18} className="mx-auto text-slate-400" />
                                 <div className="font-display text-xl font-bold text-white tabular-nums">
                                     {connectedCount}/2
                                 </div>
-                                <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Connected</div>
+                                <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Connected</div>
                             </div>
                             <button
                                 onClick={copyRoomId}
@@ -457,9 +457,9 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                             >
                                 {copiedCode
                                     ? <Check size={18} className="mx-auto text-emerald-400" />
-                                    : <Copy size={18} className="mx-auto text-slate-500 group-hover:text-indigo-300 transition-colors" />}
+                                    : <Copy size={18} className="mx-auto text-slate-400 group-hover:text-indigo-300 transition-colors" />}
                                 <div className="font-display text-xl font-bold text-indigo-200 truncate">{roomId}</div>
-                                <div className={`text-[10px] font-black uppercase tracking-widest ${copiedCode ? 'text-emerald-400' : 'text-slate-500 group-hover:text-slate-400'}`}>
+                                <div className={`text-[10px] font-black uppercase tracking-widest ${copiedCode ? 'text-emerald-400' : 'text-slate-400 group-hover:text-slate-400'}`}>
                                     {copiedCode ? 'Copied!' : 'Tap to Copy'}
                                 </div>
                             </button>
