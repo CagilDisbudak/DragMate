@@ -13,12 +13,11 @@ import {
     LogOut,
     PartyPopper,
     Trophy,
+    Undo2,
     User,
 } from 'lucide-react';
 import {
     DndContext,
-    closestCenter,
-    pointerWithin,
     KeyboardSensor,
     PointerSensor,
     useSensor,
@@ -27,20 +26,14 @@ import {
     useDraggable,
     DragOverlay,
 } from '@dnd-kit/core';
-import type { CollisionDetection, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { visibleDropCollision } from '../../lib/dndCollision';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { StageScaled } from '../FitStage';
 
-// Prefer the droppable under the actual pointer. closestCenter alone compares
-// against the DragOverlay's rect, which is offset from the cursor (ancestors
-// with animation transforms break its position:fixed), so drops landed on the
-// wrong slot. Exclude the active item itself (rack slots share one id for
-// drag + drop). closestCenter remains as fallback (e.g. keyboard drags).
-const pointerFirstCollision: CollisionDetection = (args) => {
-    const notSelf = (c: { id: string | number }) => c.id !== args.active.id;
-    const pointerCollisions = pointerWithin(args).filter(notSelf);
-    if (pointerCollisions.length > 0) return pointerCollisions;
-    return closestCenter(args).filter(notSelf);
-};
+// Shared drop rules: pointer target first, overlap fallback, never "nearest
+// zone", and droppables scrolled out of view never catch a drop.
+const pointerFirstCollision = visibleDropCollision;
 
 interface PlayerInfo {
     name: string;
@@ -75,6 +68,11 @@ interface Board101Props {
     onReset: () => void;
     onNewRound: () => void;
     onExit: () => void;
+    /** "Geri Al": undo this turn's unopened melds / side-tile take. */
+    onUndo?: () => void;
+    canUndo?: boolean;
+    /** Whether the local player already drew this turn (drives draw/discard affordances). */
+    hasDrawn?: boolean;
     playerInfo?: PlayerInfo[];
     mySlot?: number;
 }
@@ -91,7 +89,7 @@ const OpponentPanel: React.FC<{
         <div className={`flex flex-col items-center gap-1.5 transition-transform duration-300 ${isCurrentTurn ? 'scale-105' : ''}`}>
             {/* Avatar */}
             <div className={`
-                relative w-12 h-12 rounded-full bg-slate-900/70 backdrop-blur-sm border flex items-center justify-center
+                relative w-12 h-12 rounded-full bg-slate-900/70 border flex items-center justify-center
                 transition-all duration-300
                 ${isCurrentTurn
                     ? 'border-rose-400/80 shadow-[0_0_20px_rgba(251,113,133,0.55)]'
@@ -159,17 +157,19 @@ const DiscardZone101: React.FC<{
     playerId: number;
     discardPile: Tile101[];
     currentTurn: number;
-    userTileCount: number;
+    hasDrawn: boolean;
     mySlot: number;
     isDraggingRackTile: boolean;
+    okeyTile: Tile101 | null;
     onDrawDiscard: () => void;
-}> = React.memo(({ playerId, discardPile, currentTurn, userTileCount, mySlot, isDraggingRackTile, onDrawDiscard }) => {
-    // Can drop to own discard when it's your turn and you have 15 tiles
-    const canDropHere = playerId === mySlot && currentTurn === mySlot && userTileCount === 22 && isDraggingRackTile;
+}> = React.memo(({ playerId, discardPile, currentTurn, hasDrawn, mySlot, isDraggingRackTile, okeyTile, onDrawDiscard }) => {
+    // Can drop to own discard once you have drawn this turn
+    const canDropHere = playerId === mySlot && currentTurn === mySlot && hasDrawn && isDraggingRackTile;
 
-    // Can draw from previous player's discard (counter-clockwise)
+    // Can draw from previous player's discard (counter-clockwise) before drawing — works
+    // for opened players with fewer tiles too.
     const prevPlayerIdx = (mySlot + 3) % 4;
-    const canDrawHere = playerId === prevPlayerIdx && currentTurn === mySlot && userTileCount === 21 && discardPile.length > 0;
+    const canDrawHere = playerId === prevPlayerIdx && currentTurn === mySlot && !hasDrawn && discardPile.length > 0;
 
     const { setNodeRef, isOver } = useDroppable({
         id: `discard-${playerId}`
@@ -207,7 +207,7 @@ const DiscardZone101: React.FC<{
                     {...listeners}
                     className={`rotate-2 transition-transform touch-none ${canDrawHere && !isDragging ? 'hover:scale-105' : ''} ${isDragging ? 'opacity-20' : ''}`}
                 >
-                    <OkeyTile tile={lastTile} okeyTile={null} size="sm" />
+                    <OkeyTile tile={lastTile} okeyTile={okeyTile} size="sm" />
                 </div>
             ) : (
                 <div className="w-12 h-16 border-2 border-white/10 border-dashed rounded-lg flex items-center justify-center">
@@ -333,7 +333,7 @@ const PlayerRack101: React.FC<PlayerRack101Props> = React.memo(({ tiles, selecte
     );
 
     return (
-        <div className="relative wood-surface rounded-2xl p-2 sm:p-2.5 shadow-glass-lg">
+        <div className="relative wood-surface rounded-2xl p-2 @sm:p-2.5 shadow-card-lg">
             {/* Rack lip highlight (top) */}
             <div className="absolute inset-x-0 top-0 h-1.5 rounded-t-2xl bg-white/10 pointer-events-none" />
 
@@ -356,14 +356,15 @@ const CenterBoard: React.FC<{
     mySlot: number;
     isDraggingRackTile: boolean;
     playerHasLaidDown: boolean;
+    okeyTile: Tile101 | null;
     getActualSlot: (displayPos: number) => number;
-}> = React.memo(({ melds, playerInfo, mySlot, isDraggingRackTile, playerHasLaidDown, getActualSlot }) => {
+}> = React.memo(({ melds, playerInfo, mySlot, isDraggingRackTile, playerHasLaidDown, okeyTile, getActualSlot }) => {
     const getMeldsForPlayer = (playerIdx: number) => {
         return melds.filter(m => m.ownerPlayer === playerIdx);
     };
 
     const renderQuadrant = (slot: number, borders: string) => (
-        <div className={`relative p-1.5 sm:p-2 ${borders}`}>
+        <div className={`relative p-1.5 @sm:p-2 ${borders}`}>
             <div className="flex flex-wrap gap-2 content-start overflow-y-auto h-full pt-3 pr-1">
                 {getMeldsForPlayer(slot).map(meld => (
                     <MeldDisplay
@@ -372,6 +373,7 @@ const CenterBoard: React.FC<{
                         ownerName={playerInfo[slot]?.name}
                         isDraggingRackTile={isDraggingRackTile}
                         playerHasLaidDown={playerHasLaidDown}
+                        okeyTile={okeyTile}
                     />
                 ))}
             </div>
@@ -388,7 +390,7 @@ const CenterBoard: React.FC<{
 
             {melds.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="text-emerald-100/30 text-[10px] sm:text-xs font-bold uppercase tracking-[0.25em] text-center px-4">
+                    <span className="text-emerald-100/30 text-[10px] @sm:text-xs font-bold uppercase tracking-[0.25em] text-center px-4">
                         Açılan perler burada görünür
                     </span>
                 </div>
@@ -411,7 +413,8 @@ const MeldDisplay: React.FC<{
     ownerName?: string;
     isDraggingRackTile: boolean;
     playerHasLaidDown: boolean;
-}> = React.memo(({ meld, ownerName, isDraggingRackTile, playerHasLaidDown }) => {
+    okeyTile: Tile101 | null;
+}> = React.memo(({ meld, ownerName, isDraggingRackTile, playerHasLaidDown, okeyTile }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: `meld-${meld.id}`,
         data: { type: 'meld', meldId: meld.id },
@@ -435,7 +438,7 @@ const MeldDisplay: React.FC<{
         >
             {meld.tiles.map((tile, idx) => (
                 <div key={`${meld.id}-${idx}`} className="w-10 h-13">
-                    <OkeyTile tile={tile} okeyTile={null} size="sm" isJoker={tile.isFakeOkey} />
+                    <OkeyTile tile={tile} okeyTile={okeyTile} size="sm" />
                 </div>
             ))}
             {ownerName && (
@@ -455,7 +458,7 @@ const ScoreTable: React.FC<{
     const sorted = [...players].map((p, idx) => ({ ...p, originalIndex: idx })).sort((a, b) => a.score - b.score);
 
     return (
-        <div className="w-full rounded-2xl overflow-hidden border border-white/10 bg-slate-950/60 backdrop-blur-md shadow-glass">
+        <div className="w-full rounded-2xl overflow-hidden border border-white/10 bg-slate-950/60 shadow-card">
             <div className="px-3 py-2 text-center bg-white/5 border-b border-white/10">
                 <span className="font-display text-white font-bold text-[11px] tracking-[0.25em]">SKOR</span>
             </div>
@@ -498,11 +501,11 @@ const ScoreTable: React.FC<{
 const DrawPile101: React.FC<{
     count: number;
     currentTurn: number;
-    userTileCount: number;
+    hasDrawn: boolean;
     mySlot: number;
     onDraw: () => void;
-}> = React.memo(({ count, currentTurn, userTileCount, mySlot, onDraw }) => {
-    const canDraw = currentTurn === mySlot && userTileCount < 22;
+}> = React.memo(({ count, currentTurn, hasDrawn, mySlot, onDraw }) => {
+    const canDraw = currentTurn === mySlot && !hasDrawn && count > 0;
 
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: 'draw-pile',
@@ -571,7 +574,7 @@ const ToolbarButton: React.FC<{
         onClick={onClick}
         title={title}
         aria-label={title}
-        className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-lg text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-300 transition-all duration-150 hover:bg-rose-500/15 hover:text-rose-200 active:scale-95"
+        className="flex items-center gap-1.5 px-2.5 @sm:px-3.5 py-2 rounded-lg text-[10px] @sm:text-[11px] font-bold uppercase tracking-wider text-slate-300 transition-all duration-150 hover:bg-rose-500/15 hover:text-rose-200 active:scale-95"
     >
         {icon}
         <span>{label}</span>
@@ -597,6 +600,9 @@ export const Board101: React.FC<Board101Props> = React.memo(({
     onReset,
     onNewRound,
     onExit,
+    onUndo,
+    canUndo = false,
+    hasDrawn: hasDrawnProp,
     playerInfo = DEFAULT_PLAYER_INFO,
     mySlot = 0
 }) => {
@@ -661,7 +667,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
     if (!gameState) {
         return (
             <div className="flex items-center justify-center p-16">
-                <div className="liquid-glass px-8 py-6 flex items-center gap-3 anim-pop-in">
+                <div className="surface px-8 py-6 flex items-center gap-3 anim-pop-in">
                     <div className="w-5 h-5 rounded-full border-2 border-rose-400/25 border-t-rose-400 animate-spin" />
                     <span className="font-display font-bold tracking-wider text-slate-200">YÜKLENİYOR...</span>
                 </div>
@@ -675,6 +681,8 @@ export const Board101: React.FC<Board101Props> = React.memo(({
     const tableMelds = Object.values(gameState.tableMelds || {}) as Meld[];
     const isDraggingRackTile = activeId?.startsWith('rack-') || false;
     const isMyTurn = gameState.currentTurn === mySlot;
+    // Fallback for callers that don't track it: a 22-tile rack means "already drew".
+    const hasDrawn = hasDrawnProp ?? userTileCount >= 22;
 
     const getTileCount = (playerIdx: number) => {
         return gameState.players[playerIdx]?.tiles.filter(t => t !== null).length || 0;
@@ -691,11 +699,11 @@ export const Board101: React.FC<Board101Props> = React.memo(({
             const playerIdx = parseInt(activeId.replace('pick-discard-', ''));
             const pile = gameState.discardPiles[playerIdx];
             const topTile = pile && pile.length > 0 ? pile[pile.length - 1] : null;
-            return topTile ? <OkeyTile tile={topTile} size="sm" okeyTile={null} /> : null;
+            return topTile ? <OkeyTile tile={topTile} size="sm" okeyTile={gameState.okeyTile} /> : null;
         }
         if (activeId.startsWith('rack-')) {
             const tile = userTiles[parseInt(activeId.split('-')[1])];
-            return tile ? <OkeyTile tile={tile} okeyTile={null} size="md" isJoker={tile.isFakeOkey} /> : null;
+            return tile ? <OkeyTile tile={tile} okeyTile={gameState.okeyTile} size="md" /> : null;
         }
         return null;
     };
@@ -709,8 +717,8 @@ export const Board101: React.FC<Board101Props> = React.memo(({
             .sort((a, b) => a.score - b.score);
 
         return (
-            <div className="relative w-full max-w-[1400px] mx-auto wood-surface rounded-[2rem] p-1.5 sm:p-2.5 shadow-glass-lg anim-fade-up">
-                <div className="relative felt-surface rounded-[1.5rem] sm:rounded-[1.7rem] overflow-hidden min-h-[600px] flex flex-col items-center justify-center gap-5 sm:gap-6 p-6 sm:p-10">
+            <div className="relative w-full h-full wood-surface rounded-[2rem] p-1.5 @sm:p-2.5 shadow-card-lg anim-fade-up">
+                <div className="relative h-full felt-surface rounded-[1.5rem] @sm:rounded-[1.7rem] overflow-y-auto flex flex-col items-center justify-center-safe gap-5 @sm:gap-6 p-6 @sm:p-10">
                     {gameState.roundWinner === mySlot && (
                         <div className="absolute inset-0 overflow-hidden pointer-events-none">
                             {[...Array(30)].map((_, i) => {
@@ -749,17 +757,17 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         )}
                     </div>
 
-                    <h2 className="font-display text-3xl sm:text-4xl font-bold text-gradient anim-fade-up">
+                    <h2 className="font-display text-3xl @sm:text-4xl font-bold text-gradient anim-fade-up">
                         {isGameOver ? 'OYUN BİTTİ!' : 'EL BİTTİ!'}
                     </h2>
                     {winner && (
-                        <p className="text-base sm:text-lg text-slate-300">
+                        <p className="text-base @sm:text-lg text-slate-300">
                             {isGameOver ? 'Kazanan' : 'Bu eli kazanan'}: <span className="font-display font-bold text-rose-300">{winner.name}</span>
                         </p>
                     )}
 
                     {/* Score table */}
-                    <div className="w-full max-w-sm rounded-2xl overflow-hidden border border-white/10 bg-slate-950/60 backdrop-blur-md shadow-glass anim-fade-up">
+                    <div className="w-full max-w-sm rounded-2xl overflow-hidden border border-white/10 bg-slate-950/60 shadow-card anim-fade-up">
                         <div className="px-4 py-2.5 bg-white/5 border-b border-white/10 text-center">
                             <span className="font-display text-[11px] font-bold tracking-[0.25em] text-slate-300 uppercase">Skor Tablosu</span>
                         </div>
@@ -795,7 +803,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
 
                     <div className="flex flex-wrap justify-center gap-3 mt-2 anim-fade-up">
                         {!isGameOver && (
-                            <button onClick={onNewRound} className="btn-premium">
+                            <button onClick={onNewRound} className="btn-primary">
                                 Yeni El
                             </button>
                         )}
@@ -819,12 +827,12 @@ export const Board101: React.FC<Board101Props> = React.memo(({
 
     return (
         <DndContext sensors={sensors} collisionDetection={pointerFirstCollision} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
-            <div className="relative w-full max-w-[1400px] mx-auto wood-surface rounded-[2rem] p-1.5 sm:p-2.5 shadow-glass-lg anim-fade-up">
-                <div className="relative felt-surface rounded-[1.5rem] sm:rounded-[1.7rem] overflow-hidden">
-                    {/* Main game area */}
-                    <div className="relative flex">
+            <div className="relative w-full h-full wood-surface rounded-[2rem] p-1.5 @sm:p-2.5 shadow-card-lg anim-fade-up">
+                <div className="relative h-full flex flex-col felt-surface rounded-[1.5rem] @sm:rounded-[1.7rem] overflow-hidden">
+                    {/* Main game area — flex-1 absorbs spare stage height */}
+                    <div className="relative flex flex-1 min-h-0">
                         {/* Left side - Opponent and discard */}
-                        <div className="w-20 sm:w-28 flex flex-col items-center justify-center gap-3 py-6 shrink-0">
+                        <div className="w-20 @sm:w-28 flex flex-col items-center justify-center gap-3 py-6 shrink-0">
                             <OpponentPanel
                                 playerInfo={playerInfo[getActualSlot(3)] || DEFAULT_PLAYER_INFO[3]}
                                 isCurrentTurn={gameState.currentTurn === getActualSlot(3)}
@@ -836,9 +844,10 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                 playerId={getActualSlot(3)}
                                 discardPile={gameState.discardPiles[getActualSlot(3)] || []}
                                 currentTurn={gameState.currentTurn}
-                                userTileCount={userTileCount}
+                                hasDrawn={hasDrawn}
                                 mySlot={mySlot}
                                 isDraggingRackTile={isDraggingRackTile}
+                                okeyTile={gameState.okeyTile}
                                 onDrawDiscard={onDrawDiscard}
                             />
                         </div>
@@ -846,7 +855,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         {/* Center area */}
                         <div className="flex-1 flex flex-col min-w-0">
                             {/* Top area - opponent avatar/discard + gösterge + draw pile */}
-                            <div className="flex flex-wrap justify-center items-center gap-3 sm:gap-6 px-2 pt-4 pb-3">
+                            <div className="flex flex-wrap justify-center items-center gap-3 @sm:gap-6 px-2 pt-4 pb-3">
                                 <OpponentPanel
                                     playerInfo={playerInfo[getActualSlot(2)] || DEFAULT_PLAYER_INFO[2]}
                                     isCurrentTurn={gameState.currentTurn === getActualSlot(2)}
@@ -858,12 +867,13 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                     playerId={getActualSlot(2)}
                                     discardPile={gameState.discardPiles[getActualSlot(2)] || []}
                                     currentTurn={gameState.currentTurn}
-                                    userTileCount={userTileCount}
+                                    hasDrawn={hasDrawn}
                                     mySlot={mySlot}
                                     isDraggingRackTile={isDraggingRackTile}
+                                    okeyTile={gameState.okeyTile}
                                     onDrawDiscard={onDrawDiscard}
                                 />
-                                <div className="w-px h-16 bg-white/10 mx-1 hidden sm:block" />
+                                <div className="w-px h-16 bg-white/10 mx-1 hidden @sm:block" />
                                 {gameState.indicatorTile && (
                                     <div className="flex flex-col items-center gap-1.5">
                                         <span className="text-[9px] font-black uppercase tracking-[0.2em] text-rose-200/80">Gösterge</span>
@@ -877,7 +887,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                     <DrawPile101
                                         count={gameState.centerStack.length}
                                         currentTurn={gameState.currentTurn}
-                                        userTileCount={userTileCount}
+                                        hasDrawn={hasDrawn}
                                         mySlot={mySlot}
                                         onDraw={() => onDraw()}
                                     />
@@ -885,14 +895,15 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                             </div>
 
                             {/* Center board with meld zones */}
-                            <div className="flex-1 px-2 sm:px-4 pb-2">
-                                <div className="h-[240px] sm:h-[300px]">
+                            <div className="flex-1 min-h-0 flex flex-col px-2 @sm:px-4 pb-2">
+                                <div className="flex-1 min-h-[180px]">
                                     <CenterBoard
                                         melds={tableMelds}
                                         playerInfo={playerInfo}
                                         mySlot={mySlot}
                                         isDraggingRackTile={isDraggingRackTile}
                                         playerHasLaidDown={currentPlayer?.hasLaidDown || false}
+                                        okeyTile={gameState.okeyTile}
                                         getActualSlot={getActualSlot}
                                     />
                                 </div>
@@ -900,7 +911,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         </div>
 
                         {/* Right side - Opponent and discard */}
-                        <div className="w-20 sm:w-28 flex flex-col items-center justify-center gap-3 py-6 shrink-0">
+                        <div className="w-20 @sm:w-28 flex flex-col items-center justify-center gap-3 py-6 shrink-0">
                             <OpponentPanel
                                 playerInfo={playerInfo[getActualSlot(1)] || DEFAULT_PLAYER_INFO[1]}
                                 isCurrentTurn={gameState.currentTurn === getActualSlot(1)}
@@ -912,24 +923,27 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                 playerId={getActualSlot(1)}
                                 discardPile={gameState.discardPiles[getActualSlot(1)] || []}
                                 currentTurn={gameState.currentTurn}
-                                userTileCount={userTileCount}
+                                hasDrawn={hasDrawn}
                                 mySlot={mySlot}
                                 isDraggingRackTile={isDraggingRackTile}
+                                okeyTile={gameState.okeyTile}
                                 onDrawDiscard={onDrawDiscard}
                             />
                         </div>
 
                         {/* Far right - Scoreboard (desktop) */}
-                        <div className="hidden md:flex w-[150px] flex-col items-center justify-center gap-3 p-3 bg-black/20 border-l border-white/5 shrink-0">
+                        <div className="hidden @3xl:flex w-[150px] flex-col items-center justify-center gap-3 p-3 bg-black/20 border-l border-white/5 shrink-0">
                             <ScoreTable players={playersWithScores} currentTurn={gameState.currentTurn} />
                         </div>
                     </div>
 
                     {/* Bottom area - Your discard, toolbar and rack */}
-                    <div className="px-2 sm:px-4 pb-4 pt-1 flex flex-col items-center gap-3">
-                        {/* Turn banner */}
+                    <div className="shrink-0 px-2 @sm:px-4 pb-4 pt-1 flex flex-col items-center gap-3">
+                        {/* Turn banner + selection actions share one fixed-height row,
+                            so selecting tiles never shifts the table layout. */}
+                        <div className="h-11 flex items-center justify-center gap-3">
                         <div className={`
-                            flex items-center gap-2 px-5 sm:px-6 py-2 rounded-full text-xs sm:text-sm font-black uppercase tracking-wider transition-all duration-300
+                            flex items-center gap-2 px-5 @sm:px-6 py-2 rounded-full text-xs @sm:text-sm font-black uppercase tracking-wider transition-all duration-300
                             ${isMyTurn
                                 ? 'bg-rose-500/15 text-rose-200 border border-rose-400/50 shadow-[0_0_24px_-6px_rgba(244,63,94,0.6)]'
                                 : 'chip-turn-waiting'}
@@ -944,20 +958,39 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                             )}
                         </div>
 
+                        {/* Floating selection action bar */}
+                        {selectedTileIndices.length > 0 && (
+                            <div className="z-30 anim-pop-in flex items-center gap-2 @sm:gap-3 rounded-2xl border border-rose-400/30 bg-slate-950/85 pl-4 pr-2 py-1.5 shadow-[0_16px_40px_-12px_rgba(244,63,94,0.45)]">
+                                <span className="text-xs font-bold text-slate-300 whitespace-nowrap">
+                                    <span className="font-display text-base text-rose-300 tabular-nums">{selectedTileIndices.length}</span> taş seçili
+                                </span>
+                                {selectedTileIndices.length >= 3 && (
+                                    <button onClick={onLayDownMeld} className="btn-primary text-sm px-4 py-1.5">
+                                        İNDİR
+                                    </button>
+                                )}
+                                <button onClick={onClearSelection} className="btn-ghost text-xs px-3 py-1.5">
+                                    Temizle
+                                </button>
+                            </div>
+                        )}
+                        </div>
+
                         {/* Your discard zone, toolbar and controls */}
                         <div className="flex flex-wrap items-center justify-center gap-3">
                             <DiscardZone101
                                 playerId={mySlot}
                                 discardPile={gameState.discardPiles[mySlot] || []}
                                 currentTurn={gameState.currentTurn}
-                                userTileCount={userTileCount}
+                                hasDrawn={hasDrawn}
                                 mySlot={mySlot}
                                 isDraggingRackTile={isDraggingRackTile}
+                                okeyTile={gameState.okeyTile}
                                 onDrawDiscard={onDrawDiscard}
                             />
 
                             {/* Segmented sort/select toolbar */}
-                            <div className="flex items-center rounded-xl border border-white/10 bg-slate-950/70 backdrop-blur-md p-1 shadow-lg">
+                            <div className="flex items-center rounded-xl border border-white/10 bg-slate-950/70 p-1 shadow-lg">
                                 <ToolbarButton
                                     onClick={onSortByRuns}
                                     title="Serilere göre diz (aynı renk, ardışık sayılar)"
@@ -993,6 +1026,18 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                 )}
                             </div>
 
+                            {isMyTurn && canUndo && onUndo && (
+                                <button
+                                    onClick={onUndo}
+                                    title="Bu tur açtığın perleri ve aldığın yan taşı geri al"
+                                    aria-label="Geri Al"
+                                    className="btn-ghost flex items-center gap-2 text-xs uppercase tracking-wider border-amber-400/50 text-amber-200 anim-pop-in"
+                                >
+                                    <Undo2 size={14} />
+                                    Geri Al
+                                </button>
+                            )}
+
                             <button
                                 onClick={onExit}
                                 aria-label="Oyundan çık"
@@ -1012,25 +1057,8 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                             </div>
                         </div>
 
-                        {/* Floating selection action bar */}
-                        {selectedTileIndices.length > 0 && (
-                            <div className="z-30 -mb-1 anim-pop-in flex items-center gap-2 sm:gap-3 rounded-2xl border border-rose-400/30 bg-slate-950/85 backdrop-blur-xl pl-4 pr-2 py-2 shadow-[0_16px_40px_-12px_rgba(244,63,94,0.45)]">
-                                <span className="text-xs font-bold text-slate-300 whitespace-nowrap">
-                                    <span className="font-display text-base text-rose-300 tabular-nums">{selectedTileIndices.length}</span> taş seçili
-                                </span>
-                                {selectedTileIndices.length >= 3 && (
-                                    <button onClick={onLayDownMeld} className="btn-premium text-sm">
-                                        İNDİR
-                                    </button>
-                                )}
-                                <button onClick={onClearSelection} className="btn-ghost text-xs">
-                                    Temizle
-                                </button>
-                            </div>
-                        )}
-
                         {/* Player Rack */}
-                        <div className="w-full max-w-full overflow-x-auto pt-3 pb-1">
+                        <div className="w-full pt-1 pb-1">
                             <div className="w-max mx-auto">
                                 <PlayerRack101
                                     tiles={userTiles}
@@ -1046,17 +1074,19 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                         </div>
 
                         {/* Instructions */}
-                        <div className="text-emerald-100/70 text-xs sm:text-sm font-semibold text-center px-4">
+                        <div className="text-emerald-100/70 text-xs @sm:text-sm font-semibold text-center px-4">
                             {gameState.currentTurn === mySlot ? (
-                                userTileCount === 21 ? (
-                                    "Desteden veya soldaki oyuncunun ıskartasından çekin (yan taş yalnız açış için)"
-                                ) : userTileCount === 22 ? (
-                                    selectedTileIndices.length >= 3 ? (
-                                        "İNDİR ile normal aç (101+) veya Çift Aç ile 5 çift indirin"
-                                    ) : (
-                                        "Per için taş seçin, çift açın veya kendi ıskartanıza taş atın"
-                                    )
-                                ) : "Oyun devam ediyor"
+                                !hasDrawn ? (
+                                    currentPlayer?.hasLaidDown
+                                        ? "Desteden veya soldaki oyuncunun ıskartasından çekin"
+                                        : "Desteden veya soldaki oyuncunun ıskartasından çekin (yan taş yalnız o taşla açabileceksen)"
+                                ) : canUndo ? (
+                                    "Açılışı tamamla (101+ / 5 çift, yan taşı kullanarak) ya da Geri Al"
+                                ) : selectedTileIndices.length >= 3 ? (
+                                    currentPlayer?.hasLaidDown ? "İNDİR ile peri aç" : "İNDİR ile normal aç (101+) veya Çift İndir ile 5 çift indirin"
+                                ) : (
+                                    "Per için taş seçin, perlere işleyin veya kendi ıskartanıza taş atın"
+                                )
                             ) : (
                                 `${playerInfo[gameState.currentTurn]?.name || 'Rakip'} oynuyor...`
                             )}
@@ -1064,13 +1094,13 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                     </div>
 
                     {/* Round indicator */}
-                    <div className="absolute top-3 left-3 z-20 glass-chip text-rose-200">
+                    <div className="absolute top-3 left-3 z-20 chip text-rose-200">
                         El: {gameState.roundNumber}
                     </div>
 
                     {/* Joker / Okey indicator */}
                     {gameState.okeyTile && (
-                        <div className="absolute top-3 right-3 z-20 flex items-center gap-2 rounded-full border border-emerald-400/40 bg-slate-950/70 backdrop-blur-md pl-3 pr-1.5 py-1 shadow-[0_0_16px_-4px_rgba(16,185,129,0.5)]">
+                        <div className="absolute top-3 right-3 z-20 flex items-center gap-2 rounded-full border border-emerald-400/40 bg-slate-950/70 pl-3 pr-1.5 py-1 shadow-[0_0_16px_-4px_rgba(16,185,129,0.5)]">
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                             <span className="text-emerald-200 font-bold text-[10px] uppercase tracking-widest">Okey</span>
                             <div className="w-8 h-11">
@@ -1089,7 +1119,7 @@ export const Board101: React.FC<Board101Props> = React.memo(({
                                 pointerEvents: 'none',
                                 filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.3))',
                             }}>
-                                {renderDragOverlay()}
+                                <StageScaled>{renderDragOverlay()}</StageScaled>
                             </div>
                         </DragOverlay>,
                         document.body

@@ -23,7 +23,6 @@ const ACCENT: Record<GameKey, {
     createBtn: string;
     selfCard: string;
     avatar: string;
-    glow: string;
     spinner: string;
 }> = {
     chess: {
@@ -31,14 +30,13 @@ const ACCENT: Record<GameKey, {
         text: 'text-indigo-400',
         chip: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30',
         iconBg: 'bg-indigo-500/15 text-indigo-300',
-        cardHover: 'hover:border-indigo-400/60 hover:shadow-indigo-500/20',
+        cardHover: 'hover:border-indigo-400/50',
         modeHover: 'hover:border-indigo-400/50 hover:shadow-indigo-500/10',
         dotStrong: 'bg-indigo-400',
         inputRing: 'focus:ring-indigo-500/30 focus:border-indigo-500/50',
-        createBtn: 'from-indigo-500 to-violet-500 hover:from-indigo-400 hover:to-violet-400 shadow-indigo-500/25 hover:shadow-indigo-500/40',
+        createBtn: 'bg-indigo-500 hover:bg-indigo-400',
         selfCard: 'bg-indigo-500/10 border-indigo-500/40',
         avatar: 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300',
-        glow: 'bg-indigo-500',
         spinner: 'border-indigo-500/20 border-t-indigo-500',
     },
     backgammon: {
@@ -46,14 +44,13 @@ const ACCENT: Record<GameKey, {
         text: 'text-emerald-400',
         chip: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
         iconBg: 'bg-emerald-500/15 text-emerald-300',
-        cardHover: 'hover:border-emerald-400/60 hover:shadow-emerald-500/20',
+        cardHover: 'hover:border-emerald-400/50',
         modeHover: 'hover:border-emerald-400/50 hover:shadow-emerald-500/10',
         dotStrong: 'bg-emerald-400',
         inputRing: 'focus:ring-emerald-500/30 focus:border-emerald-500/50',
-        createBtn: 'from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 shadow-emerald-500/25 hover:shadow-emerald-500/40',
+        createBtn: 'bg-emerald-500 hover:bg-emerald-400',
         selfCard: 'bg-emerald-500/10 border-emerald-500/40',
         avatar: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300',
-        glow: 'bg-emerald-500',
         spinner: 'border-emerald-500/20 border-t-emerald-500',
     },
     okey: {
@@ -61,14 +58,13 @@ const ACCENT: Record<GameKey, {
         text: 'text-amber-400',
         chip: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
         iconBg: 'bg-amber-500/15 text-amber-300',
-        cardHover: 'hover:border-amber-400/60 hover:shadow-amber-500/20',
+        cardHover: 'hover:border-amber-400/50',
         modeHover: 'hover:border-amber-400/50 hover:shadow-amber-500/10',
         dotStrong: 'bg-amber-400',
         inputRing: 'focus:ring-amber-500/30 focus:border-amber-500/50',
-        createBtn: 'from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 shadow-amber-500/25 hover:shadow-amber-500/40',
+        createBtn: 'bg-amber-400 hover:bg-amber-300 text-amber-950!',
         selfCard: 'bg-amber-500/10 border-amber-500/40',
         avatar: 'bg-amber-500/20 border-amber-500/40 text-amber-300',
-        glow: 'bg-amber-500',
         spinner: 'border-amber-500/20 border-t-amber-500',
     },
     '101': {
@@ -76,14 +72,13 @@ const ACCENT: Record<GameKey, {
         text: 'text-rose-400',
         chip: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
         iconBg: 'bg-rose-500/15 text-rose-300',
-        cardHover: 'hover:border-rose-400/60 hover:shadow-rose-500/20',
+        cardHover: 'hover:border-rose-400/50',
         modeHover: 'hover:border-rose-400/50 hover:shadow-rose-500/10',
         dotStrong: 'bg-rose-400',
         inputRing: 'focus:ring-rose-500/30 focus:border-rose-500/50',
-        createBtn: 'from-rose-500 to-pink-500 hover:from-rose-400 hover:to-pink-400 shadow-rose-500/25 hover:shadow-rose-500/40',
+        createBtn: 'bg-rose-500 hover:bg-rose-400',
         selfCard: 'bg-rose-500/10 border-rose-500/40',
         avatar: 'bg-rose-500/20 border-rose-500/40 text-rose-300',
-        glow: 'bg-rose-500',
         spinner: 'border-rose-500/20 border-t-rose-500',
     },
 };
@@ -118,7 +113,7 @@ const RulesBadge: React.FC<{ game: GameKey; onOpen: (g: GameKey) => void }> = ({
         onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); onOpen(game); }
         }}
-        className="absolute top-2.5 left-2.5 z-10 inline-flex items-center gap-1 px-2 py-1 rounded-full border border-white/10 bg-black/45 backdrop-blur-md text-slate-300 hover:text-white hover:bg-black/65 hover:border-white/25 transition-all cursor-pointer active:scale-95"
+        className="absolute top-2.5 left-2.5 z-10 inline-flex items-center gap-1 px-2 py-1 rounded-full border border-white/10 bg-surface-2 text-slate-300 hover:text-white hover:bg-surface-1 hover:border-white/25 transition-all cursor-pointer active:scale-95"
     >
         <Info size={13} />
         <span className="text-[9px] font-black uppercase tracking-wider">Kurallar</span>
@@ -336,11 +331,9 @@ export const Lobby: React.FC<LobbyProps> = ({
                         <button
                             key={g.key}
                             onClick={() => { onSelectGame(g.key); setStep('mode-select'); }}
-                            className={`group relative hover-shine w-full aspect-square sm:aspect-[4/3] rounded-2xl sm:rounded-3xl border border-slate-700/60 bg-linear-to-br from-slate-800/80 via-slate-900/90 to-slate-950 overflow-hidden text-left p-4 sm:p-5 flex flex-col justify-end transition-all duration-300 hover:-translate-y-1.5 active:translate-y-0 active:scale-[0.98] hover:shadow-2xl ${a.cardHover}`}
+                            className={`group relative w-full aspect-square sm:aspect-[4/3] rounded-2xl border border-line bg-surface-0 overflow-hidden text-left p-4 sm:p-5 flex flex-col justify-end transition-colors duration-200 hover:bg-surface-2 active:scale-[0.98] ${a.cardHover}`}
                         >
-                            <div className={`pointer-events-none absolute -top-12 -right-12 w-36 h-36 rounded-full blur-3xl opacity-25 group-hover:opacity-60 transition-opacity duration-500 ${a.glow}`} />
-                            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-white/20 to-transparent" />
-                            <Icon aria-hidden className={`pointer-events-none absolute -bottom-4 -right-4 w-24 h-24 sm:w-28 sm:h-28 opacity-[0.05] group-hover:opacity-10 group-hover:-rotate-6 transition-all duration-500 ${a.text}`} />
+                            <Icon aria-hidden className={`pointer-events-none absolute -bottom-4 -right-4 w-24 h-24 sm:w-28 sm:h-28 opacity-[0.05] group-hover:opacity-10 transition-opacity duration-300 ${a.text}`} />
                             <RulesBadge game={g.key} onOpen={setRulesGameType} />
                             {g.badge && (
                                 <div className={`absolute top-0 right-0 px-2 py-1.5 rounded-bl-2xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest border-b border-l ${g.badgeClass}`}>
@@ -348,7 +341,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                                 </div>
                             )}
                             <div className="relative">
-                                <div className={`inline-flex p-2.5 sm:p-3 rounded-2xl mb-2.5 sm:mb-3 ${a.iconBg} group-hover:scale-110 transition-transform duration-300`}>
+                                <div className={`inline-flex p-2.5 sm:p-3 rounded-xl mb-2.5 sm:mb-3 ${a.iconBg}`}>
                                     <Icon className="w-6 h-6 sm:w-7 sm:h-7" />
                                 </div>
                                 <h3 className="font-display text-lg sm:text-2xl font-bold text-white">{g.name}</h3>
@@ -370,7 +363,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                 right={selectedGame && (
                     <button
                         onClick={() => setRulesGameType(selectedGame)}
-                        className="flex items-center gap-2 px-3 py-2 rounded-xl border border-glass-border bg-glass hover:bg-white/10 text-slate-300 hover:text-white text-sm font-bold transition-all active:scale-95"
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl border border-line bg-surface-1 hover:bg-white/10 text-slate-300 hover:text-white text-sm font-bold transition-all active:scale-95"
                     >
                         <BookOpen size={16} />
                         Kurallar
@@ -384,7 +377,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     onClick={() => setStep('difficulty-select')}
                     className={`group flex flex-col items-center justify-center gap-3 sm:gap-4 p-6 sm:p-8 rounded-2xl border border-slate-700/70 bg-slate-900/50 transition-all duration-300 hover:bg-slate-800/60 hover:-translate-y-1 hover:shadow-xl active:translate-y-0 active:scale-[0.98] ${currentAccent.modeHover}`}
                 >
-                    <div className={`p-4 rounded-2xl ${currentAccent.iconBg} group-hover:scale-110 transition-transform duration-300`}>
+                    <div className={`p-4 rounded-2xl ${currentAccent.iconBg} `}>
                         <Bot size={30} />
                     </div>
                     <div className="text-center">
@@ -401,7 +394,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     }}
                     className={`group flex flex-col items-center justify-center gap-3 sm:gap-4 p-6 sm:p-8 rounded-2xl border border-slate-700/70 bg-slate-900/50 transition-all duration-300 hover:bg-slate-800/60 hover:-translate-y-1 hover:shadow-xl active:translate-y-0 active:scale-[0.98] ${currentAccent.modeHover}`}
                 >
-                    <div className={`p-4 rounded-2xl ${currentAccent.iconBg} group-hover:scale-110 transition-transform duration-300`}>
+                    <div className={`p-4 rounded-2xl ${currentAccent.iconBg} `}>
                         <Users size={30} />
                     </div>
                     <div className="text-center">
@@ -461,7 +454,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                 <button
                     onClick={handleCreate}
                     disabled={isCreating || isAuthLoading}
-                    className="w-full btn-premium flex items-center justify-center gap-3 text-lg group disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full btn-primary flex items-center justify-center gap-3 text-lg group disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isCreating || isAuthLoading ? (
                         <Spinner />
@@ -480,7 +473,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                         value={roomIdInput}
                         onChange={(e) => setRoomIdInput(e.target.value)}
                         aria-label="Room ID"
-                        className={`flex-1 min-w-0 bg-slate-950/50 border border-slate-700/60 rounded-xl px-4 py-3.5 font-mono text-lg tracking-wider placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all ${currentAccent.inputRing}`}
+                        className={`flex-1 min-w-0 bg-surface-0 border border-line-strong rounded-xl px-4 py-3.5 font-mono text-lg tracking-wider placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all ${currentAccent.inputRing}`}
                     />
                     <button
                         onClick={() => onJoinRoom(roomIdInput)}
@@ -525,7 +518,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                             value={playerName}
                             onChange={(e) => setPlayerName(e.target.value)}
                             maxLength={20}
-                            className={`w-full bg-slate-950/50 border border-slate-700/60 rounded-xl px-4 py-3.5 text-lg placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all ${a.inputRing}`}
+                            className={`w-full bg-surface-0 border border-line-strong rounded-xl px-4 py-3.5 text-lg placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all ${a.inputRing}`}
                         />
                     </div>
 
@@ -533,7 +526,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                     <button
                         onClick={onCreate}
                         disabled={!playerName.trim() || isCreating || isAuthLoading}
-                        className={`w-full flex items-center justify-center gap-3 text-lg py-4 rounded-xl text-white font-bold bg-linear-to-r transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${a.createBtn}`}
+                        className={`w-full flex items-center justify-center gap-3 text-lg py-4 rounded-xl text-white font-semibold transition-colors duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${a.createBtn}`}
                     >
                         {isCreating ? <Spinner /> : <Plus size={24} />}
                         <span>{isCreating ? 'Creating Room...' : 'Create New Room'}</span>
@@ -550,7 +543,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                             onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
                             maxLength={10}
                             aria-label="Room ID"
-                            className={`flex-1 min-w-0 bg-slate-950/50 border border-slate-700/60 rounded-xl px-4 py-3.5 font-mono text-lg tracking-[0.25em] uppercase placeholder:font-sans placeholder:tracking-normal placeholder:normal-case placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all ${a.inputRing}`}
+                            className={`flex-1 min-w-0 bg-surface-0 border border-line-strong rounded-xl px-4 py-3.5 font-mono text-lg tracking-[0.25em] uppercase placeholder:font-sans placeholder:tracking-normal placeholder:normal-case placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all ${a.inputRing}`}
                         />
                         <button
                             onClick={onJoin}
@@ -600,7 +593,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                 />
 
                 {/* Room code */}
-                <div className="glass-inset p-4 sm:p-5 flex items-center justify-between gap-3">
+                <div className="surface-inset p-4 sm:p-5 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                         <p className="text-[10px] text-slate-500 uppercase tracking-[0.25em] font-black">Room ID</p>
                         <p className={`font-display text-2xl sm:text-3xl font-bold tracking-[0.2em] truncate ${a.text}`}>{room.roomId}</p>
@@ -681,14 +674,14 @@ export const Lobby: React.FC<LobbyProps> = ({
                 {isHost ? (
                     <button
                         onClick={onStart}
-                        className="w-full btn-premium flex items-center justify-center gap-3 text-lg"
+                        className="w-full btn-primary flex items-center justify-center gap-3 text-lg"
                     >
                         <Play size={22} />
                         <span>Start Game</span>
                     </button>
                 ) : (
                     <div className="flex justify-center py-2">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-glass-border bg-glass backdrop-blur-md text-sm text-slate-400">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-line bg-surface-1 text-sm text-slate-400">
                             <span className={`w-2 h-2 rounded-full animate-pulse ${a.dotStrong}`} />
                             Waiting for host to start...
                         </div>
@@ -706,15 +699,14 @@ export const Lobby: React.FC<LobbyProps> = ({
         <div className="flex flex-col items-center justify-center min-h-[85vh] gap-8 lg:gap-10 relative px-4">
             {/* Hero */}
             <header className="text-center space-y-3.5 anim-fade-up">
-                <h1 className="font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold pb-2 text-gradient-brand drop-shadow-[0_10px_40px_rgba(139,92,246,0.35)]">
+                <h1 className="font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-semibold pb-1 text-white">
                     DragMate
                 </h1>
-                <div aria-hidden className="mx-auto h-px w-44 sm:w-60 bg-linear-to-r from-transparent via-[#e9c877]/60 to-transparent" />
                 <p className="text-slate-400 text-sm sm:text-base font-medium max-w-md mx-auto">
                     Premium multiplayer board gaming — Chess, Tavla, Okey &amp; 101.
                 </p>
                 <div className="flex justify-center pt-1">
-                    <div className="glass-chip text-slate-200">
+                    <div className="chip text-slate-200">
                         <span className={`w-2 h-2 rounded-full ${!isSupported ? 'bg-slate-600' : presenceOnline ? 'bg-emerald-400 animate-glow-pulse' : 'bg-amber-400 animate-pulse'}`} />
                         {!isSupported
                             ? 'Demo Mode'
@@ -726,7 +718,7 @@ export const Lobby: React.FC<LobbyProps> = ({
             </header>
 
             {/* Step panel */}
-            <section className={`liquid-glass w-full p-5 sm:p-8 min-h-[420px] flex flex-col justify-center transition-all duration-500 ${step === 'game-select' ? 'max-w-2xl' : 'max-w-xl'}`}>
+            <section className={`surface w-full p-5 sm:p-8 min-h-[420px] flex flex-col justify-center transition-all duration-500 ${step === 'game-select' ? 'max-w-2xl' : 'max-w-xl'}`}>
                 {step === 'game-select' && renderGameSelect()}
                 {step === 'mode-select' && renderModeSelect()}
                 {step === 'difficulty-select' && renderDifficultySelect()}

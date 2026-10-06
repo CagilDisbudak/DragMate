@@ -210,7 +210,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             onDragStart={(event) => handleDragStart(event.active.id as string)}
         >
             <div
-                className="p-2.5 lg:p-4 rounded-[1.75rem] lg:rounded-[2.5rem] bg-linear-to-br from-slate-800/90 via-slate-900 to-slate-950 border border-slate-700/60 ring-1 ring-slate-950/70 shadow-[0_24px_64px_-16px_rgba(2,6,23,0.8),0_0_70px_-24px_rgba(99,102,241,0.4)]"
+                className="p-2.5 lg:p-4 rounded-[1.75rem] lg:rounded-[2.5rem] bg-surface-1 border border-line shadow-card-lg"
                 style={{ touchAction: 'none' }}
             >
                 <div
@@ -231,12 +231,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
                     {/* Board */}
                     <div
-                        className="relative grid grid-cols-8 gap-0 rounded-xl lg:rounded-2xl overflow-hidden ring-1 ring-slate-950/60 shadow-[inset_0_2px_16px_rgba(0,0,0,0.45)]"
+                        className="chess-board relative grid grid-cols-8 gap-0 rounded-xl lg:rounded-2xl overflow-hidden ring-1 ring-slate-950/60 shadow-[inset_0_2px_16px_rgba(0,0,0,0.45)]"
                         style={{
-                            // Mobilde ekrana göre, masaüstünde daha büyük tahta
-                            // (92vw eksi çerçeve + koordinat sütunu payı)
-                            width: 'min(92vw - 44px, 720px)',
-                            height: 'min(92vw - 44px, 720px)',
+                            // Sized by .chess-board against the parent .fit-box.
                             gridTemplateColumns: 'repeat(8, 1fr)'
                         }}
                     >
@@ -247,9 +244,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                             <div
                                 className="absolute inset-0 z-[70] flex items-center justify-center p-4"
                                 style={{
-                                    background: 'rgba(2, 6, 23, 0.78)',
-                                    backdropFilter: 'blur(14px)',
-                                    WebkitBackdropFilter: 'blur(14px)'
+                                    background: 'rgba(9, 9, 11, 0.82)'
                                 }}
                                 onClick={cancelPromotion}
                                 role="dialog"

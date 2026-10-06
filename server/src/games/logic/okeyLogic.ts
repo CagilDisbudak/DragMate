@@ -26,130 +26,297 @@ export interface OkeyGameState {
     winner: number | null;
 }
 
+// ---------------------------------------------------------------------------
+// Tile semantics (single source of truth for the win check, layout and bots)
+//
+// - The REAL okey (indicator + 1, same colour; 13 wraps to 1) is the wildcard:
+//   it can stand in for any tile.
+// - The SAHTE okey (isFakeOkey) is NOT wild: it plays as the okey's face value
+//   (the okey's colour and number), i.e. it replaces the two tiles that became wild.
+// - Run: same colour, consecutive, 3+ tiles. A run may continue from 13 to 1 at its
+//   END (e.g. 12-13-1, 10-11-12-13-1) but never past 1 (13-1-2 is invalid).
+// - Set: same number, 3 or 4 DIFFERENT colours.
+// ---------------------------------------------------------------------------
+
+const COLORS: OkeyColor[] = ['red', 'black', 'blue', 'yellow'];
+const COLOR_INDEX: Record<OkeyColor, number> = { red: 0, black: 1, blue: 2, yellow: 3 };
+
+/** True when the tile is the round's actual okey (the wild card). */
+export const isRealOkeyTile = (tile: OkeyTile, okeyTile: OkeyTile | null): boolean =>
+    !tile.isFakeOkey && okeyTile !== null && tile.color === okeyTile.color && tile.value === okeyTile.value;
+
+/** Face a non-wild tile plays as: sahte okeys play as the okey's colour + number. */
+const effectiveTile = (tile: OkeyTile, okeyTile: OkeyTile | null): { value: number; color: OkeyColor | null } =>
+    tile.isFakeOkey
+        ? { value: okeyTile?.value ?? 1, color: okeyTile?.color ?? 'red' }
+        : { value: tile.value, color: tile.color };
+
+/** counts[colourIndex][value] (value 1..13) of the NON-wild tiles, by effective face. */
+type Counts = number[][];
+
+/** One tile position in a meld: a colour/value role, filled by a real tile or a wildcard. */
+interface MeldRole { color: number; value: number; wild: boolean }
+type Meld = { kind: 'run' | 'set'; roles: MeldRole[] };
+
+interface HandAnalysis {
+    counts: Counts;
+    wild: number;
+    /** Tiles that can never be part of a meld (e.g. hidden placeholders). */
+    invalid: number;
+}
+
+const analyseTiles = (tiles: OkeyTile[], okeyTile: OkeyTile | null): HandAnalysis => {
+    const counts: Counts = COLORS.map(() => new Array(14).fill(0));
+    let wild = 0;
+    let invalid = 0;
+    for (const t of tiles) {
+        if (isRealOkeyTile(t, okeyTile)) { wild++; continue; }
+        const e = effectiveTile(t, okeyTile);
+        if (!e.color || e.value < 1 || e.value > 13) { invalid++; continue; }
+        counts[COLOR_INDEX[e.color]][e.value]++;
+    }
+    return { counts, wild, invalid };
+};
+
+const countsKey = (counts: Counts, wild: number): string => {
+    // Each row as a base-16 number (a face never has more than a handful of copies).
+    let key = '';
+    for (let c = 0; c < 4; c++) {
+        let n = 0;
+        const row = counts[c];
+        for (let v = 13; v >= 1; v--) n = n * 16 + row[v];
+        key += n.toString(36) + ',';
+    }
+    return key + wild;
+};
+
+/** First remaining non-wild tile in (colour, value) order, or null when none remain. */
+const firstTile = (counts: Counts): [number, number] | null => {
+    for (let c = 0; c < 4; c++) {
+        const row = counts[c];
+        for (let v = 1; v <= 13; v++) if (row[v] > 0) return [c, v];
+    }
+    return null;
+};
+
+const range = (a: number, b: number): number[] => {
+    const r: number[] = [];
+    for (let i = a; i <= b; i++) r.push(i);
+    return r;
+};
+
 /**
- * Validates if the hand is a winning hand (14 tiles in valid sets/runs).
+ * All run value-sequences that can contain the tile (c, v), where (c, v) is the
+ * LOWEST remaining tile of colour c (so every value below v in colour c must be
+ * a wildcard) and at most `wild` wildcards are available. Wrap runs end with 1.
+ */
+const runsContaining = (counts: Counts, c: number, v: number, wild: number): number[][] => {
+    const row = counts[c];
+    const out: number[][] = [];
+    // Plain runs s..e with s <= v <= e.
+    for (let s = Math.max(1, v - wild); s <= v; s++) {
+        let need = v - s; // wildcards standing in for s..v-1
+        if (v - s + 1 >= 3) out.push(range(s, v));
+        for (let e = v + 1; e <= 13; e++) {
+            if (row[e] === 0) need++;
+            if (need > wild) break;
+            if (e - s + 1 >= 3) out.push(range(s, e));
+        }
+    }
+    // Wrap runs s..13 followed by 1 (s >= 2 so 1 never appears twice).
+    if (v === 1) {
+        // (c, 1) is the trailing 1; positions s..13 are real or wild.
+        let need = 0;
+        for (let s = 13; s >= 2; s--) {
+            if (row[s] === 0) need++;
+            if (need > wild) break;
+            if (13 - s + 2 >= 3) out.push([...range(s, 13), 1]);
+        }
+    } else {
+        // No real (c, 1) remains (v is the lowest), so the trailing 1 is a wildcard.
+        let above = 0;
+        for (let u = v + 1; u <= 13; u++) if (row[u] === 0) above++;
+        for (let s = Math.max(2, v - wild); s <= v; s++) {
+            const need = 1 + (v - s) + above;
+            if (need <= wild && 13 - s + 2 >= 3) out.push([...range(s, 13), 1]);
+        }
+    }
+    return out;
+};
+
+/**
+ * Apply a meld containing the first tile (c, v): real tiles where available,
+ * wildcards elsewhere. Returns the roles and the number of wildcards used, or
+ * null if it needs more wildcards than available. Mutates `counts` (caller undoes).
+ */
+const takeRun = (counts: Counts, c: number, v: number, values: number[], wild: number): { roles: MeldRole[]; need: number } | null => {
+    const roles: MeldRole[] = [];
+    let need = 0;
+    let firstPlaced = false;
+    for (const u of values) {
+        if (u === v && !firstPlaced) {
+            firstPlaced = true;
+            counts[c][u]--;
+            roles.push({ color: c, value: u, wild: false });
+        } else if (counts[c][u] > 0) {
+            counts[c][u]--;
+            roles.push({ color: c, value: u, wild: false });
+        } else {
+            need++;
+            roles.push({ color: c, value: u, wild: true });
+        }
+    }
+    if (need > wild) { undoRoles(counts, roles); return null; }
+    return { roles, need };
+};
+
+const takeSet = (counts: Counts, c: number, v: number, otherColors: number[], wild: number): { roles: MeldRole[]; need: number } | null => {
+    const roles: MeldRole[] = [{ color: c, value: v, wild: false }];
+    counts[c][v]--;
+    let need = 0;
+    for (const oc of otherColors) {
+        if (counts[oc][v] > 0) { counts[oc][v]--; roles.push({ color: oc, value: v, wild: false }); }
+        else { need++; roles.push({ color: oc, value: v, wild: true }); }
+    }
+    if (need > wild) { undoRoles(counts, roles); return null; }
+    return { roles, need };
+};
+
+const undoRoles = (counts: Counts, roles: MeldRole[]) => {
+    for (const r of roles) if (!r.wild) counts[r.color][r.value]++;
+};
+
+/** The 7 non-empty subsets of the three colours other than c. */
+const otherColorSubsets = (c: number): number[][] => {
+    const others = [0, 1, 2, 3].filter(x => x !== c);
+    const subsets: number[][] = [];
+    for (let mask = 1; mask < 8; mask++) subsets.push(others.filter((_, i) => mask & (1 << i)));
+    return subsets;
+};
+
+/**
+ * Exact solver: partitions ALL non-wild tiles and ALL wildcards into valid melds.
+ * Returns the melds, or null when no partition exists. `failed` memoises dead ends.
+ */
+const exactPartition = (counts: Counts, wild: number, failed: Set<string>): Meld[] | null => {
+    const first = firstTile(counts);
+    if (!first) return wild === 0 ? [] : null; // spare wildcards must sit inside a meld
+    const key = countsKey(counts, wild);
+    if (failed.has(key)) return null;
+    const [c, v] = first;
+
+    for (const values of runsContaining(counts, c, v, wild)) {
+        const r = takeRun(counts, c, v, values, wild);
+        if (!r) continue;
+        const rest = exactPartition(counts, wild - r.need, failed);
+        undoRoles(counts, r.roles);
+        if (rest) return [{ kind: 'run', roles: r.roles }, ...rest];
+    }
+    for (const subset of otherColorSubsets(c)) {
+        if (subset.length < 2) continue;
+        const r = takeSet(counts, c, v, subset, wild);
+        if (!r) continue;
+        const rest = exactPartition(counts, wild - r.need, failed);
+        undoRoles(counts, r.roles);
+        if (rest) return [{ kind: 'set', roles: r.roles }, ...rest];
+    }
+    failed.add(key);
+    return null;
+};
+
+interface CoverResult { score: number; meld: Meld | null; need: number; skip: boolean }
+
+/**
+ * Best partial partition: maximises 10 x (real tiles in melds) + (wildcards in melds),
+ * leaving the rest ungrouped. Melds are canonical (a wildcard sits on a run end only
+ * in a 3-tile run; 4-tile sets are all real) — spare wildcards are attached afterwards.
+ */
+const bestCover = (counts: Counts, wild: number, memo: Map<string, CoverResult>): number => {
+    const first = firstTile(counts);
+    if (!first) return 0;
+    const key = countsKey(counts, wild);
+    const hit = memo.get(key);
+    if (hit) return hit.score;
+    const [c, v] = first;
+
+    // Option: leave this tile ungrouped.
+    counts[c][v]--;
+    let best: CoverResult = { score: bestCover(counts, wild, memo), meld: null, need: 0, skip: true };
+    counts[c][v]++;
+
+    for (const values of runsContaining(counts, c, v, wild)) {
+        const r = takeRun(counts, c, v, values, wild);
+        if (!r) continue;
+        const roles = r.roles;
+        const canonical = roles.length === 3 || (!roles[0].wild && !roles[roles.length - 1].wild);
+        if (canonical) {
+            const score = 10 * (roles.length - r.need) + r.need + bestCover(counts, wild - r.need, memo);
+            if (score > best.score) best = { score, meld: { kind: 'run', roles }, need: r.need, skip: false };
+        }
+        undoRoles(counts, roles);
+    }
+    for (const subset of otherColorSubsets(c)) {
+        if (subset.length < 2) continue;
+        const r = takeSet(counts, c, v, subset, wild);
+        if (!r) continue;
+        if (r.roles.length === 3 || r.need === 0) {
+            const score = 10 * (r.roles.length - r.need) + r.need + bestCover(counts, wild - r.need, memo);
+            if (score > best.score) best = { score, meld: { kind: 'set', roles: r.roles }, need: r.need, skip: false };
+        }
+        undoRoles(counts, r.roles);
+    }
+    memo.set(key, best);
+    return best.score;
+};
+
+/** Reconstruct the melds chosen by bestCover (mutates a copy of counts). */
+const coverPartition = (counts: Counts, wild: number): Meld[] => {
+    const memo = new Map<string, CoverResult>();
+    bestCover(counts, wild, memo);
+    const melds: Meld[] = [];
+    let w = wild;
+    for (;;) {
+        const first = firstTile(counts);
+        if (!first) break;
+        const choice = memo.get(countsKey(counts, w));
+        if (!choice || choice.skip || !choice.meld) {
+            counts[first[0]][first[1]]--; // ungrouped
+            continue;
+        }
+        for (const r of choice.meld.roles) if (!r.wild) counts[r.color][r.value]--;
+        w -= choice.need;
+        melds.push(choice.meld);
+    }
+    return melds;
+};
+
+const cloneCounts = (counts: Counts): Counts => counts.map(r => [...r]);
+
+/**
+ * Validates if the hand is a winning hand: exactly 14 tiles, all of them in valid
+ * runs/sets (see the semantics block above). Rack positions/gaps are not required.
  */
 export const isWinningHand = (tiles: (OkeyTile | null)[], okeyTile: OkeyTile | null): boolean => {
     const actualTiles = tiles.filter((t): t is OkeyTile => t !== null);
     if (actualTiles.length !== 14) return false;
-
-    const wildcards: OkeyTile[] = [];
-    const normals: OkeyTile[] = [];
-
-    actualTiles.forEach(t => {
-        const isRealOkey = !t.isFakeOkey && okeyTile && t.color === okeyTile.color && t.value === okeyTile.value;
-        if (isRealOkey) {
-            wildcards.push(t);
-        } else {
-            if (t.isFakeOkey) {
-                normals.push({ ...t, value: okeyTile?.value || 1, color: okeyTile?.color || 'red', isFakeOkey: false });
-            } else {
-                normals.push(t);
-            }
-        }
-    });
-
-    normals.sort((a, b) => {
-        if (a.color !== b.color) return a.color!.localeCompare(b.color!);
-        return a.value - b.value;
-    });
-
-    return checkRecursive(normals, wildcards.length);
+    // A rack holding the same physical tile twice is corrupt, never a win.
+    if (new Set(actualTiles.map(t => t.id)).size !== actualTiles.length) return false;
+    const a = analyseTiles(actualTiles, okeyTile);
+    if (a.invalid > 0) return false;
+    return exactPartition(a.counts, a.wild, new Set()) !== null;
 };
 
-const checkRecursive = (remainingTiles: OkeyTile[], wildcardCount: number): boolean => {
-    if (remainingTiles.length === 0) return true;
-
-    const first = remainingTiles[0];
-
-    // OPTION 1: Run (same color, consecutive)
-    const sameColorTiles = remainingTiles.filter(t => t.color === first.color);
-
-    for (let size = 3; size <= 13; size++) {
-        const expectedValues = [];
-        let valid = true;
-        for (let i = 0; i < size; i++) {
-            const v = first.value + i;
-            if (v > 13) { valid = false; break; }
-            expectedValues.push(v);
-        }
-        if (!valid) break;
-
-        const consumed: OkeyTile[] = [];
-        let missing = 0;
-        let tempColorTiles = [...sameColorTiles];
-        for (const v of expectedValues) {
-            const idx = tempColorTiles.findIndex(t => t.value === v);
-            if (idx !== -1) {
-                consumed.push(tempColorTiles[idx]);
-                tempColorTiles.splice(idx, 1);
-            } else {
-                missing++;
-            }
-        }
-
-        if (missing <= wildcardCount) {
-            const consumedIds = consumed.map(c => c.id);
-            const nextRemaining = remainingTiles.filter(t => !consumedIds.includes(t.id));
-            if (checkRecursive(nextRemaining, wildcardCount - missing)) return true;
-        }
-    }
-
-    // Wrap-around Run (if first is '1')
-    if (first.value === 1) {
-        for (let size = 3; size <= 4; size++) {
-            const expectedValues = [];
-            for (let v = 13 - (size - 2); v <= 13; v++) expectedValues.push(v);
-            expectedValues.push(1);
-
-            const consumed: OkeyTile[] = [];
-            let missing = 0;
-            let tempColorTiles = [...sameColorTiles];
-            for (const v of expectedValues) {
-                const idx = tempColorTiles.findIndex(t => t.value === v);
-                if (idx !== -1) {
-                    consumed.push(tempColorTiles[idx]);
-                    tempColorTiles.splice(idx, 1);
-                } else {
-                    missing++;
-                }
-            }
-            if (missing <= wildcardCount) {
-                const consumedIds = consumed.map(c => c.id);
-                const nextRemaining = remainingTiles.filter(t => !consumedIds.includes(t.id));
-                if (checkRecursive(nextRemaining, wildcardCount - missing)) return true;
-            }
-        }
-    }
-
-    // OPTION 2: Set (same value, different colors)
-    const sameValueTiles = remainingTiles.filter(t => t.value === first.value);
-    const uniqueColorTiles: OkeyTile[] = [];
-    const colorsFound = new Set();
-    for (const t of sameValueTiles) {
-        if (!colorsFound.has(t.color)) {
-            colorsFound.add(t.color);
-            uniqueColorTiles.push(t);
-        }
-    }
-
-    for (let size = 3; size <= 4; size++) {
-        const possibleRealTiles = uniqueColorTiles.slice(0, Math.min(size, uniqueColorTiles.length));
-        const missing = size - possibleRealTiles.length;
-        if (missing >= 0 && missing <= wildcardCount) {
-            const consumedIds = possibleRealTiles.map(p => p.id);
-            const nextRemaining = remainingTiles.filter(t => !consumedIds.includes(t.id));
-            if (checkRecursive(nextRemaining, wildcardCount - missing)) return true;
-        }
-    }
-
-    return false;
+/** Number of real (non-wild) tiles in the best meld partition — a hand-quality measure. */
+export const countMeldedTiles = (tiles: (OkeyTile | null)[], okeyTile: OkeyTile | null): number => {
+    const actual = tiles.filter((t): t is OkeyTile => t !== null);
+    const a = analyseTiles(actual, okeyTile);
+    const memo = new Map<string, CoverResult>();
+    return Math.floor(bestCover(a.counts, a.wild, memo) / 10);
 };
 
 // Helpers
-const COLORS: OkeyColor[] = ['red', 'black', 'blue', 'yellow'];
 
-// A tile that may carry display-only metadata when a joker stands in for a real tile.
+// A tile that may carry display-only metadata (kept for backward compatibility).
 export interface DisplayOkeyTile extends OkeyTile {
     displayValue?: number;
     displayColor?: string;
@@ -160,193 +327,168 @@ const COLOR_ORDER: Record<string, number> = { red: 0, black: 1, blue: 2, yellow:
 
 /**
  * Arranges a collection of tiles into a clean, readable rack layout.
- * - Detects complete runs (same color, consecutive) and sets (same value, different colors).
- * - Uses jokers (fake okeys) to complete near-miss runs/sets.
- * - Groups are placed on the top shelf (slots 0..14) separated by a gap.
- * - Leftover (ungrouped) tiles are sorted by color & value and placed on the
- *   bottom shelf (slots 15..29).
+ * - Finds the best partition into runs/sets using the SAME semantics as the win
+ *   check (real okey = wildcard, sahte okey = the okey's face value). If the tiles
+ *   (or, for 15 tiles, all but one of them) form a winning hand, that exact
+ *   partition is shown and the spare tile is left on the bottom shelf.
+ * - Unused okeys go first on the top shelf, then melds separated by a gap; melds
+ *   that do not fit move to the bottom shelf, followed by the ungrouped tiles
+ *   sorted by colour and value.
+ * - Every input tile appears exactly once in the output (duplicate references of
+ *   the same tile id are collapsed); nothing is ever dropped.
  *
- * Pure & reusable: used both for the initial deal and the "Düzenle" auto-sort button,
- * so a freshly dealt hand already looks organized in both single & multiplayer.
+ * Pure & reusable: used for the initial deal and the "Düzenle" auto-sort button.
  */
 export const arrangeTiles = (
     inputTiles: (OkeyTile | null)[],
     okeyTile: OkeyTile | null
 ): (DisplayOkeyTile | null)[] => {
-    const originalTiles = inputTiles.filter((t): t is OkeyTile => t !== null) as DisplayOkeyTile[];
+    // Unique tiles in input order.
+    const seen = new Set<string>();
+    const tiles: OkeyTile[] = [];
+    for (const t of inputTiles) {
+        if (t && !seen.has(t.id)) { seen.add(t.id); tiles.push(t); }
+    }
 
-    // Separate joker tiles (pure wild fake okeys) from tiles usable by value.
-    const jokerPool: DisplayOkeyTile[] = [...originalTiles.filter(t => t.isFakeOkey)];
-    const okeyValueTiles = originalTiles.filter(
-        t => !t.isFakeOkey && okeyTile && t.color === okeyTile.color && t.value === okeyTile.value
-    );
-    const normalTiles = originalTiles.filter(
-        t => !t.isFakeOkey && !(okeyTile && t.color === okeyTile.color && t.value === okeyTile.value)
-    );
+    const wildTiles = tiles.filter(t => isRealOkeyTile(t, okeyTile));
+    const placeable = tiles.filter(t => !isRealOkeyTile(t, okeyTile));
+    const faceOf = (t: OkeyTile) => effectiveTile(t, okeyTile);
+    const isValidFace = (t: OkeyTile) => { const e = faceOf(t); return !!e.color && e.value >= 1 && e.value <= 13; };
 
-    // Okey-value tiles can be used both as jokers and by their actual value;
-    // try to use them by value first.
-    const tilesForRuns: DisplayOkeyTile[] = [...normalTiles, ...okeyValueTiles];
+    const a = analyseTiles(tiles, okeyTile);
 
-    const groups: DisplayOkeyTile[][] = [];
-    const remaining = [...tilesForRuns];
-    const colors: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
-
-    const createJokerPlaceholder = (joker: DisplayOkeyTile, forValue: number, forColor: string): DisplayOkeyTile => ({
-        ...joker,
-        displayValue: forValue,
-        displayColor: forColor,
-        isJokerPlaceholder: true,
-    });
-
-    // 1. First pass: complete runs (3+ consecutive, same color) without jokers.
-    colors.forEach(color => {
-        let sameColor = remaining.filter(t => t.color === color).sort((a, b) => a.value - b.value);
-        let i = 0;
-        while (i < sameColor.length) {
-            const currentRun: DisplayOkeyTile[] = [sameColor[i]];
-            let nextVal = sameColor[i].value + 1;
-            let j = i + 1;
-
-            while (j < sameColor.length) {
-                if (sameColor[j].value === nextVal) {
-                    currentRun.push(sameColor[j]);
-                    nextVal++;
-                    j++;
-                } else if (sameColor[j].value < nextVal) {
-                    j++;
-                } else {
-                    break;
-                }
-            }
-
-            // Special case: wrap around 13-1.
-            if (currentRun[currentRun.length - 1].value === 13) {
-                const oneTile = sameColor.find(t => t.value === 1);
-                if (oneTile && !currentRun.find(rt => rt.id === oneTile.id)) {
-                    currentRun.push(oneTile);
-                }
-            }
-
-            if (currentRun.length >= 3) {
-                groups.push([...currentRun]);
-                currentRun.forEach(t => {
-                    const idx = remaining.findIndex(r => r.id === t.id);
-                    if (idx !== -1) remaining.splice(idx, 1);
-                });
-                sameColor = remaining.filter(t => t.color === color).sort((a, b) => a.value - b.value);
-                i = 0;
-            } else {
-                i++;
-            }
+    // 1) Exact partition of the whole hand, or of the hand minus one tile. In that
+    //    case every okey is already inside a meld (or is the single spare tile).
+    let melds: Meld[] | null = null;
+    if (a.invalid === 0 && tiles.length === 14) {
+        melds = exactPartition(cloneCounts(a.counts), a.wild, new Set());
+    } else if (a.invalid === 0 && tiles.length === 15) {
+        const tried = new Set<string>();
+        for (const t of [...placeable].reverse()) {
+            const e = faceOf(t);
+            const k = `${e.color}-${e.value}`;
+            if (tried.has(k)) continue;
+            tried.add(k);
+            const counts = cloneCounts(a.counts);
+            counts[COLOR_INDEX[e.color as OkeyColor]][e.value]--;
+            melds = exactPartition(counts, a.wild, new Set());
+            if (melds) break;
         }
-    });
+        if (!melds && a.wild > 0) melds = exactPartition(cloneCounts(a.counts), a.wild - 1, new Set());
+    }
+    const exact = melds !== null;
+    // 2) Otherwise the best partial partition.
+    if (!melds) melds = coverPartition(cloneCounts(a.counts), a.wild);
 
-    // 2. First pass: complete sets (3+ same value, different colors) without jokers.
-    for (let val = 1; val <= 13; val++) {
-        const sameValue = remaining.filter(t => t.value === val);
-        const uniqueColors = Array.from(new Set(sameValue.map(t => t.color)));
-        if (uniqueColors.length >= 3) {
-            const set = uniqueColors.map(c => sameValue.find(t => t.color === c)!) as DisplayOkeyTile[];
-            groups.push(set);
-            set.forEach(t => {
-                const idx = remaining.findIndex(r => r.id === t.id);
-                if (idx !== -1) remaining.splice(idx, 1);
-            });
+    // Assign physical tiles to roles.
+    const pools = new Map<string, OkeyTile[]>();
+    for (const t of placeable) {
+        if (!isValidFace(t)) continue;
+        const e = faceOf(t);
+        const k = `${COLOR_INDEX[e.color as OkeyColor]}-${e.value}`;
+        if (!pools.has(k)) pools.set(k, []);
+        pools.get(k)!.push(t);
+    }
+    const wildPool = [...wildTiles];
+    const used = new Set<string>();
+    const groups: { g: OkeyTile[]; m: Meld }[] = [];
+    for (const m of melds) {
+        const g: OkeyTile[] = [];
+        for (const r of m.roles) {
+            const t = r.wild ? wildPool.shift() : pools.get(`${r.color}-${r.value}`)?.shift();
+            if (t) { g.push(t); used.add(t.id); }
+        }
+        if (g.length) groups.push({ g, m: { kind: m.kind, roles: [...m.roles] } });
+    }
+
+    // Partial layouts only: attach spare okeys to melds that can grow (visual only).
+    const tryGrow = ({ g, m }: { g: OkeyTile[]; m: Meld }, w: OkeyTile): boolean => {
+        if (m.kind === 'set') {
+            if (g.length >= 4) return false;
+            const taken = new Set(m.roles.map(r => r.color));
+            const missing = [0, 1, 2, 3].find(c => !taken.has(c))!;
+            g.push(w);
+            m.roles.push({ color: missing, value: m.roles[0].value, wild: true });
+            return true;
+        }
+        const color = m.roles[0].color;
+        const firstVal = m.roles[0].value;
+        const lastVal = m.roles[m.roles.length - 1].value;
+        const wrapped = lastVal === 1;
+        if (!wrapped && lastVal < 13) {
+            g.push(w);
+            m.roles.push({ color, value: lastVal + 1, wild: true });
+            return true;
+        }
+        if (firstVal > (wrapped ? 2 : 1)) {
+            g.unshift(w);
+            m.roles.unshift({ color, value: firstVal - 1, wild: true });
+            return true;
+        }
+        return false;
+    };
+    if (!exact) {
+        for (const w of [...wildPool]) {
+            if (groups.some(grp => tryGrow(grp, w))) {
+                used.add(w.id);
+                wildPool.splice(wildPool.indexOf(w), 1);
+            }
         }
     }
 
-    // 3. Use jokers to complete 2-tile runs (need 1 joker to make 3).
-    colors.forEach(color => {
-        if (jokerPool.length === 0) return;
-        const sameColor = remaining.filter(t => t.color === color).sort((a, b) => a.value - b.value);
-
-        for (let i = 0; i < sameColor.length - 1 && jokerPool.length > 0; i++) {
-            const tile1 = sameColor[i];
-            const tile2 = sameColor[i + 1];
-
-            // Consecutive (e.g. 5-6, joker as 4 or 7).
-            if (tile2.value === tile1.value + 1) {
-                const joker = jokerPool.shift()!;
-                if (tile2.value < 13) {
-                    groups.push([tile1, tile2, createJokerPlaceholder(joker, tile2.value + 1, color)]);
-                } else if (tile1.value > 1) {
-                    groups.push([createJokerPlaceholder(joker, tile1.value - 1, color), tile1, tile2]);
-                } else {
-                    groups.push([tile1, tile2, createJokerPlaceholder(joker, 3, color)]);
-                }
-                [tile1, tile2].forEach(t => {
-                    const idx = remaining.findIndex(r => r.id === t.id);
-                    if (idx !== -1) remaining.splice(idx, 1);
-                });
-                i = -1; // restart scan
-            }
-            // Gap of 1 (e.g. 5-7, joker as 6).
-            else if (tile2.value === tile1.value + 2 && jokerPool.length > 0) {
-                const joker = jokerPool.shift()!;
-                groups.push([tile1, createJokerPlaceholder(joker, tile1.value + 1, color), tile2]);
-                [tile1, tile2].forEach(t => {
-                    const idx = remaining.findIndex(r => r.id === t.id);
-                    if (idx !== -1) remaining.splice(idx, 1);
-                });
-                i = -1;
-            }
-        }
+    // Order melds: runs by colour then start, then sets by value.
+    groups.sort((x, y) => {
+        if (x.m.kind !== y.m.kind) return x.m.kind === 'run' ? -1 : 1;
+        if (x.m.kind === 'run') return x.m.roles[0].color - y.m.roles[0].color || x.m.roles[0].value - y.m.roles[0].value;
+        return x.m.roles[0].value - y.m.roles[0].value;
     });
 
-    // 4. Use jokers to complete 2-tile sets (same value, 2 different colors).
-    for (let val = 1; val <= 13 && jokerPool.length > 0; val++) {
-        const sameValue = remaining.filter(t => t.value === val);
-        const uniqueColors = Array.from(new Set(sameValue.map(t => t.color)));
-
-        if (uniqueColors.length === 2) {
-            const joker = jokerPool.shift()!;
-            const missingColor = colors.find(c => !uniqueColors.includes(c))!;
-            const jokerTile = createJokerPlaceholder(joker, val, missingColor);
-            const set = [...uniqueColors.map(c => sameValue.find(t => t.color === c)!), jokerTile] as DisplayOkeyTile[];
-            groups.push(set);
-            set.forEach(t => {
-                if (!t.isJokerPlaceholder) {
-                    const idx = remaining.findIndex(r => r.id === t.id);
-                    if (idx !== -1) remaining.splice(idx, 1);
-                }
-            });
-        }
-    }
-
-    // Sort leftovers by color then value for a tidy bottom shelf.
-    remaining.sort((a, b) => {
-        const ca = COLOR_ORDER[a.color ?? ''] ?? 99;
-        const cb = COLOR_ORDER[b.color ?? ''] ?? 99;
-        if (ca !== cb) return ca - cb;
-        return a.value - b.value;
+    const spareWilds = tiles.filter(t => isRealOkeyTile(t, okeyTile) && !used.has(t.id));
+    spareWilds.forEach(t => used.add(t.id));
+    const leftovers = tiles.filter(t => !used.has(t.id));
+    leftovers.sort((x, y) => {
+        const ex = faceOf(x), ey = faceOf(y);
+        const cx = COLOR_ORDER[ex.color ?? ''] ?? 99;
+        const cy = COLOR_ORDER[ey.color ?? ''] ?? 99;
+        if (cx !== cy) return cx - cy;
+        return ex.value - ey.value;
     });
 
-    // Construct the new rack.
+    // Construct the rack.
     const TOP_SHELF = RACK_SIZE / 2; // 15
     const newRack: (DisplayOkeyTile | null)[] = new Array(RACK_SIZE).fill(null);
-    let currentPos = 0;
+    const placed = new Set<string>();
+    const put = (t: OkeyTile, pos: number) => { newRack[pos] = t; placed.add(t.id); };
 
-    // Place any unused jokers first.
-    jokerPool.forEach(t => {
-        if (currentPos < RACK_SIZE) newRack[currentPos++] = t;
-    });
-    if (jokerPool.length > 0) currentPos++; // gap after jokers
-
-    // Place groups, separated by a gap.
-    groups.forEach(group => {
-        group.forEach(t => {
-            if (currentPos < RACK_SIZE) newRack[currentPos++] = t;
-        });
-        currentPos++; // gap between groups
-    });
-
-    // Place leftover tiles on the bottom shelf.
-    let remainingPos = TOP_SHELF;
-    while (remainingPos < RACK_SIZE && newRack[remainingPos] !== null) remainingPos++;
-    remaining.forEach(t => {
-        if (remainingPos < RACK_SIZE) newRack[remainingPos++] = t;
-    });
+    let top = 0;
+    spareWilds.forEach(t => { if (top < TOP_SHELF) put(t, top++); });
+    if (spareWilds.length > 0) top++;
+    let bottom = TOP_SHELF;
+    const bottomGroups: OkeyTile[][] = [];
+    for (const { g } of groups) {
+        if (top + g.length <= TOP_SHELF) {
+            g.forEach(t => put(t, top++));
+            top++; // gap between groups
+        } else {
+            bottomGroups.push(g);
+        }
+    }
+    for (const g of bottomGroups) {
+        if (bottom + g.length > RACK_SIZE) break;
+        g.forEach(t => put(t, bottom++));
+        bottom++;
+    }
+    for (const t of leftovers) {
+        if (bottom >= RACK_SIZE) break;
+        put(t, bottom++);
+    }
+    // Safety net: anything not yet placed goes into the first free slot (never dropped).
+    for (const t of tiles) {
+        if (placed.has(t.id)) continue;
+        const free = newRack.indexOf(null);
+        if (free !== -1) put(t, free);
+        else { newRack.push(t); placed.add(t.id); }
+    }
 
     return newRack;
 };
@@ -391,8 +533,8 @@ export const shuffleDeck = (deck: OkeyTile[]): OkeyTile[] => {
  */
 export const determineOkey = (indicator: OkeyTile): OkeyTile => {
     if (indicator.isFakeOkey || !indicator.color) {
-        // Should be rare/impossible if indicator drawn from numbered tiles, 
-        // but fallback to Red 1 just in case
+        // initializeOkeyGame never picks a sahte okey as indicator; this fallback only
+        // protects other callers (e.g. 101) from malformed input.
         return { id: 'virtual-okey', value: 1, color: 'red' };
     }
 
@@ -403,28 +545,22 @@ export const determineOkey = (indicator: OkeyTile): OkeyTile => {
 /**
  * Initializes a new game.
  * - Shuffles
- * - Picks indicator
+ * - Picks the indicator (never a sahte okey)
  * - Distributes 15 tiles to starter, 14 to others
  * - Remainder goes to center
  */
 export const initializeOkeyGame = (): OkeyGameState => {
-    let deck = shuffleDeck(createOkeyDeck());
+    const deck = shuffleDeck(createOkeyDeck());
 
-    // Pick indicator (usually from end or random, let's pop random for simplicity logic)
-    // In real Okey, distribution is complex (stacks of 5).
-    // Simplified: Pop one for indicator.
-    const indicator = deck.pop()!;
+    // Indicator: the last numbered tile of the shuffled deck (uniform over numbered
+    // tiles). A sahte okey has no "one above", so it can never be the indicator.
+    let indicatorIdx = deck.length - 1;
+    while (indicatorIdx > 0 && deck[indicatorIdx].isFakeOkey) indicatorIdx--;
+    const indicator = deck.splice(indicatorIdx, 1)[0];
 
-    // Determine ACTUAL Okey (virtual tile def)
+    // The okey definition (virtual tile): both tiles with this colour+value are wild;
+    // the sahte okeys play as this colour+value.
     const okeyDef = determineOkey(indicator);
-
-    // Note: We don't put the okey definition back in deck, 
-    // we just know conceptually that 'Red 5' is now wild.
-
-    // Logic fix: The "False Okeys" in the deck act as the 'okeyDef' tile.
-    // The 'okeyDef' tiles in the deck act as Wild Cards.
-    // We don't perform this swap in data structure here, visual layer handles logic usually,
-    // OR we can mark them. For simplicity, we just store `okeyTile` in state for check checks.
 
     // Distribute
     // Player 0 (User) starts -> 15 tiles
@@ -465,16 +601,6 @@ export const initializeOkeyGame = (): OkeyGameState => {
 
 export type BotDifficulty = 'Easy' | 'Normal' | 'Hard';
 
-/** True when the tile is the round's actual okey (the wild card). */
-const isRealOkeyTile = (tile: OkeyTile, okeyTile: OkeyTile | null): boolean =>
-    !tile.isFakeOkey && okeyTile !== null && tile.color === okeyTile.color && tile.value === okeyTile.value;
-
-/** Fake okeys play as the round's okey tile; everything else plays as itself. */
-const effectiveTile = (tile: OkeyTile, okeyTile: OkeyTile | null): { value: number; color: OkeyColor | null } =>
-    tile.isFakeOkey && okeyTile
-        ? { value: okeyTile.value, color: okeyTile.color }
-        : { value: tile.value, color: tile.color };
-
 /** Circular distance between tile values (1 neighbours 13 via the 12-13-1 wrap). */
 const valueDistance = (a: number, b: number): number => {
     const d = Math.abs(a - b);
@@ -493,7 +619,8 @@ const hashTileId = (id: string): number => {
  * - run potential: same-colour neighbours at ±1 (strong) / ±2 (weak),
  * - set potential: same value in other colours,
  * - pair: an exact duplicate already held (only 2 of each exist, so capped at one),
- * - the round's okey (wild) and fake okeys are maximally valuable.
+ * - the round's okey (wild) is maximally valuable; a sahte okey is scored as the
+ *   okey's face value like any other tile.
  */
 export const scoreTileUsefulness = (
     tile: OkeyTile,
@@ -501,7 +628,6 @@ export const scoreTileUsefulness = (
     okeyTile: OkeyTile | null
 ): number => {
     if (isRealOkeyTile(tile, okeyTile)) return 1000;
-    if (tile.isFakeOkey) return 900;
 
     const self = effectiveTile(tile, okeyTile);
     if (self.color === null) return 0;
@@ -532,11 +658,19 @@ export const scoreTileUsefulness = (
     return score;
 };
 
+/** Hand quality used by the draw decision: melded tiles first, usefulness second. */
+const handQuality = (tiles: OkeyTile[], okeyTile: OkeyTile | null): number => {
+    let usefulness = 0;
+    for (const t of tiles) usefulness += scoreTileUsefulness(t, tiles, okeyTile);
+    return countMeldedTiles(tiles, okeyTile) * 100000 + usefulness;
+};
+
 /**
- * Where should the bot draw from? Takes the previous player's discard only when
- * that tile immediately completes/extends a meld or strong pair structure
- * (usefulness >= 6, i.e. at least two run/set connections); otherwise the
- * unknown centre draw is preferred. Wilds on the pile are always taken.
+ * Where should the bot draw from? It takes the previous player's discard only when
+ * (a) that tile lets it finish right now, or (b) after taking it and throwing its
+ * least useful OTHER tile the hand is strictly better than before. A tile it would
+ * throw straight back is never taken. Because every discard pick strictly improves
+ * the taker's own hand, bots can never loop forever passing tiles around.
  */
 export const chooseBotDraw = (
     hand14: (OkeyTile | null)[],
@@ -544,23 +678,32 @@ export const chooseBotDraw = (
     okeyTile: OkeyTile | null
 ): 'center' | 'discard' => {
     if (!prevDiscardTop) return 'center';
-    return scoreTileUsefulness(prevDiscardTop, hand14, okeyTile) >= 6 ? 'discard' : 'center';
+    const hand = hand14.filter((t): t is OkeyTile => t !== null);
+    const hand15 = [...hand, prevDiscardTop];
+    if (chooseBotFinish(hand15, okeyTile, prevDiscardTop.id) !== -1) return 'discard';
+    const d = chooseBotDiscard(hand15, okeyTile, 'Normal', Math.random, prevDiscardTop.id);
+    if (d === -1 || hand15[d].id === prevDiscardTop.id) return 'center';
+    const after = hand15.filter((_, i) => i !== d);
+    return handQuality(after, okeyTile) > handQuality(hand, okeyTile) ? 'discard' : 'center';
 };
 
 /**
  * If discarding a single tile leaves a winning 14-tile hand, return that tile's
  * rack index (the bot should finish). Returns -1 when no winning discard exists.
+ * `avoidTileId` (the tile just taken from the discard pile) is never used as the
+ * finishing discard.
  */
 export const chooseBotFinish = (
     hand15: (OkeyTile | null)[],
-    okeyTile: OkeyTile | null
+    okeyTile: OkeyTile | null,
+    avoidTileId?: string
 ): number => {
     if (hand15.filter(t => t !== null).length !== 15) return -1;
 
     const tested = new Set<string>();
     for (let i = 0; i < hand15.length; i++) {
         const tile = hand15[i];
-        if (!tile) continue;
+        if (!tile || tile.id === avoidTileId) continue;
         const key = tile.isFakeOkey ? 'fake' : `${tile.color}-${tile.value}`;
         if (tested.has(key)) continue; // an identical tile was already tested
         tested.add(key);
@@ -573,17 +716,19 @@ export const chooseBotFinish = (
 };
 
 /**
- * Pick the rack index to discard: the least useful tile, never the okey or a
- * fake okey unless the hand holds nothing else. Easy throws a random non-okey
- * tile ~60% of the time; Hard additionally holds tiles adjacent to the okey's
- * value. `rand` defaults to Math.random — never call this from a React render
- * path (event handlers / timers / server code are fine).
+ * Pick the rack index to discard: the least useful tile, never the okey unless the
+ * hand holds nothing else, and never `avoidTileId` (the tile just taken from the
+ * discard pile) unless it is the only option. Easy throws a random tile ~60% of the
+ * time; Hard additionally holds tiles adjacent to the okey's value. `rand` defaults
+ * to Math.random — never call this from a React render path (event handlers /
+ * timers / server code are fine).
  */
 export const chooseBotDiscard = (
     hand15: (OkeyTile | null)[],
     okeyTile: OkeyTile | null,
     difficulty: BotDifficulty = 'Normal',
-    rand: () => number = Math.random
+    rand: () => number = Math.random,
+    avoidTileId?: string
 ): number => {
     const occupied: number[] = [];
     for (let i = 0; i < hand15.length; i++) {
@@ -591,11 +736,10 @@ export const chooseBotDiscard = (
     }
     if (occupied.length === 0) return -1;
 
-    const nonOkey = occupied.filter(i => {
-        const t = hand15[i]!;
-        return !t.isFakeOkey && !isRealOkeyTile(t, okeyTile);
-    });
-    const candidates = nonOkey.length > 0 ? nonOkey : occupied; // forced only when all tiles are wild
+    const notAvoided = occupied.filter(i => hand15[i]!.id !== avoidTileId);
+    const pool = notAvoided.length > 0 ? notAvoided : occupied;
+    const nonOkey = pool.filter(i => !isRealOkeyTile(hand15[i]!, okeyTile));
+    const candidates = nonOkey.length > 0 ? nonOkey : pool; // forced only when all tiles are wild
 
     if (difficulty === 'Easy' && rand() < 0.6) {
         return candidates[Math.floor(rand() * candidates.length)];
@@ -606,12 +750,12 @@ export const chooseBotDiscard = (
     for (const i of candidates) {
         const tile = hand15[i]!;
         let score = scoreTileUsefulness(tile, hand15, okeyTile);
+        const eff = effectiveTile(tile, okeyTile);
         if (
             difficulty === 'Hard' &&
             okeyTile !== null &&
-            !tile.isFakeOkey &&
-            tile.color === okeyTile.color &&
-            valueDistance(tile.value, okeyTile.value) <= 1
+            eff.color === okeyTile.color &&
+            valueDistance(eff.value, okeyTile.value) <= 1
         ) {
             score += 1; // hold tiles adjacent to the okey's value
         }

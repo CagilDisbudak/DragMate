@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Board101 } from '../101Board/Board101';
+import { FitStage } from '../FitStage';
+import { RotateHint } from '../RotateHint';
 import { use101Game } from '../../hooks/use101Game';
 import { use101Room } from '../../hooks/use101Room';
 import type { Room101 } from '../../hooks/use101Room';
@@ -190,6 +192,14 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
         }
     }, [isOnline, roomHook, localGame]);
 
+    const handleUndo = useCallback(() => {
+        if (isOnline) {
+            roomHook.undoTurn();
+        } else {
+            localGame.undoTurn();
+        }
+    }, [isOnline, roomHook, localGame]);
+
     const handleNewRound = useCallback(() => {
         if (isOnline) {
             roomHook.startNewRound();
@@ -233,8 +243,8 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
     // Loading states
     if (isOnline && (roomHook.loading || roomHook.isAuthLoading)) {
         return (
-            <div className="flex items-center justify-center min-h-[85vh] px-4">
-                <div className="liquid-glass px-10 py-8 flex flex-col items-center gap-4 anim-pop-in">
+            <div className="flex items-center justify-center min-h-full px-4">
+                <div className="surface px-10 py-8 flex flex-col items-center gap-4 anim-pop-in">
                     <div className="w-10 h-10 rounded-full border-[3px] border-rose-400/25 border-t-rose-400 animate-spin" />
                     <span className="font-display text-lg font-bold tracking-wide text-slate-200">Bağlanıyor...</span>
                 </div>
@@ -244,8 +254,8 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
 
     if (isOnline && roomHook.error) {
         return (
-            <div className="flex items-center justify-center min-h-[85vh] px-4">
-                <div className="liquid-glass w-full max-w-md p-8 flex flex-col items-center gap-5 text-center anim-pop-in">
+            <div className="flex items-center justify-center min-h-full px-4">
+                <div className="surface w-full max-w-md p-8 flex flex-col items-center gap-5 text-center anim-pop-in">
                     <div className="w-16 h-16 rounded-full bg-red-500/15 border border-red-400/40 flex items-center justify-center shadow-[0_0_30px_-8px_rgba(239,68,68,0.6)]">
                         <AlertTriangle size={28} className="text-red-400" />
                     </div>
@@ -267,20 +277,18 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
         const emptySeats = Math.max(0, 4 - room.players.length);
 
         return (
-            <div className="relative flex flex-col items-center justify-center min-h-[85vh] gap-6 px-4 py-10 overflow-hidden">
-                <div className="bg-blob w-[420px] h-[420px] bg-rose-500/15 -top-24 -left-24" />
-                <div className="bg-blob w-[360px] h-[360px] bg-violet-500/10 bottom-0 -right-20" style={{ animationDelay: '-8s' }} />
+            <div className="relative flex flex-col items-center justify-center min-h-full gap-6 px-4 py-10 overflow-hidden">
 
                 {/* Header */}
                 <div className="text-center space-y-3 anim-fade-up">
-                    <div className="glass-chip text-rose-300 border-rose-400/30">Çevrimiçi Oda</div>
+                    <div className="chip text-rose-300 border-rose-400/30">Çevrimiçi Oda</div>
                     <h2 className="font-display text-3xl sm:text-4xl font-bold text-gradient">101 Odası</h2>
                     <div className="flex flex-col items-center gap-1">
                         <button
                             onClick={handleCopyRoomId}
                             title="Oda kodunu kopyala"
                             aria-label="Oda kodunu kopyala"
-                            className="group inline-flex items-center gap-2.5 px-4 py-2 rounded-xl border border-white/10 bg-slate-900/60 backdrop-blur-md transition-all duration-200 hover:border-rose-400/40 hover:bg-slate-900/80 active:scale-[0.98]"
+                            className="group inline-flex items-center gap-2.5 px-4 py-2 rounded-xl border border-white/10 bg-slate-900/60 transition-all duration-200 hover:border-rose-400/40 hover:bg-slate-900/80 active:scale-[0.98]"
                         >
                             <span className="font-display font-bold tracking-[0.2em] text-rose-200">{room.roomId}</span>
                             {copied ? (
@@ -296,13 +304,13 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
                 </div>
 
                 {/* Players card */}
-                <div className="liquid-glass w-full max-w-md p-5 sm:p-7 space-y-4 anim-fade-up" style={{ animationDelay: '0.08s' }}>
+                <div className="surface w-full max-w-md p-5 sm:p-7 space-y-4 anim-fade-up" style={{ animationDelay: '0.08s' }}>
                     <div className="flex items-center justify-between">
                         <h3 className="font-display font-bold text-slate-100 flex items-center gap-2">
                             <Users size={18} className="text-rose-300" />
                             Oyuncular
                         </h3>
-                        <span className="glass-chip text-rose-200">{room.players.length}/4</span>
+                        <span className="chip text-rose-200">{room.players.length}/4</span>
                     </div>
 
                     <div className="space-y-2 stagger-children">
@@ -310,7 +318,7 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
                             const isMe = player.odaUserId === roomHook.userId;
                             const isRoomHost = player.odaUserId === room.hostUserId;
                             return (
-                                <div key={idx} className="glass-inset flex items-center gap-3 px-4 py-3">
+                                <div key={idx} className="surface-inset flex items-center gap-3 px-4 py-3">
                                     <div className={`
                                         w-9 h-9 rounded-full flex items-center justify-center border shrink-0
                                         ${isMe
@@ -355,7 +363,7 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
                     {isHost ? (
                         <button
                             onClick={() => roomHook.startGame()}
-                            className="btn-premium flex items-center gap-3 text-lg"
+                            className="btn-primary flex items-center gap-3 text-lg"
                         >
                             <Play size={20} />
                             Oyunu Başlat
@@ -376,7 +384,10 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
     }
 
     return (
-        <div className="w-full flex flex-col items-center justify-center min-h-[85vh] px-1 sm:px-4 py-4 fade-in animate-in duration-700">
+        <div className="h-full flex flex-col">
+            {/* The table is drawn at a fixed design size and scaled to fill this box. */}
+            <div className="flex-1 min-h-[16rem] p-2 sm:p-4">
+            <FitStage minWidth={1100} maxWidth={1560} minHeight={760} maxHeight={1000}>
             <Board101
                 gameState={gameState}
                 selectedTileIndices={selectedTileIndices}
@@ -395,10 +406,16 @@ export const Game101: React.FC<Game101Props> = ({ roomId, mode, onExit }) => {
                 onSelectSets={handleSelectSets}
                 onReset={handleReset}
                 onNewRound={handleNewRound}
+                onUndo={handleUndo}
+                canUndo={isOnline ? !!room?.canUndo : localGame.canUndo}
+                hasDrawn={isOnline ? !!room?.drawnThisTurn : localGame.drawnThisTurn}
                 onExit={onExit}
                 playerInfo={boardPlayerInfo}
                 mySlot={isOnline ? mySlot : 0}
             />
+            </FitStage>
+            </div>
+            <RotateHint />
         </div>
     );
 };

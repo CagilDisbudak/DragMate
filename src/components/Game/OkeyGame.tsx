@@ -3,6 +3,8 @@ import { useOkeyGame } from '../../hooks/useOkeyGame';
 import { useOkeyRoom } from '../../hooks/useOkeyRoom';
 import type { OkeyRoom, DiscardPilesMap } from '../../hooks/useOkeyRoom';
 import { OkeyBoard } from '../OkeyBoard/OkeyBoard';
+import { FitStage } from '../FitStage';
+import { RotateHint } from '../RotateHint';
 import { LogOut, Bot, Copy, Check } from 'lucide-react';
 import type { OkeyGameState, PlayerHand } from '../../logic/okeyLogic';
 
@@ -159,16 +161,12 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
     }, [isOnline, room, roomHook.userId]);
 
     return (
-        // justify-start + padding (not justify-center): tall content must not clip the header
-        <div className="relative isolate flex flex-col items-center min-h-[85vh] pt-2">
-            {/* Ambient amber table glow */}
-            <div className="bg-blob w-[42rem] h-[42rem] bg-amber-500/10 top-[-10%] left-[15%]" aria-hidden="true" />
-
-            <div className="w-full max-w-6xl mb-5 flex flex-wrap items-center justify-between gap-3 text-white px-4 anim-fade-up">
+        <div className="relative isolate h-full flex flex-col">
+            <div className="shrink-0 w-full flex flex-wrap items-center justify-between gap-3 text-white px-4 lg:px-8 py-3 [@media(max-height:500px)]:py-1.5 anim-fade-up">
                 <div className="flex items-center gap-3 sm:gap-4">
                     <button
                         onClick={onExit}
-                        className="p-3 rounded-xl border border-slate-700/80 bg-slate-900/70 text-slate-400 transition-all duration-200 hover:border-red-500/50 hover:bg-red-500/15 hover:text-red-400 active:scale-95"
+                        className="p-3 [@media(max-height:500px)]:p-2 rounded-xl border border-slate-700/80 bg-slate-900/70 text-slate-400 transition-all duration-200 hover:border-red-500/50 hover:bg-red-500/15 hover:text-red-400 active:scale-95"
                         title="Leave Game"
                         aria-label="Leave Game"
                     >
@@ -176,7 +174,7 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
                     </button>
                     <div>
                         <h2 className="font-display text-2xl font-bold tracking-tight">
-                            Okey <span className="text-transparent bg-clip-text bg-linear-to-r from-amber-300 via-amber-400 to-amber-600">Arena</span>
+                            Okey <span className="text-amber-400">Arena</span>
                         </h2>
                         <div className="mt-1 text-xs font-medium text-emerald-400 flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -230,7 +228,9 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
                 )}
             </div>
 
-            <div className="w-full max-w-6xl px-1 sm:px-4">
+            {/* The table is drawn at a fixed design size and scaled to fill this box. */}
+            <div className="flex-1 min-h-[16rem] px-2 pb-2 sm:px-4 sm:pb-4">
+                <FitStage minWidth={1000} maxWidth={1440} minHeight={770} maxHeight={1000}>
                 <OkeyBoard
                     gameState={gameState}
                     onDraw={handleDraw}
@@ -250,16 +250,10 @@ export const OkeyGame: React.FC<OkeyGameProps> = ({ roomId, mode, aiDifficulty, 
                     )}
                     mySlot={isOnline ? mySlot : 0}
                 />
+                </FitStage>
             </div>
 
-            <footer className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[10px] pt-10 flex flex-col items-center gap-1.5">
-                <span className="flex items-center gap-2">
-                    <span className="w-1 h-1 rounded-full bg-amber-500/50" />
-                    Transparent Strategy Arena
-                    <span className="w-1 h-1 rounded-full bg-amber-500/50" />
-                </span>
-                <span className="text-slate-700 text-[8px] font-display tracking-[0.3em]">v0.1.0</span>
-            </footer>
+            <RotateHint />
         </div>
     );
 };

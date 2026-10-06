@@ -138,8 +138,10 @@ export const GAME_RULES: Record<GameKey, GameRules> = {
                     'Sıran gelince ortadaki desteden ya da kendinden önceki oyuncunun ıskartasından bir taş çekersin.',
                     'Elin 15 taşa ulaşınca bir taş atarak sıranı bitirirsin.',
                     'Seri: aynı renkten ardışık 3 veya daha fazla taş (örn. kırmızı 5-6-7).',
+                    "13'ten sonra 1 gelebilir (örn. 11-12-13-1); fakat 13-1-2 şeklinde devam edemez.",
                     'Grup: aynı sayıdan farklı renklerde 3-4 taş (örn. 8 kırmızı, 8 siyah, 8 mavi).',
-                    'Okey taşı ve sahte okey joker gibidir; eksik taşın yerine geçer.',
+                    'Okey taşı jokerdir; seri veya gruptaki eksik herhangi bir taşın yerine geçer.',
+                    'Sahte okey (yonca desenli taş) joker değildir; okeyin rengi ve sayısı yerine geçer.',
                     "'Düzenle' düğmesiyle taşların otomatik olarak dizilir.",
                 ],
             },
@@ -155,7 +157,7 @@ export const GAME_RULES: Record<GameKey, GameRules> = {
         tips: [
             'Okey taşını koru; bir önceki oyuncu ıskartandan çalabilir.',
             'Iskartalara dikkat et; rakiplerin ne topladığına dair ipucu verir.',
-            'Sadece 2 joker var; en kritik seri/grup için sakla.',
+            'Sadece 2 okey (joker) taşı var; en kritik seri/grup için sakla.',
         ],
     },
 
@@ -171,9 +173,11 @@ export const GAME_RULES: Record<GameKey, GameRules> = {
                 heading: 'Taş Dağıtımı ve Başlangıç',
                 items: [
                     'Oyun 4 kişiliktir. Dağıtıcı taşları 7’şerli bloklar halinde dizer.',
-                    'Bir gösterge taşı belirlenir; bu taşın bir üstü o elin Okey (Joker) taşıdır. Gösterge 13 ise okey 1’dir.',
+                    'Bir gösterge taşı belirlenir; bu taşın bir üstü (aynı renk) o elin Okey (Joker) taşıdır. Gösterge 13 ise okey 1’dir.',
+                    'Okey her taşın yerine geçebilir. Sahte okey joker değildir: okeyin rengi ve sayısı yerine geçer.',
                     'Dağıtıcının sağındaki oyuncuya 22, diğer 3 oyuncuya 21 taş dağıtılır.',
                     '22 taşı olan oyuncu taş çekmeden yere bir taş atarak oyunu başlatır.',
+                    'Eli kazanan bir sonraki eli dağıtır; kazanan çıkmazsa dağıtım sıradaki oyuncuya geçer.',
                 ],
             },
             {
@@ -183,20 +187,23 @@ export const GAME_RULES: Record<GameKey, GameRules> = {
                     'Seri per: aynı renkten ardışık sayılar (örn. Mavi 7-8-9 veya Siyah 1-2-3).',
                     '13’ten sonra 1 gelebilir (12-13-1); fakat 13-1-2 şeklinde devam edemez.',
                     'Renk per: farklı renklerdeki aynı sayılar (örn. Kırmızı 5, Mavi 5, Siyah 5).',
+                    'Okey, perdeki eksik taşın yerine geçer ve onun puanını alır.',
                 ],
             },
             {
                 heading: 'El Açma (Normal ve Çift)',
                 items: [
                     'Normal açış: açtığın perlerin üzerindeki sayıların toplamı en az 101 olmalıdır. Barajı geçiyorsan taşlarını masaya açabilirsin.',
-                    'Çift açış: aynı renk ve sayıdan çiftler biriktirirsen (örn. iki Mavi 4, iki Kırmızı 9) en az 5 çiftle masaya açabilirsin; 101 şartı aranmaz.',
+                    'Çift açış: aynı renk ve sayıdan çiftler biriktirirsen (örn. iki Mavi 4, iki Kırmızı 9) en az 5 çiftle masaya açabilirsin; 101 şartı aranmaz. Okey tek kalan bir taşı çifte tamamlayabilir.',
+                    'Açılış perlerini aynı tur içinde tek tek indirebilirsin. 101’e ulaşamazsan "Geri Al" ile bu tur indirdiğin perleri ıstakana geri alırsın. Normal açış ile çift açış aynı turda karıştırılamaz.',
                 ],
             },
             {
                 heading: 'Taş Çekme ve İşleme',
                 items: [
                     'Sıran gelince ya desteden gizli bir taş çekersin ya da bir önceki oyuncunun attığı taşı alırsın.',
-                    'Yandaki (önceki oyuncunun) taşı alabilmek için o taşla birlikte elini masaya açabiliyor olman gerekir. Açmıyorsan veya taş açışına yetmiyorsa yan taraftan alamazsın.',
+                    'Elini henüz açmadıysan yandaki (önceki oyuncunun) taşı ancak o taşı kullanarak aynı tur elini açabileceksen alabilirsin; aldıysan turu açmadan bitiremezsin. Vazgeçersen "Geri Al" taşı yerine koyar ve desteden çekebilirsin.',
+                    'Elini açtıktan sonra yan taşı serbestçe alabilirsin.',
                     'Elini açtıktan sonra (normal veya çift) kendinin veya rakiplerin perlerine uygun taş ekleyebilirsin (örn. Mavi 7-8-9’a Mavi 6 veya 10).',
                     'Elini açmayan oyuncu taş işleyemez.',
                     'Sıranı bitirmek için kendi ıskartana bir taş atarsın.',
@@ -205,20 +212,20 @@ export const GAME_RULES: Record<GameKey, GameRules> = {
             {
                 heading: 'Puanlama ve Ceza',
                 items: [
-                    'Elini bitiren oyuncu (tüm taşlarını açıp son taşı kurallı atarsa) 0 ceza puanı alır.',
+                    'Elini bitiren oyuncu (tüm taşlarını perlere açarak veya son taşını atarak) 0 ceza puanı alır.',
                     'Hiç el açamayanlar: oyun bittiğinde masaya hiç taş açmamış oyunculara +202 ceza yazılır.',
-                    'El açıp bitiremeyenler: ıstakada kalan taşların sayı toplamı kadar ceza alır.',
+                    'El açıp bitiremeyenler: ıstakada kalan taşların sayı toplamı kadar ceza alır (Okey 25, sahte okey okeyin sayısı kadar sayılır).',
                     'Çift açıp bitiremeyenler: kalan taş toplamının iki katı ceza alır.',
                     'Çift açıp eli bitiren oyuncu varsa, diğer tüm oyuncuların o eldeki cezaları ikiye katlanır.',
+                    'Deste biterse el kazanansız biter; herkesin cezası yukarıdaki kurallarla yazılır (katlama olmaz).',
                     'Bir oyuncu 101 ceza puanına ulaşınca oyun biter; en düşük puanlı oyuncu kazanır.',
                 ],
             },
             {
                 heading: 'Katlama Cezaları (+101)',
                 items: [
-                    'Yanlış taş işleme: masadaki pere uymayan taşı koymaya çalışmak ve bunun fark edilmesi → +101.',
-                    'Okeyi yere atmak: ıstakadaki Okey (Joker) taşını ıskartaya atmak → +101.',
-                    'Yanlış açış hesabı: açılan perlerin toplamı 101’e ulaşmadığı halde masaya dizmek ve bunun fark edilmesi → taşlar ıstakaya geri alınır, +101 ceza yazılır.',
+                    'Okeyi yere atmak: Okey ıskartaya atılamaz; yalnızca elinde Okey’den başka taş kalmadıysa atabilirsin ve +101 ceza yazılır.',
+                    'Oyun, pere uymayan taşın işlenmesine ve 101’e ulaşmayan açışın tamamlanmasına izin vermez; eksik açış "Geri Al" ile cezasız geri alınır.',
                 ],
             },
         ],
@@ -226,7 +233,7 @@ export const GAME_RULES: Record<GameKey, GameRules> = {
             'Normal açış için toplamı 101’i geçen yüksek perler biriktir; acele açma.',
             'Çift açmayı düşünüyorsan en az 5 sağlam çift hedefle; bitiremezsen ceza ikiye katlanır.',
             'Yan taşı ancak o taşla açabileceksen al; aksi halde desteden çek.',
-            'Okey taşını ıskartaya atma — anında +101 ceza gelir.',
+            'Okey taşını ıskartaya atma — yalnızca başka taşın kalmadıysa atılabilir ve +101 ceza gelir.',
         ],
     },
 };

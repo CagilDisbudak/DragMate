@@ -161,6 +161,7 @@ export const okeyModule: GameModule = {
       }
       case 'drawDiscard': {
         if (!isTurn) throw new GameError('not_your_turn', 'Not your turn');
+        if (status !== 'playing') throw new GameError('not_active', 'Cannot draw now');
         if (countTiles(p.hands[seat]) >= 15) throw new GameError('too_many', 'Discard before drawing');
         const prev = (seat + 3) % SEATS;
         const tile = p.discardPiles[prev].pop();
@@ -170,6 +171,7 @@ export const okeyModule: GameModule = {
       }
       case 'discard': {
         if (!isTurn) throw new GameError('not_your_turn', 'Not your turn');
+        if (status !== 'playing') throw new GameError('not_active', 'Cannot discard now');
         if (index === undefined) throw new GameError('bad_move', 'discard needs index');
         if (countTiles(p.hands[seat]) !== 15) throw new GameError('need_15', 'You must hold 15 tiles to discard');
         const tile = p.hands[seat][index];
@@ -177,10 +179,13 @@ export const okeyModule: GameModule = {
         p.hands[seat][index] = null;
         p.discardPiles[seat].push(tile);
         const nextTurn = (turn + 1) % SEATS;
-        return result(p, 'playing', 'playing', nextTurn, null, { discard: tile.id, seat });
+        // An exhausted centre stays exhausted: the host must reshuffle or end in a tie.
+        const nextStatus: OkeyPhase = p.centerStack.length === 0 ? 'stackEmpty' : 'playing';
+        return result(p, 'playing', nextStatus, nextTurn, null, { discard: tile.id, seat });
       }
       case 'finish': {
         if (!isTurn) throw new GameError('not_your_turn', 'Not your turn');
+        if (status !== 'playing') throw new GameError('not_active', 'Cannot finish now');
         if (index === undefined) throw new GameError('bad_move', 'finish needs index');
         if (countTiles(p.hands[seat]) !== 15) throw new GameError('need_15', 'You must hold 15 tiles to finish');
         const discard = p.hands[seat][index];
@@ -195,12 +200,14 @@ export const okeyModule: GameModule = {
         if (!isHostSeat(room, seat)) throw new GameError('not_host', 'Only the host can reshuffle');
         if (status !== 'stackEmpty') throw new GameError('bad_phase', 'Nothing to reshuffle');
         const all = p.discardPiles.flat();
-        p.centerStack = shuffleDeck(all);
         p.discardPiles = [[], [], [], []];
+        if (all.length === 0) return result(p, 'roundOver', 'roundOver', turn, null); // nothing left to play with
+        p.centerStack = shuffleDeck(all);
         return result(p, 'playing', 'playing', turn, null);
       }
       case 'endTie': {
         if (!isHostSeat(room, seat)) throw new GameError('not_host', 'Only the host can end the round');
+        if (status !== 'stackEmpty') throw new GameError('bad_phase', 'A round can only be tied when the centre is empty');
         return result(p, 'roundOver', 'roundOver', turn, null);
       }
       default:
@@ -214,9 +221,10 @@ export const okeyModule: GameModule = {
     const hand = p.hands[turn];
     const nextTurn = (turn + 1) % SEATS;
 
-    // Draw: the engine heuristic takes the previous player's discard when that
-    // tile is an immediate meld-maker, otherwise the center (with fallbacks
-    // when either source is empty).
+    // Draw: the engine heuristic takes the previous player's discard only when it
+    // lets the bot finish or strictly improves its hand, otherwise the center (with
+    // fallbacks when either source is empty).
+    let takenFromDiscardId: string | undefined;
     if (countTiles(hand) < 15) {
       const prev = (turn + 3) % SEATS;
       const prevPile = p.discardPiles[prev];
@@ -224,9 +232,13 @@ export const okeyModule: GameModule = {
       let tile: OkeyTile | undefined;
       if (prevTop && chooseBotDraw(hand, prevTop, p.okeyTile) === 'discard') {
         tile = prevPile.pop();
+        takenFromDiscardId = tile?.id;
       }
       if (!tile) tile = p.centerStack.pop();
-      if (!tile) tile = prevPile.pop();
+      if (!tile) {
+        tile = prevPile.pop();
+        takenFromDiscardId = tile?.id;
+      }
       if (!tile) {
         // Nothing to draw anywhere — pass the turn to avoid a deadlock.
         return result(p, 'playing', 'stackEmpty', nextTurn, null, { ai: true, pass: true });
@@ -236,7 +248,7 @@ export const okeyModule: GameModule = {
 
     // Win check BEFORE discarding: if one discard leaves a valid 14-tile hand,
     // the bot finishes and wins the round.
-    const finishIdx = chooseBotFinish(hand, p.okeyTile);
+    const finishIdx = chooseBotFinish(hand, p.okeyTile, takenFromDiscardId);
     if (finishIdx !== -1) {
       const tile = hand[finishIdx]!;
       hand[finishIdx] = null;
@@ -244,8 +256,9 @@ export const okeyModule: GameModule = {
       return result(p, 'roundOver', 'roundOver', turn, turn, { finish: turn, ai: true });
     }
 
-    // Discard the least useful tile (difficulty-aware, never the okey unless forced).
-    const idx = chooseBotDiscard(hand, p.okeyTile, room.aiDifficulty);
+    // Discard the least useful tile (difficulty-aware, never the okey unless forced,
+    // never the tile it just took from the discard pile).
+    const idx = chooseBotDiscard(hand, p.okeyTile, room.aiDifficulty, Math.random, takenFromDiscardId);
     if (idx !== -1) {
       const tile = hand[idx]!;
       hand[idx] = null;

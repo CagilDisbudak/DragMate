@@ -6,8 +6,6 @@ import { OkeyTile } from './OkeyTile';
 import { Bot, Wand2 } from 'lucide-react';
 import {
     DndContext,
-    closestCenter,
-    pointerWithin,
     KeyboardSensor,
     PointerSensor,
     useSensor,
@@ -16,18 +14,14 @@ import {
     useDraggable,
     DragOverlay,
 } from '@dnd-kit/core';
-import type { CollisionDetection, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { visibleDropCollision } from '../../lib/dndCollision';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { StageScaled } from '../FitStage';
 
-// Prefer the droppable under the actual pointer. closestCenter alone compares
-// against the DragOverlay's rect, which can be offset from the cursor
-// (ancestors with animation transforms break its position:fixed), so drops
-// could land on the wrong slot. closestCenter remains as fallback.
-const pointerFirstCollision: CollisionDetection = (args) => {
-    const pointerCollisions = pointerWithin(args);
-    if (pointerCollisions.length > 0) return pointerCollisions;
-    return closestCenter(args);
-};
+// Shared drop rules: pointer target first, overlap fallback, never "nearest
+// zone", and droppables scrolled out of view never catch a drop.
+const pointerFirstCollision = visibleDropCollision;
 
 // Default player info for local mode
 const DEFAULT_PLAYER_INFO = [
@@ -93,8 +87,8 @@ const PlayerPanel: React.FC<PlayerPanelProps> = React.memo(({
     return (
         <div className={`transition-all duration-300 ${isActive && !isDragging ? 'scale-105' : 'opacity-90'} ${className}`}>
             <div className={`
-                relative flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full border backdrop-blur-md transition-all duration-300
-                ${compact ? 'min-w-0' : 'min-w-[130px] sm:min-w-[160px]'}
+                relative flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full border transition-all duration-300
+                ${compact ? 'min-w-0' : 'min-w-[130px] @sm:min-w-[160px]'}
                 ${isActive
                     ? 'border-amber-400/70 bg-amber-500/15 shadow-[0_0_22px_-2px_rgba(251,191,36,0.55)]'
                     : 'border-white/10 bg-black/45 shadow-lg'}
@@ -108,7 +102,7 @@ const PlayerPanel: React.FC<PlayerPanelProps> = React.memo(({
                     {playerInfo.isAI ? <Bot size={13} /> : initial}
                 </div>
 
-                <div className={`flex-1 items-center justify-center gap-1.5 font-bold text-[11px] uppercase tracking-wide min-w-0 ${compact ? 'hidden md:flex' : 'flex'} ${isActive ? 'text-amber-100' : 'text-slate-300'}`}>
+                <div className={`flex-1 items-center justify-center gap-1.5 font-bold text-[11px] uppercase tracking-wide min-w-0 ${compact ? 'hidden @3xl:flex' : 'flex'} ${isActive ? 'text-amber-100' : 'text-slate-300'}`}>
                     {isActive && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />}
                     <span className="truncate">{playerInfo.name}</span>
                     {playerInfo.isYou && !playerInfo.isAI && (
@@ -158,7 +152,7 @@ const DiscardZone = ({ playerId, discardPiles, okeyTile, currentTurn, userTileCo
             ref={setNodeRef}
             onClick={() => canDrawHere && onDrawDiscard()}
             className={`
-                relative w-14 h-20 sm:w-16 sm:h-24 shrink-0 rounded-xl transition-all duration-200 flex items-center justify-center
+                relative w-14 h-20 @sm:w-16 @sm:h-24 shrink-0 rounded-xl transition-all duration-200 flex items-center justify-center
                 ${isOver ? 'bg-emerald-400/30 scale-110 ring-4 ring-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.5)]' : ''}
                 ${canDropHere && !isOver ? 'bg-emerald-500/10 ring-2 ring-emerald-400/50' : ''}
                 ${canDrawHere ? 'cursor-grab active:cursor-grabbing bg-amber-400/10' : ''}
@@ -185,7 +179,7 @@ const DiscardZone = ({ playerId, discardPiles, okeyTile, currentTurn, userTileCo
                     ref={setDraggableRef}
                     {...attributes}
                     {...listeners}
-                    className={`relative z-10 rotate-2 ${canDrawHere && !isDragging ? 'transition-transform duration-150 hover:scale-105 hover:-translate-y-0.5' : ''} ${isDragging ? 'opacity-20' : ''}`}
+                    className={`relative z-10 rotate-2 touch-none ${canDrawHere && !isDragging ? 'transition-transform duration-150 hover:scale-105 hover:-translate-y-0.5' : ''} ${isDragging ? 'opacity-20' : ''}`}
                 >
                     <OkeyTile tile={lastTile} size="sm" okeyTile={okeyTile} />
                 </div>
@@ -226,7 +220,7 @@ const DraggableDrawPile = ({ currentTurn, userTileCount, centerStackCount, onDra
                 onClick={() => canDraw && onDraw()}
                 aria-label="Taş çek"
                 className={`
-                    relative w-16 h-21 rounded-lg transition-all duration-200
+                    relative w-16 h-21 rounded-lg transition-all duration-200 touch-none
                     ${canDraw ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1.5' : 'cursor-wait opacity-70'}
                     ${isDragging ? 'opacity-20' : ''}
                 `}
@@ -350,7 +344,11 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
         }
         if (activeId.startsWith('slot-')) {
             const tile = gameState.players[mySlot].tiles[parseInt(activeId.split('-')[1])];
-            return tile ? <OkeyTile tile={tile} okeyTile={gameState.okeyTile} dragging /> : null;
+            return tile ? (
+                <div className="w-[3.25rem] h-[4.25rem] p-px">
+                    <OkeyTile tile={tile} okeyTile={gameState.okeyTile} size="fit" dragging />
+                </div>
+            ) : null;
         }
         return null;
     };
@@ -377,10 +375,10 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
     return (
         <DndContext sensors={sensors} collisionDetection={pointerFirstCollision} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
             {/* Wooden table rim */}
-            <div className="relative w-full mx-auto rounded-[24px] shadow-glass-lg anim-fade-up">
-                <div className="wood-surface rounded-[24px] p-1.5 sm:p-2.5">
+            <div className="relative w-full h-full rounded-[24px] shadow-card-lg anim-fade-up">
+                <div className="h-full wood-surface rounded-[24px] p-1.5 @sm:p-2.5">
                     {/* Flex-row table: rows can never overlap each other, at any viewport size */}
-                    <div className="relative w-full felt-surface rounded-[16px] overflow-hidden font-sans flex flex-col gap-3 sm:gap-4 px-2 sm:px-5 pt-3 pb-2 sm:pb-3">
+                    <div className="relative w-full h-full felt-surface rounded-[16px] overflow-hidden font-sans flex flex-col gap-3 @sm:gap-4 px-2 @sm:px-5 pt-3 pb-2 @sm:pb-3">
                         {/* Felt vignette */}
                         <div className="absolute inset-0 rounded-[16px] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.4),inset_0_0_80px_rgba(0,0,0,0.3)] pointer-events-none" />
 
@@ -397,7 +395,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
                         </div>
 
                         {/* Row 2: left opponent | center (indicator + draw pile) | right opponent */}
-                        <div className="relative z-10 flex-1 flex items-center justify-between gap-2 sm:gap-6 min-h-[11rem]">
+                        <div className="relative z-10 flex-1 flex items-center justify-between gap-2 @sm:gap-6 min-h-[11rem]">
                             <div className="flex flex-col items-center gap-8 shrink-0">
                                 <PlayerPanel
                                     playerId={getActualSlot(3)}
@@ -410,7 +408,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
                                 <DiscardZone playerId={getActualSlot(3)} {...gameState} userTileCount={userTileCount} onDrawDiscard={onDrawDiscard} isDraggingRackTile={activeId?.startsWith('slot-')} mySlot={mySlot} />
                             </div>
 
-                            <div className="flex items-center gap-6 sm:gap-12">
+                            <div className="flex items-center gap-6 @sm:gap-12">
                                 <div className="relative flex flex-col items-center gap-1.5 rounded-2xl border border-amber-400/35 bg-linear-to-b from-[#4a2f10]/90 to-[#2c1b08]/95 px-3.5 py-2.5 shadow-[inset_0_1px_0_rgba(251,191,36,0.25),0_10px_28px_rgba(0,0,0,0.55)]">
                                     <span className="font-display text-[9px] font-bold uppercase tracking-[0.3em] text-amber-300/90">Gösterge</span>
                                     <OkeyTile tile={gameState.indicatorTile!} size="md" okeyTile={gameState.okeyTile} />
@@ -441,7 +439,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
 
                         {/* Row 3: me — my discard target + identity + sort, then the rack */}
                         <div className="relative z-10 flex flex-col items-center gap-2.5">
-                            <div className="flex items-center justify-center gap-3 sm:gap-5 flex-wrap">
+                            <div className="flex items-center justify-center gap-3 @sm:gap-5 flex-wrap">
                                 <PlayerPanel
                                     playerId={mySlot}
                                     currentTurn={gameState.currentTurn}
@@ -486,23 +484,23 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
                                     </div>
                                 )}
 
-                                <div className="relative w-full max-w-md liquid-glass px-6 py-8 sm:px-10 sm:py-10 flex flex-col items-center gap-5 anim-pop-in">
+                                <div className="relative w-full max-w-md surface px-6 py-8 @sm:px-10 @sm:py-10 flex flex-col items-center gap-5 anim-pop-in">
                                     {gameState.winner === mySlot && (
-                                        <div className="absolute inset-0 rounded-3xl ring-1 ring-amber-400/40 shadow-[0_0_60px_-10px_rgba(251,191,36,0.45)] pointer-events-none" />
+                                        <div className="absolute inset-0 rounded-2xl ring-1 ring-amber-400/40 pointer-events-none" />
                                     )}
                                     {/* Trophy / Icon */}
-                                    <div className={`text-6xl sm:text-7xl ${gameState.winner === mySlot ? 'animate-bounce' : 'anim-float'}`}>
+                                    <div className={`text-6xl @sm:text-7xl ${gameState.winner === mySlot ? 'animate-bounce' : 'anim-float'}`}>
                                         {gameState.winner === null ? '🤝' : gameState.winner === mySlot ? '🏆' : '😢'}
                                     </div>
 
-                                    <h2 className={`font-display text-3xl sm:text-4xl font-bold uppercase tracking-tight ${gameState.winner === mySlot
-                                        ? 'text-transparent bg-clip-text bg-linear-to-r from-amber-200 via-amber-300 to-amber-500'
+                                    <h2 className={`font-display text-3xl @sm:text-4xl font-bold uppercase tracking-tight ${gameState.winner === mySlot
+                                        ? 'text-amber-300'
                                         : 'text-gradient'
                                         }`}>
                                         {gameState.winner === null ? 'BERABERE!' : (gameState.winner === mySlot ? 'KAZANDINIZ!' : 'KAYBETTİNİZ')}
                                     </h2>
 
-                                    <p className="text-sm sm:text-base font-medium text-slate-300 text-center max-w-xs">
+                                    <p className="text-sm @sm:text-base font-medium text-slate-300 text-center max-w-xs">
                                         {gameState.winner === null
                                             ? 'Kimse kazanamadı. Taşlar tükendi!'
                                             : (gameState.winner === mySlot
@@ -515,7 +513,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
                                     <div className="flex flex-wrap justify-center gap-3 mt-2">
                                         <button
                                             onClick={onReset}
-                                            className="btn-premium uppercase tracking-wide"
+                                            className="btn-primary uppercase tracking-wide"
                                         >
                                             🔄 Tekrar Oyna
                                         </button>
@@ -533,7 +531,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
                         {/* Stack Empty Prompt Overlay */}
                         {gameState.phase === 'stackEmpty' && (
                             <div className="overlay-backdrop">
-                                <div className="relative liquid-glass w-full max-w-md px-6 py-8 sm:px-8 flex flex-col items-center gap-6 anim-pop-in">
+                                <div className="relative surface w-full max-w-md px-6 py-8 @sm:px-8 flex flex-col items-center gap-6 anim-pop-in">
                                     <div className="absolute inset-0 rounded-3xl ring-1 ring-amber-500/30 pointer-events-none" />
                                     <div className="text-5xl anim-float">🪹</div>
                                     <div>
@@ -543,7 +541,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
                                     <div className="flex flex-col gap-3 w-full">
                                         <button
                                             onClick={onReshuffle}
-                                            className="btn-premium w-full uppercase tracking-widest"
+                                            className="btn-primary w-full uppercase tracking-widest"
                                         >
                                             Taşları Karıştır (Devam Et)
                                         </button>
@@ -580,7 +578,7 @@ export const OkeyBoard: React.FC<OkeyBoardProps> = React.memo(({
                             filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.25))',
                         }}
                     >
-                        {renderDragOverlay()}
+                        <StageScaled>{renderDragOverlay()}</StageScaled>
                     </div>
                 </DragOverlay>,
                 document.body

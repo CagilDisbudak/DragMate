@@ -140,7 +140,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
     if (!isLocal && gameRoom.loading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[80vh] gap-6">
-                <div className="relative rounded-full p-5 liquid-glass shadow-[0_0_60px_-12px_rgba(16,185,129,0.4)]">
+                <div className="relative rounded-full p-5 surface">
                     <Loader2 className="w-14 h-14 text-emerald-400 animate-spin" />
                 </div>
                 <div className="text-center space-y-2 anim-fade-up">
@@ -158,7 +158,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                     <h2 className="font-display text-5xl font-bold text-gradient">Room Dissolved</h2>
                     <p className="text-slate-400 text-lg">The arena you seek no longer exists or the link is expired.</p>
                 </div>
-                <button onClick={onExit} className="btn-premium px-10 py-4 text-xl">Return to Lobby</button>
+                <button onClick={onExit} className="btn-primary px-10 py-4 text-xl">Return to Lobby</button>
             </div>
         );
     }
@@ -173,8 +173,8 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
         : (gameRoom.room?.whitePlayer || gameRoom.room?.blackPlayer ? '1/2' : '0/2');
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center gap-8 lg:gap-12 py-6 lg:py-10 w-full anim-fade-up">
-            <header className="w-full max-w-6xl flex items-center justify-between gap-3 px-4 lg:px-6">
+        <div className="h-full flex flex-col anim-fade-up">
+            <header className="shrink-0 w-full flex items-center justify-between gap-3 px-4 lg:px-8 py-3 lg:py-4">
                 <button
                     onClick={() => {
                         if (!isLocal && gameRoom.leaveRoom) gameRoom.leaveRoom();
@@ -189,7 +189,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                 </button>
 
                 {!isLocal && (
-                    <div className="liquid-glass px-4 lg:px-6 py-2.5 lg:py-3 flex items-center gap-4 lg:gap-6">
+                    <div className="surface px-4 lg:px-5 py-2 flex items-center gap-4 lg:gap-5">
                         <div className="flex flex-col gap-0.5 min-w-0">
                             <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-black">Arena ID</span>
                             <code className="font-display text-emerald-300 font-bold truncate">{roomId}</code>
@@ -210,16 +210,17 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                     </div>
                 )}
                 {isLocal && (
-                    <div className="glass-chip text-emerald-300 border-emerald-500/30">
+                    <div className="chip text-emerald-300 border-emerald-500/30">
                         <Bot size={14} className="text-emerald-400" />
                         Single Player Mode
                     </div>
                 )}
             </header>
 
-            <div className="flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-16 w-full max-w-7xl px-0 lg:px-6">
-                <div className="relative group w-full flex justify-center max-w-full overflow-visible">
-                    <div className="absolute -inset-4 bg-linear-to-r from-emerald-500 via-teal-500 to-emerald-400 rounded-[2.5rem] blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
+            {/* Board fills whatever the header leaves; side panel scrolls on its own. */}
+            <div className="flex-1 min-h-0 overflow-y-auto side:overflow-hidden">
+            <div className="min-h-full side:h-full flex flex-col side:flex-row gap-4 lg:gap-8 px-3 pb-3 side:px-4 lg:px-8 side:pb-4 lg:pb-6">
+                <div className="fit-box relative shrink-0 h-[min(100vw_+_4rem,100dvh_-_9rem)] side:h-auto side:flex-1 flex items-center justify-center">
                     <BackgammonBoard
                         gameState={gameState}
                         playerColor={playerColor}
@@ -245,14 +246,14 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                     )}
                 </div>
 
-                <div className="w-full lg:w-96 flex flex-col gap-3 lg:gap-6 mt-0 lg:mt-0 stagger-children">
-                    <div className="liquid-glass p-4 lg:p-8 space-y-4 lg:space-y-8 border-l-4 border-l-emerald-500/70">
+                <div className="w-full side:w-[clamp(16rem,26vw,24rem)] shrink-0 side:min-h-0 side:overflow-y-auto flex flex-col justify-center-safe gap-4 stagger-children">
+                    <div className="surface p-4 lg:p-6 space-y-4 lg:space-y-5 border-l-4 border-l-emerald-500/70">
                         <div className="flex items-center justify-between gap-3">
                             <h3 className="text-xs lg:text-sm font-black text-slate-500 uppercase tracking-[0.3em]">
                                 Game Status
                             </h3>
                             <div
-                                className={`glass-chip text-[10px] ${gameState.winner
+                                className={`chip text-[10px] ${gameState.winner
                                     ? 'chip-game-over'
                                     : (isOurTurn ? 'chip-turn-active' : 'chip-turn-waiting')
                                     }`}
@@ -295,7 +296,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                                                 {gameRoom.room?.whitePlayer === currentUserId ? 'Connected (You)' : (gameRoom.room?.whitePlayer ? 'Opponent Ready' : 'Awaiting Entry...')}
                                             </div>
                                         </div>
-                                        {isWhite && <span className="glass-chip text-[9px] text-emerald-300 border-emerald-500/30 shrink-0">You</span>}
+                                        {isWhite && <span className="chip text-[9px] text-emerald-300 border-emerald-500/30 shrink-0">You</span>}
                                     </div>
 
                                     <div className={`flex items-center gap-3 lg:gap-4 p-2.5 lg:p-4 rounded-2xl border transition-colors ${isBlack
@@ -316,13 +317,13 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                                                 {gameRoom.room?.blackPlayer === currentUserId ? 'Connected (You)' : (gameRoom.room?.blackPlayer ? 'Opponent Ready' : 'Awaiting Entry...')}
                                             </div>
                                         </div>
-                                        {isBlack && <span className="glass-chip text-[9px] text-emerald-300 border-emerald-500/30 shrink-0">You</span>}
+                                        {isBlack && <span className="chip text-[9px] text-emerald-300 border-emerald-500/30 shrink-0">You</span>}
                                     </div>
                                 </>
                             )}
                         </div>
 
-                        <div className="flex flex-col sm:flex-row gap-2 lg:gap-3">
+                        <div className="flex flex-wrap gap-2 lg:gap-3 [&>*]:min-w-[8rem]">
                             <button
                                 disabled={isGameOver}
                                 onClick={() => {
@@ -356,7 +357,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
 
                     {!isLocal && (
                         <div className="hidden lg:grid grid-cols-2 gap-4">
-                            <div className="liquid-glass p-6 text-center space-y-2">
+                            <div className="surface p-6 text-center space-y-2">
                                 <Users size={20} className="mx-auto text-emerald-400/70" />
                                 <div className="font-display text-xl font-bold text-white tabular-nums">
                                     {connectedCount}
@@ -366,7 +367,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                             <button
                                 onClick={copyRoomId}
                                 aria-label="Copy room code"
-                                className="liquid-glass p-6 text-center space-y-2 group transition-all hover:border-emerald-500/40 active:scale-[0.98] cursor-pointer"
+                                className="surface p-6 text-center space-y-2 group transition-all hover:border-emerald-500/40 active:scale-[0.98] cursor-pointer"
                             >
                                 {copied
                                     ? <Check size={20} className="mx-auto text-emerald-400" />
@@ -380,11 +381,7 @@ export const BackgammonGame: React.FC<BackgammonGameProps> = ({ roomId = '', mod
                     )}
                 </div>
             </div>
-
-            <footer className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[10px] pt-10 flex flex-col items-center gap-1">
-                <span>Transparent Strategy Arena</span>
-                <span className="text-slate-700 text-[8px]">v1.1.0</span>
-            </footer>
+            </div>
         </div>
     );
 };
@@ -428,7 +425,7 @@ const GameTimer: React.FC<{ gameState: BackgammonState }> = ({ gameState }) => {
     };
 
     return (
-        <div className="grid grid-cols-3 gap-2 md:gap-3 p-3 md:p-4 glass-inset text-[9px] lg:text-[10px] font-bold uppercase tracking-widest">
+        <div className="grid grid-cols-3 gap-2 md:gap-3 p-3 md:p-4 surface-inset text-[9px] lg:text-[10px] font-bold uppercase tracking-widest">
             <div className="space-y-1">
                 <div className="text-slate-500">Time</div>
                 <div className="font-display tabular-nums text-white text-base lg:text-lg">{formatTime(totalSeconds)}</div>
@@ -455,18 +452,16 @@ const GameOverOverlay: React.FC<{
 
     return (
         <div className="overlay-backdrop rounded-[2rem] overflow-hidden anim-pop-in">
-            {/* Ambient glow behind the icon */}
             <div className="relative mb-6">
-                <div className={`absolute -inset-6 rounded-full blur-2xl ${isWin ? 'bg-amber-400/30' : 'bg-red-500/25'}`} />
                 <div className={`relative p-6 rounded-full border anim-float ${isWin
-                    ? 'bg-amber-500/15 border-amber-400/40 text-amber-300 shadow-[0_0_60px_-10px_rgba(245,158,11,0.6)]'
-                    : 'bg-red-500/15 border-red-400/30 text-red-400 shadow-[0_0_60px_-10px_rgba(239,68,68,0.5)]'}`}>
+                    ? 'bg-amber-500/15 border-amber-400/40 text-amber-300'
+                    : 'bg-red-500/15 border-red-400/30 text-red-400'}`}>
                     {isWin ? <Trophy size={64} /> : <XCircle size={64} />}
                 </div>
             </div>
 
             <h2 className={`font-display text-4xl md:text-5xl font-bold uppercase tracking-widest mb-2 ${isWin
-                ? 'text-transparent bg-clip-text bg-linear-to-b from-amber-200 via-amber-300 to-amber-600'
+                ? 'text-amber-300'
                 : 'text-gradient'}`}>
                 {isWin ? 'Victory!' : 'Defeat'}
             </h2>
@@ -478,7 +473,7 @@ const GameOverOverlay: React.FC<{
             <div className="flex flex-col gap-3 w-full max-w-xs stagger-children">
                 <button
                     onClick={onRematch}
-                    className="btn-premium w-full flex items-center justify-center gap-3 py-4 uppercase tracking-widest"
+                    className="btn-primary w-full flex items-center justify-center gap-3 py-4 uppercase tracking-widest"
                 >
                     <RotateCcw size={20} />
                     Rematch

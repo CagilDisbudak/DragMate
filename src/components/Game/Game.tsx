@@ -185,7 +185,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[80vh] gap-6">
-                <div className="liquid-glass p-6 rounded-full shadow-[0_0_60px_-12px_rgba(99,102,241,0.4)] anim-pop-in">
+                <div className="surface p-6 rounded-full anim-pop-in">
                     <Loader2 className="w-14 h-14 text-indigo-400 animate-spin" />
                 </div>
                 <div className="text-center space-y-2 anim-fade-up">
@@ -203,7 +203,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                     <h2 className="font-display text-4xl lg:text-5xl font-black text-gradient">Room Dissolved</h2>
                     <p className="text-slate-400 text-lg">The arena you seek no longer exists or the link is expired.</p>
                 </div>
-                <button onClick={onExit} className="btn-premium px-10 py-4 text-lg">Return to Lobby</button>
+                <button onClick={onExit} className="btn-primary px-10 py-4 text-lg">Return to Lobby</button>
             </div>
         );
     }
@@ -263,8 +263,8 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
     };
 
     return (
-        <div className="flex flex-col items-center gap-6 lg:gap-10 py-6 lg:py-10 w-full">
-            <header className="w-full max-w-7xl flex items-center justify-between gap-3 px-4 lg:px-6 anim-fade-up">
+        <div className="h-full flex flex-col">
+            <header className="shrink-0 w-full flex items-center justify-between gap-3 px-4 lg:px-8 py-3 lg:py-4 anim-fade-up">
                 <button
                     onClick={handleExit}
                     className="group flex items-center gap-3 text-slate-500 hover:text-white transition-colors font-bold uppercase tracking-widest text-xs"
@@ -276,15 +276,16 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                     Back
                 </button>
 
-                <div className="glass-chip text-indigo-200">
+                <div className="chip text-indigo-200">
                     <Crown size={14} className="text-indigo-300" />
                     {isLocal ? `Single Player • ${aiDifficulty}` : 'Chess • Online Arena'}
                 </div>
             </header>
 
-            <div className="flex flex-col lg:flex-row items-center lg:items-start justify-center gap-6 lg:gap-12 w-full max-w-7xl px-4 lg:px-6">
-                <div className="relative group w-full lg:w-auto flex justify-center max-w-full overflow-visible anim-fade-up">
-                    <div className="absolute -inset-4 bg-linear-to-br from-indigo-500 via-violet-500 to-indigo-600 rounded-[2.5rem] blur-2xl opacity-10 group-hover:opacity-20 transition-opacity pointer-events-none" />
+            {/* Board fills whatever the header leaves; side panel scrolls on its own. */}
+            <div className="flex-1 min-h-0 overflow-y-auto side:overflow-hidden">
+            <div className="min-h-full side:h-full w-full side:max-w-[calc(100dvh_+_clamp(16rem,26vw,24rem))] mx-auto flex flex-col side:flex-row gap-4 lg:gap-8 px-3 pb-3 side:px-4 lg:px-8 side:pb-4 lg:pb-6">
+                <div className="fit-box shrink-0 h-[min(100vw_-_1.5rem,100dvh_-_9rem)] side:h-auto side:flex-1 flex items-center justify-center anim-fade-up">
                     <div className="relative">
                         <ChessBoard
                             initialFen={room.fen}
@@ -299,10 +300,10 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                             <div className="overlay-backdrop rounded-[1.75rem] lg:rounded-[2.5rem] anim-pop-in">
                                 <div className={`p-5 lg:p-6 rounded-full mb-5 ${
                                     overlayResult === 'win'
-                                        ? 'bg-amber-500/20 text-amber-400 shadow-[0_0_50px_-12px_rgba(245,158,11,0.5)]'
+                                        ? 'bg-amber-500/20 text-amber-400'
                                         : overlayResult === 'loss'
-                                            ? 'bg-red-500/20 text-red-400 shadow-[0_0_50px_-12px_rgba(239,68,68,0.5)]'
-                                            : 'bg-slate-500/20 text-slate-300 shadow-[0_0_50px_-12px_rgba(148,163,184,0.5)]'
+                                            ? 'bg-red-500/20 text-red-400'
+                                            : 'bg-slate-500/20 text-slate-300'
                                 }`}>
                                     {overlayResult === 'win' && <Trophy size={56} className="animate-bounce" />}
                                     {overlayResult === 'loss' && <XCircle size={56} />}
@@ -311,7 +312,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
 
                                 <h2 className={`font-display text-4xl lg:text-5xl font-black uppercase tracking-widest mb-2 ${
                                     overlayResult === 'win'
-                                        ? 'text-transparent bg-clip-text bg-linear-to-b from-amber-300 to-amber-600'
+                                        ? 'text-amber-300'
                                         : 'text-slate-100'
                                 }`}>
                                     {overlayResult === 'win' ? 'Victory!' : overlayResult === 'loss' ? 'Defeat' : 'Draw'}
@@ -324,7 +325,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                                 <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
                                     <button
                                         onClick={() => resetGame()}
-                                        className="btn-premium flex-1 flex items-center justify-center gap-2 uppercase tracking-widest text-sm"
+                                        className="btn-primary flex-1 flex items-center justify-center gap-2 uppercase tracking-widest text-sm"
                                     >
                                         <RotateCcw size={18} />
                                         Rematch
@@ -342,13 +343,13 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                     </div>
                 </div>
 
-                <div className="w-full lg:w-96 lg:shrink-0 flex flex-col gap-5 stagger-children">
-                    <div className="liquid-glass p-5 lg:p-6 space-y-5 border-l-4 border-l-indigo-500">
+                <div className="w-full side:w-[clamp(16rem,26vw,24rem)] shrink-0 side:min-h-0 side:overflow-y-auto flex flex-col justify-center-safe gap-4 stagger-children">
+                    <div className="surface p-5 lg:p-6 space-y-5 border-l-4 border-l-indigo-500">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.25em]">
                                 Game Status
                             </h3>
-                            <div className={`glass-chip ${
+                            <div className={`chip ${
                                 isGameOver ? 'chip-game-over' : isMyTurn ? 'chip-turn-active' : 'chip-turn-waiting'
                             }`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${
@@ -365,7 +366,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                             </div>
                         )}
 
-                        <div className="glass-inset p-3 lg:p-4 grid grid-cols-3 gap-2 text-center">
+                        <div className="surface-inset p-3 lg:p-4 grid grid-cols-3 gap-2 text-center">
                             <ClockCell label="Time" value={formatTime(totalSeconds)} />
                             <ClockCell label="White" value={formatTime(whiteSeconds)} active={!isGameOver && room.turn === 'w'} />
                             <ClockCell label="Black" value={formatTime(blackSeconds)} active={!isGameOver && room.turn === 'b'} />
@@ -414,7 +415,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                             )}
                         </div>
 
-                        <div className="flex items-stretch gap-3">
+                        <div className="flex flex-wrap items-stretch gap-3 [&>*]:min-w-[8rem]">
                             <button
                                 disabled={isGameOver}
                                 onClick={() => resignGame(playerColor as 'w' | 'b')}
@@ -430,7 +431,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                                 className={`flex-1 flex items-center justify-center gap-2 uppercase tracking-wide text-sm ${
                                     rematchDisabled
                                         ? 'btn-ghost opacity-40 cursor-not-allowed'
-                                        : 'btn-premium'
+                                        : 'btn-primary'
                                 }`}
                                 aria-label="Start a rematch"
                             >
@@ -442,7 +443,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
 
                     {!isLocal && (
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="rounded-2xl lg:rounded-3xl border border-glass-border bg-white/5 backdrop-blur-xl p-4 lg:p-5 text-center space-y-1.5">
+                            <div className="rounded-2xl lg:rounded-3xl border border-line bg-white/5 p-4 lg:p-5 text-center space-y-1.5">
                                 <Users size={18} className="mx-auto text-slate-500" />
                                 <div className="font-display text-xl font-bold text-white tabular-nums">
                                     {connectedCount}/2
@@ -451,7 +452,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
                             </div>
                             <button
                                 onClick={copyRoomId}
-                                className="rounded-2xl lg:rounded-3xl border border-glass-border bg-white/5 backdrop-blur-xl p-4 lg:p-5 text-center space-y-1.5 transition-all duration-200 hover:border-indigo-400/50 hover:bg-indigo-500/10 hover:-translate-y-0.5 active:scale-[0.98] group"
+                                className="rounded-2xl lg:rounded-3xl border border-line bg-white/5 p-4 lg:p-5 text-center space-y-1.5 transition-all duration-200 hover:border-indigo-400/50 hover:bg-indigo-500/10 hover:-translate-y-0.5 active:scale-[0.98] group"
                                 aria-label="Copy room code to clipboard"
                             >
                                 {copiedCode
@@ -467,11 +468,7 @@ export const Game: React.FC<GameProps> = ({ roomId = '', mode = 'online', aiDiff
 
                 </div>
             </div>
-
-            <footer className="text-slate-600 font-bold uppercase tracking-[0.4em] text-[10px] pt-8 flex flex-col items-center gap-1">
-                <span>Transparent Strategy Arena</span>
-                <span className="text-slate-700 text-[8px]">v1.2.0</span>
-            </footer>
+            </div>
         </div>
     );
 };

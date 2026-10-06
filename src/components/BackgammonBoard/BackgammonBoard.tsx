@@ -223,11 +223,14 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                 setHighlightedPoints([]);
             }}
         >
-            <div className="flex flex-col md:flex-row w-full max-w-full md:max-w-7xl mx-auto gap-2 md:gap-4 items-stretch p-1 md:p-4">
+            {/* Width solved against the parent .fit-box so board + tray fit both axes:
+                row (md+): 4:3 board + 8rem tray + 1rem gap → W ≤ 100cqh·4/3 + 9rem
+                column:    square board + 5rem tray + 0.5rem gap → W ≤ 100cqh − 5.5rem */}
+            <div className="relative flex flex-col md:flex-row w-[min(100cqw,100cqh_-_5.5rem)] md:w-[min(100cqw,100cqh*4/3_+_9rem)] gap-2 md:gap-4 items-stretch">
 
                 {/* Main Board Area — wood frame around a dark felt field */}
                 <div
-                    className="relative flex-1 aspect-square md:aspect-[4/3] wood-surface rounded-2xl p-1.5 md:p-3 flex shadow-glass-lg"
+                    className="relative flex-1 aspect-square md:aspect-[4/3] wood-surface rounded-2xl p-1.5 md:p-3 flex shadow-card-lg"
                 >
                     <div className="relative flex-1 rounded-lg md:rounded-xl overflow-hidden flex flex-col" style={feltFieldStyle}>
 
@@ -335,7 +338,7 @@ export const BackgammonBoard: React.FC<BackgammonBoardProps> = ({
                 </div>
 
                 {/* Off Tray Sidebar - Bottom on Mobile, Right on Desktop */}
-                <div className="w-full h-20 md:w-32 md:h-auto wood-surface rounded-2xl p-1.5 md:p-2 flex flex-row md:flex-col gap-1.5 md:gap-2 relative overflow-hidden shrink-0 shadow-glass">
+                <div className="w-full h-20 md:w-32 md:h-auto wood-surface rounded-2xl p-1.5 md:p-2 flex flex-row md:flex-col gap-1.5 md:gap-2 relative overflow-hidden shrink-0 shadow-card">
 
                     <div
                         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:-rotate-90 font-display text-amber-100/20 text-xs md:text-sm tracking-[0.5em] pointer-events-none whitespace-nowrap z-0"
@@ -413,7 +416,7 @@ const OffTrayDroppable: React.FC<{ isHighlighted: boolean }> = ({ isHighlighted 
         <div
             ref={setNodeRef}
             className={`w-full h-full flex items-center justify-center rounded-2xl transition-all duration-300 ${isActive
-                ? 'bg-emerald-500/25 backdrop-blur-sm border-2 border-dashed border-emerald-400/80 shadow-[inset_0_0_30px_rgba(16,185,129,0.25)]'
+                ? 'bg-emerald-500/25 border-2 border-dashed border-emerald-400/80 shadow-[inset_0_0_30px_rgba(16,185,129,0.25)]'
                 : ''}`}
         >
             {isActive && (

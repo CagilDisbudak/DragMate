@@ -169,6 +169,10 @@ export const useOkeyRoom = (roomId: string | null) => {
     const endInTie = () => void move({ action: 'endTie' });
     const finishGame = async (index: number): Promise<boolean> => {
         const ack = await move({ action: 'finish', index });
+        // Same feedback as the local game when the server rejects the hand.
+        if (!ack.ok && 'code' in ack && ack.code === 'not_winning') {
+            alert("Eliniz okey değil! Lütfen taşları per yapın.");
+        }
         return ack.ok;
     };
     const resetGame = async (): Promise<void> => {

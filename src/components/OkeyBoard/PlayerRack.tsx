@@ -37,7 +37,7 @@ const RackSlot: React.FC<RackSlotProps> = React.memo(({ tile, isJoker, index, ok
         <div
             ref={setDroppableRef}
             className={`
-                relative w-[clamp(1.3rem,5.6vw,3.25rem)] h-[clamp(1.8rem,7.5vw,4.25rem)] rounded-lg flex items-center justify-center transition-all duration-150
+                relative w-[3.25rem] h-[4.25rem] rounded-lg flex items-center justify-center transition-all duration-150
                 ${isOver
                     ? 'bg-amber-400/25 ring-2 ring-amber-400 scale-105 z-20 shadow-[0_0_18px_rgba(251,191,36,0.45)]'
                     : 'bg-black/25 ring-1 ring-black/30 shadow-[inset_0_2px_5px_rgba(0,0,0,0.45),inset_0_-1px_0_rgba(255,255,255,0.05)]'}
@@ -106,12 +106,12 @@ export const PlayerRack: React.FC<PlayerRackProps> = ({ tiles, isCurrentPlayer, 
     return (
         <div className="relative w-full max-w-none mx-auto flex flex-col items-center select-none">
             {/* The wooden istaka */}
-            <div className="relative w-full sm:w-[92%] max-w-[900px] wood-surface rounded-xl border-b-8 border-[#2a180c] p-1.5 sm:p-4 flex flex-col gap-1.5 sm:gap-2 drop-shadow-[0_20px_28px_rgba(0,0,0,0.55)]">
+            <div className="relative w-full @sm:w-[92%] max-w-[900px] wood-surface rounded-xl border-b-8 border-[#2a180c] p-1.5 @sm:p-4 flex flex-col gap-1.5 @sm:gap-2 drop-shadow-[0_20px_28px_rgba(0,0,0,0.55)]">
                 {/* Rim highlight */}
                 <div className="absolute inset-0 rounded-xl ring-1 ring-white/10 pointer-events-none" />
 
                 {/* Top shelf (slots 0-14) */}
-                <div className="relative flex justify-center gap-0.5 sm:gap-1 rounded-lg bg-black/20 px-1 py-1 sm:px-1.5 sm:py-1.5 shadow-[inset_0_3px_8px_rgba(0,0,0,0.5)] border-b-4 border-black/35 z-10">
+                <div className="relative flex justify-center gap-0.5 @sm:gap-1 rounded-lg bg-black/20 px-1 py-1 @sm:px-1.5 @sm:py-1.5 shadow-[inset_0_3px_8px_rgba(0,0,0,0.5)] border-b-4 border-black/35 z-10">
                     {tiles.slice(0, 15).map((tile, i) => {
                         const isActualOkey = okeyTile && tile && tile.color === okeyTile.color && tile.value === okeyTile.value;
                         return (
@@ -127,7 +127,7 @@ export const PlayerRack: React.FC<PlayerRackProps> = ({ tiles, isCurrentPlayer, 
                 </div>
 
                 {/* Bottom shelf (slots 15-29) */}
-                <div className="relative flex justify-center gap-0.5 sm:gap-1 rounded-lg bg-black/20 px-1 py-1 sm:px-1.5 sm:py-1.5 shadow-[inset_0_3px_8px_rgba(0,0,0,0.5)] border-b-4 border-black/35 z-10">
+                <div className="relative flex justify-center gap-0.5 @sm:gap-1 rounded-lg bg-black/20 px-1 py-1 @sm:px-1.5 @sm:py-1.5 shadow-[inset_0_3px_8px_rgba(0,0,0,0.5)] border-b-4 border-black/35 z-10">
                     {tiles.slice(15, 30).map((tile, i) => {
                         const actualIndex = i + 15;
                         const isActualOkey = okeyTile && tile && tile.color === okeyTile.color && tile.value === okeyTile.value;
@@ -145,7 +145,7 @@ export const PlayerRack: React.FC<PlayerRackProps> = ({ tiles, isCurrentPlayer, 
             </div>
 
             {/* Shelf hint */}
-            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 backdrop-blur-md text-[10px] font-bold uppercase tracking-widest text-amber-300/90">
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 text-[10px] font-bold uppercase tracking-widest text-amber-300/90">
                 Taşları Sürükleyerek Düzenleyebilirsiniz
             </div>
         </div>

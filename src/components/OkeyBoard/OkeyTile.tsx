@@ -28,8 +28,8 @@ const DOT_COLORS: Record<string, string> = {
 
 export const OkeyTile: React.FC<OkeyTileProps> = React.memo(({ tile, okeyTile, isJoker, className = '', dragging = false, size = 'md' }) => {
   const dims = size === 'fit' ? 'w-full h-full rounded-lg' : size === 'xs' ? 'w-8 h-11 rounded-md' : size === 'sm' ? 'w-10 h-13 rounded-lg' : size === 'lg' ? 'w-16 h-22 rounded-2xl' : 'w-14 h-19 rounded-xl';
-  const fontSize = size === 'fit' ? 'text-[clamp(1rem,2.9vw,2.1rem)]' : size === 'xs' ? 'text-lg' : size === 'sm' ? 'text-2xl' : size === 'lg' ? 'text-5xl' : 'text-4xl';
-  const dotSize = size === 'xs' || size === 'sm' ? 'w-1.5 h-1.5' : size === 'fit' ? 'w-1.5 h-1.5 sm:w-2 sm:h-2' : 'w-2 h-2';
+  const fontSize = size === 'fit' ? 'text-[2.1rem]' : size === 'xs' ? 'text-lg' : size === 'sm' ? 'text-2xl' : size === 'lg' ? 'text-5xl' : 'text-4xl';
+  const dotSize = size === 'xs' || size === 'sm' ? 'w-1.5 h-1.5' : size === 'fit' ? 'w-2 h-2' : 'w-2 h-2';
 
   const isFake = !!tile.isFakeOkey;
   // Real Okey check (the tile currently acting as the joker for this round)
@@ -37,18 +37,19 @@ export const OkeyTile: React.FC<OkeyTileProps> = React.memo(({ tile, okeyTile, i
   const showOkeyGlow = isRealOkey || (!!isJoker && !isFake);
 
   const renderContent = () => {
-    // Fake Okey ("Sahte Okey") — clover motif
+    // Fake Okey ("Sahte Okey") — clover motif. Not a wildcard: it stands in for
+    // the okey's colour and number (the real okey is the joker).
     if (isFake) {
-      const jokerSize = size === 'fit' ? 'w-5 h-5 sm:w-7 sm:h-7' : size === 'xs' ? 'w-5 h-5' : size === 'sm' ? 'w-6 h-6' : size === 'lg' ? 'w-10 h-10' : 'w-8 h-8';
-      const cloverSize = size === 'fit' ? 'text-xs sm:text-base' : size === 'xs' ? 'text-[10px]' : size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-2xl' : 'text-lg';
-      const textSize = size === 'fit' ? 'text-[6px] sm:text-[9px]' : size === 'xs' ? 'text-[6px]' : size === 'sm' ? 'text-[8px]' : size === 'lg' ? 'text-sm' : 'text-[10px]';
+      const jokerSize = size === 'fit' ? 'w-7 h-7' : size === 'xs' ? 'w-5 h-5' : size === 'sm' ? 'w-6 h-6' : size === 'lg' ? 'w-10 h-10' : 'w-8 h-8';
+      const cloverSize = size === 'fit' ? 'text-base' : size === 'xs' ? 'text-[10px]' : size === 'sm' ? 'text-xs' : size === 'lg' ? 'text-2xl' : 'text-lg';
+      const textSize = size === 'fit' ? 'text-[9px]' : size === 'xs' ? 'text-[6px]' : size === 'sm' ? 'text-[8px]' : size === 'lg' ? 'text-sm' : 'text-[10px]';
 
       return (
         <div className="flex flex-col items-center justify-center gap-0.5">
           <div className={`${jokerSize} rounded-full border-2 border-emerald-500/80 bg-linear-to-br from-emerald-50 to-emerald-200 flex items-center justify-center shadow-[inset_0_1px_2px_rgba(255,255,255,0.8),0_1px_3px_rgba(6,95,70,0.35)]`}>
             <span className={`${cloverSize} leading-none text-emerald-600 drop-shadow-sm`}>☘</span>
           </div>
-          <span className={`${textSize} font-black text-emerald-700 tracking-tight uppercase`}>JOKER</span>
+          <span className={`${textSize} font-black text-emerald-700 tracking-tight uppercase`}>SAHTE</span>
         </div>
       );
     }

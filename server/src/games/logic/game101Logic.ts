@@ -1,4 +1,9 @@
 // 101 Game Logic - Uses same tile types as Okey
+//
+// Okey semantics (as in the rules text): the indicator's +1 tile of the same colour
+// is the round's OKEY and acts as a wildcard. The two "sahte okey" tiles
+// (isFakeOkey) are NOT wild — each stands for the okey's own colour+number.
+// Every validator / scorer below takes the round's okey tile for that reason.
 import type { OkeyTile, OkeyColor } from './okeyLogic';
 import { createOkeyDeck, shuffleDeck, determineOkey } from './okeyLogic';
 
@@ -19,6 +24,10 @@ export const PAIR_OPEN_MINIMUM = 5;
 export const NEVER_OPENED_PENALTY = 202;
 /** Game ends when someone reaches this cumulative penalty. */
 export const LOSING_SCORE = 101;
+/** Penalty for throwing the okey away (only allowed when nothing else is left to discard). */
+export const OKEY_DISCARD_PENALTY = 101;
+/** Hand value of an okey (wild) still on the rack when the round ends. */
+export const OKEY_IN_HAND_POINTS = 25;
 
 // A meld is a valid set (same value, different colors), run (same color, consecutive),
 // or pair (identical color+value duo used for çift açış).
@@ -51,259 +60,589 @@ export interface Game101State {
     roundWinner: number | null;
     gameWinner: number | null; // The player who DIDN'T reach 101
     roundNumber: number;
+    /** Seat that dealt this round; the starter is the next seat. */
+    dealer?: number;
 }
 
-/**
- * Calculate the point value of a tile
- * 1 = 1 point, 2-10 = face value, 11-13 = 10 points each
- * Joker (isFakeOkey) = 25 points when in hand
- */
-export const getTilePoints = (tile: Tile101): number => {
-    if (tile.isFakeOkey) return 25; // Joker penalty
-    if (tile.value >= 11) return 10; // J, Q, K equivalent
-    return tile.value;
-};
+type OkeyRef = Tile101 | null | undefined;
+type Face = { color: OkeyColor | null; value: number };
+
+const COLOR_ORDER: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
+const colorIndex = (c: OkeyColor | null): number => (c ? COLOR_ORDER.indexOf(c) : 99);
+const nonNull = (t: Tile101 | null | undefined): t is Tile101 => !!t;
+
+// ---------------------------------------------------------------------------
+// Okey helpers
+// ---------------------------------------------------------------------------
 
 /**
- * Calculate total points of tiles in a meld
+ * True when `tile` is this round's wildcard: the real okey (indicator + 1, same colour).
+ * Without a known okey (legacy callers) the sahte okey is treated as the joker.
  */
-export const calculateMeldPoints = (tiles: Tile101[]): number => {
-    return tiles.reduce((sum, tile) => {
-        // Jokers in melds take the value of the tile they represent
-        if (tile.isFakeOkey) {
-            // We need context to know the value, but for simplicity assume it's valid
-            return sum + 0; // Jokers don't add to meld point requirement
-        }
-        return sum + getTilePoints(tile);
-    }, 0);
+export const isWildOkey = (tile: Tile101, okey: OkeyRef): boolean => {
+    if (!okey || !okey.color) return !!tile.isFakeOkey;
+    return !tile.isFakeOkey && tile.color === okey.color && tile.value === okey.value;
+};
+
+/** Colour/number a non-wild tile plays as (sahte okey → the okey's face). */
+export const tileFace = (tile: Tile101, okey: OkeyRef): Face => {
+    if (tile.isFakeOkey) {
+        return okey && okey.color ? { color: okey.color, value: okey.value } : { color: null, value: 0 };
+    }
+    return { color: tile.color, value: tile.value };
+};
+
+/** Point value of a tile value (1 = 1, 2-10 = face, 11-13 = 10). */
+const pointsForValue = (value: number): number => (value >= 11 ? 10 : value);
+/** Run position 1..14 where 14 is the "1" placed after 13. */
+const pointsForPosition = (pos: number): number => (pos === 14 ? 1 : pointsForValue(pos));
+
+/**
+ * Point value of a tile left in hand.
+ * Okey (wild) = 25; sahte okey counts as the okey's number; 11-13 = 10.
+ */
+export const getTilePoints = (tile: Tile101, okey?: OkeyRef): number => {
+    if (isWildOkey(tile, okey)) return OKEY_IN_HAND_POINTS;
+    const f = tileFace(tile, okey);
+    return f.color ? pointsForValue(f.value) : OKEY_IN_HAND_POINTS;
 };
 
 /**
  * Calculate points in a player's hand (for scoring at round end)
  */
-export const calculateHandPoints = (tiles: (Tile101 | null)[]): number => {
-    return tiles
-        .filter((t): t is Tile101 => t !== null)
-        .reduce((sum, tile) => sum + getTilePoints(tile), 0);
+export const calculateHandPoints = (tiles: (Tile101 | null)[], okey?: OkeyRef): number => {
+    return tiles.filter(nonNull).reduce((sum, tile) => sum + getTilePoints(tile, okey), 0);
 };
 
+// ---------------------------------------------------------------------------
+// Meld validation
+// ---------------------------------------------------------------------------
+
 /**
- * Check if a set of tiles forms a valid SET (same value, 3-4 different colors)
+ * Check if a set of tiles forms a valid SET (same value, 3-4 different colors).
+ * Okeys (wild) fill missing colours; at least one real tile is required.
  */
-export const isValidSet = (tiles: Tile101[]): boolean => {
+export const isValidSet = (tiles: Tile101[], okey?: OkeyRef): boolean => {
     if (tiles.length < 3 || tiles.length > 4) return false;
-
-    const nonJokers = tiles.filter(t => !t.isFakeOkey);
-    const jokerCount = tiles.length - nonJokers.length;
-
-    if (nonJokers.length === 0) return false; // Can't have all jokers
-
-    // All non-jokers must have the same value
-    const value = nonJokers[0].value;
-    if (!nonJokers.every(t => t.value === value)) return false;
-
-    // All non-jokers must have different colors
-    const colors = nonJokers.map(t => t.color);
-    if (new Set(colors).size !== colors.length) return false;
-
-    // With jokers, we need enough unique colors
-    const uniqueColors = new Set(colors);
-    const possibleColors = 4 - uniqueColors.size; // Remaining colors jokers can fill
-    
-    return jokerCount <= possibleColors;
+    const faces = tiles.filter(t => !isWildOkey(t, okey)).map(t => tileFace(t, okey));
+    if (faces.length === 0) return false;
+    if (faces.some(f => !f.color)) return false;
+    const value = faces[0].value;
+    if (!faces.every(f => f.value === value)) return false;
+    return new Set(faces.map(f => f.color)).size === faces.length;
 };
 
 /**
- * Check if a set of tiles forms a valid RUN (same color, 3+ consecutive).
- * Jokers may fill internal gaps or extend either end. Duplicate values are NOT allowed.
+ * Every start position a group of tiles can occupy as a RUN. Positions run 1..14,
+ * where 14 is the 1 that may follow 13 (12-13-1 is legal, 13-1-2 is not).
+ * Okeys fill any position. Returns [] when the tiles are not a run.
+ */
+export const runPlacements = (tiles: Tile101[], okey?: OkeyRef): number[] => {
+    const len = tiles.length;
+    if (len < 3 || len > 13) return [];
+    const faces: Face[] = [];
+    for (const t of tiles) {
+        if (isWildOkey(t, okey)) continue;
+        const f = tileFace(t, okey);
+        if (!f.color) return [];
+        faces.push(f);
+    }
+    if (faces.length === 0) return [];
+    if (!faces.every(f => f.color === faces[0].color)) return [];
+
+    const starts: number[] = [];
+    for (let s = 1; s + len - 1 <= 14; s++) {
+        const e = s + len - 1;
+        const used = new Set<number>();
+        let ok = true;
+        for (const f of faces) {
+            let pos = -1;
+            if (f.value >= s && f.value <= e) pos = f.value;
+            else if (f.value === 1 && e === 14) pos = 14;
+            if (pos === -1 || used.has(pos)) { ok = false; break; }
+            used.add(pos);
+        }
+        if (ok) starts.push(s);
+    }
+    return starts;
+};
+
+/**
+ * Check if a set of tiles forms a valid RUN (same color, 3-13 consecutive).
+ * Okeys may fill internal gaps or extend either end. Duplicate values are NOT allowed.
  * Classic wrap: 12-13-1 is allowed; 13-1-2 is not.
  */
-export const isValidRun = (tiles: Tile101[]): boolean => {
-    if (tiles.length < 3 || tiles.length > 13) return false;
-
-    const nonJokers = tiles.filter(t => !t.isFakeOkey);
-    const jokerCount = tiles.length - nonJokers.length;
-
-    if (nonJokers.length === 0) return false;
-
-    // All non-jokers must have the same color
-    const color = nonJokers[0].color;
-    if (!nonJokers.every(t => t.color === color)) return false;
-
-    // No duplicate values allowed in a run
-    const values = nonJokers.map(t => t.value).sort((a, b) => a - b);
-    for (let i = 1; i < values.length; i++) {
-        if (values[i] === values[i - 1]) return false;
-    }
-
-    const has1 = values.includes(1);
-    const has13 = values.includes(13);
-    const has2 = values.includes(2);
-
-    // Wrap-around run (…-12-13-1): map 1 → 14, forbid continuing into 2.
-    if (has1 && has13) {
-        if (has2) return false; // 13-1-2 is illegal
-        const mapped = values.map(v => (v === 1 ? 14 : v)).sort((a, b) => a - b);
-        const minVal = mapped[0];
-        const maxVal = mapped[mapped.length - 1];
-        const span = maxVal - minVal + 1;
-        if (span > tiles.length) return false;
-        const internalGaps = span - nonJokers.length;
-        if (internalGaps < 0 || internalGaps > jokerCount) return false;
-        // Wrapped runs sit at the high end of 1–13 (1 becomes 14).
-        if (maxVal !== 14) return false;
-        const earliestStart = Math.max(1, maxVal - tiles.length + 1);
-        const latestStart = Math.min(minVal, 14 - tiles.length + 1);
-        return earliestStart <= latestStart;
-    }
-
-    const minVal = values[0];
-    const maxVal = values[values.length - 1];
-    const span = maxVal - minVal + 1;
-
-    if (span > tiles.length) return false;
-
-    const internalGaps = span - nonJokers.length;
-    if (internalGaps < 0 || internalGaps > jokerCount) return false;
-
-    const earliestStart = Math.max(1, maxVal - tiles.length + 1);
-    const latestStart = Math.min(minVal, 13 - tiles.length + 1);
-    return earliestStart <= latestStart;
-};
+export const isValidRun = (tiles: Tile101[], okey?: OkeyRef): boolean => runPlacements(tiles, okey).length > 0;
 
 /**
  * Check if tiles form a valid meld (either set or run)
  */
-export const isValidMeld = (tiles: Tile101[]): { valid: boolean; type: 'set' | 'run' | null } => {
-    if (isValidSet(tiles)) return { valid: true, type: 'set' };
-    if (isValidRun(tiles)) return { valid: true, type: 'run' };
+export const isValidMeld = (tiles: Tile101[], okey?: OkeyRef): { valid: boolean; type: 'set' | 'run' | null } => {
+    if (isValidSet(tiles, okey)) return { valid: true, type: 'set' };
+    if (isValidRun(tiles, okey)) return { valid: true, type: 'run' };
     return { valid: false, type: null };
+};
+
+/** A pair (çift): two identical tiles, or one tile + an okey. */
+export const isValidPair = (tiles: Tile101[], okey?: OkeyRef): boolean => {
+    if (tiles.length !== 2) return false;
+    const real = tiles.filter(t => !isWildOkey(t, okey));
+    if (real.length === 0) return false;
+    if (real.length === 1) return !!tileFace(real[0], okey).color;
+    const a = tileFace(real[0], okey), b = tileFace(real[1], okey);
+    return !!a.color && a.color === b.color && a.value === b.value;
+};
+
+/**
+ * Start position (1..14 scale) of a run as it lies on the table, i.e. consistent with the
+ * stored tile order — so every okey keeps the value it was laid as. Null if the stored
+ * order is not a run layout (then the multiset rule applies).
+ */
+const laidRunStart = (tiles: Tile101[], okey: OkeyRef): number | null => {
+    const len = tiles.length;
+    const first = tiles.findIndex(t => !isWildOkey(t, okey));
+    if (first === -1) return null;
+    const f = tileFace(tiles[first], okey);
+    const options = f.value === 1 ? [1 - first, 14 - first] : [f.value - first];
+    for (const s of options) {
+        if (s < 1 || s + len - 1 > 14) continue;
+        const ok = tiles.every((t, i) => {
+            if (isWildOkey(t, okey)) return true;
+            const g = tileFace(t, okey);
+            const pos = s + i;
+            return g.color === f.color && (pos === 14 ? g.value === 1 : g.value === pos);
+        });
+        if (ok) return s;
+    }
+    return null;
+};
+
+/** Where a tile would attach to a laid run: 'low' / 'high' end, or null if it does not fit. */
+const runAttachSide = (meld: Meld, tile: Tile101, okey: OkeyRef): 'low' | 'high' | null => {
+    const tiles = [...meld.tiles, tile];
+    if (!isValidRun(tiles, okey)) return null;
+    const s = laidRunStart(meld.tiles, okey);
+    if (s === null) return 'high'; // legacy unordered meld: multiset rule, re-ordered on add
+    const e = s + meld.tiles.length - 1;
+    if (isWildOkey(tile, okey)) return e < 14 ? 'high' : s > 1 ? 'low' : null;
+    const f = tileFace(tile, okey);
+    const color = tileFace(meld.tiles.find(t => !isWildOkey(t, okey))!, okey).color;
+    if (f.color !== color) return null;
+    if (e < 14 && (e + 1 === 14 ? 1 : e + 1) === f.value) return 'high';
+    if (s > 1 && s - 1 === f.value) return 'low';
+    return null;
 };
 
 /**
  * Check if a tile can be added to an existing meld.
- * Re-validates the augmented tile group so end/internal/joker cases are all handled.
- * Pair melds (çift açış) do not accept additions.
+ * Runs grow only at their ends and okeys already on the table keep their value;
+ * sets accept a missing colour. Pair melds (çift açış) do not accept additions.
  */
-export const canAddToMeld = (meld: Meld, tile: Tile101): boolean => {
+export const canAddToMeld = (meld: Meld, tile: Tile101, okey?: OkeyRef): boolean => {
     if (meld.type === 'pair') return false;
-    const newTiles = [...meld.tiles, tile];
-    if (meld.type === 'set') {
-        return isValidSet(newTiles);
+    if (meld.type === 'set') return isValidSet([...meld.tiles, tile], okey);
+    return runAttachSide(meld, tile, okey) !== null;
+};
+
+/** Tiles of `meld` after adding `tile` (call only when canAddToMeld is true), in display order. */
+export const addTileToMeld = (meld: Meld, tile: Tile101, okey?: OkeyRef): Tile101[] => {
+    if (meld.type === 'run') {
+        if (laidRunStart(meld.tiles, okey) === null) return orderMeldTiles([...meld.tiles, tile], 'run', okey);
+        return runAttachSide(meld, tile, okey) === 'low' ? [tile, ...meld.tiles] : [...meld.tiles, tile];
     }
-    return isValidRun(newTiles);
+    return orderMeldTiles([...meld.tiles, tile], meld.type, okey);
 };
 
 /**
- * Point value of a non-joker tile value (1 = 1, 2-10 = face, 11-13 = 10).
+ * Total point value a meld contributes toward the 101-point first lay-down.
+ * Okeys count as the tile they stand for. When an okey at a run end could stand
+ * for either neighbour, the higher-value placement is used. Pairs count 0.
  */
-const pointsForValue = (value: number): number => (value >= 11 ? 10 : value);
+export const getMeldPoints = (tiles: Tile101[], type: 'set' | 'run' | 'pair', okey?: OkeyRef): number => {
+    if (type === 'pair') return 0;
+    if (type === 'set') {
+        const real = tiles.find(t => !isWildOkey(t, okey));
+        if (!real) return 0;
+        return tiles.length * pointsForValue(tileFace(real, okey).value);
+    }
+    let best = 0;
+    for (const s of runPlacements(tiles, okey)) {
+        let sum = 0;
+        for (let i = 0; i < tiles.length; i++) sum += pointsForPosition(s + i);
+        if (sum > best) best = sum;
+    }
+    return best;
+};
 
 /**
- * Total point value a meld contributes toward the 101-point first lay-down,
- * counting jokers as the value they represent (for runs, the filled/extended
- * positions; for sets, the shared value). Pairs do not count toward 101 open.
+ * Display order for a meld: runs ascending (okeys in the slots they fill),
+ * sets by colour with okeys last.
  */
-export const getMeldPoints = (tiles: Tile101[], type: 'set' | 'run' | 'pair'): number => {
-    if (type === 'pair') return 0;
-    const nonJokers = tiles.filter(t => !t.isFakeOkey);
-    if (nonJokers.length === 0) return 0;
-
+export const orderMeldTiles = (tiles: Tile101[], type: 'set' | 'run' | 'pair', okey?: OkeyRef): Tile101[] => {
+    if (type === 'pair') return [...tiles];
     if (type === 'set') {
-        return tiles.length * pointsForValue(nonJokers[0].value);
+        const real = tiles.filter(t => !isWildOkey(t, okey))
+            .sort((a, b) => colorIndex(tileFace(a, okey).color) - colorIndex(tileFace(b, okey).color));
+        return [...real, ...tiles.filter(t => isWildOkey(t, okey))];
     }
-
-    // Run: place the run at the highest values that still cover the non-jokers,
-    // then sum every position (jokers included via their represented value).
-    // Wrap runs (…-13-1): treat 1 as 14 for placement.
-    const raw = nonJokers.map(t => t.value);
-    const wrap = raw.includes(1) && raw.includes(13) && !raw.includes(2);
-    const vals = raw.map(v => (wrap && v === 1 ? 14 : v));
-    const maxVal = Math.max(...vals);
-    const start = Math.max(1, maxVal - tiles.length + 1);
-    let sum = 0;
-    for (let i = 0; i < tiles.length; i++) {
-        let v = start + i;
-        if (v === 14) v = 1;
-        if (v >= 1 && v <= 13) sum += pointsForValue(v);
+    const starts = runPlacements(tiles, okey);
+    if (starts.length === 0) return [...tiles];
+    let s = starts[0];
+    let bestPts = -1;
+    for (const st of starts) {
+        let sum = 0;
+        for (let i = 0; i < tiles.length; i++) sum += pointsForPosition(st + i);
+        if (sum > bestPts) { bestPts = sum; s = st; }
     }
-    return sum;
+    const e = s + tiles.length - 1;
+    const slots: (Tile101 | null)[] = new Array(tiles.length).fill(null);
+    const wilds: Tile101[] = [];
+    for (const t of tiles) {
+        if (isWildOkey(t, okey)) { wilds.push(t); continue; }
+        const v = tileFace(t, okey).value;
+        const pos = v >= s && v <= e ? v : 14;
+        slots[pos - s] = t;
+    }
+    return slots.map(t => t ?? wilds.shift()!);
 };
 
 /**
  * Check if player can make their first normal lay down (101+ points across melds).
  */
-export const canMakeFirstLayDown = (melds: Tile101[][]): boolean => {
+export const canMakeFirstLayDown = (melds: Tile101[][], okey?: OkeyRef): boolean => {
     let totalPoints = 0;
-
     for (const meld of melds) {
-        const validation = isValidMeld(meld);
+        const validation = isValidMeld(meld, okey);
         if (!validation.valid || !validation.type) return false;
-        totalPoints += getMeldPoints(meld, validation.type);
+        totalPoints += getMeldPoints(meld, validation.type, okey);
     }
-
     return totalPoints >= FIRST_MELD_MINIMUM;
 };
 
-/** Pair key for identical color+value tiles (jokers excluded). */
-const pairKey = (tile: Tile101): string | null => {
-    if (tile.isFakeOkey || !tile.color) return null;
-    return `${tile.color}-${tile.value}`;
+// ---------------------------------------------------------------------------
+// Exact meld search (shared by the side-tile rule and the bot)
+// ---------------------------------------------------------------------------
+
+export interface PlannedMeld {
+    tiles: Tile101[];
+    type: 'set' | 'run';
+    points: number;
+}
+
+interface Candidate {
+    keys: number[]; // face keys (colorIdx*13 + value-1), distinct
+    wild: number;
+    type: 'set' | 'run';
+    points: number;
+    score: number;
+    rel: number[]; // relevant-key indices (ascending)
+}
+
+const faceKey = (f: Face): number => (f.color ? COLOR_ORDER.indexOf(f.color) * 13 + (f.value - 1) : -1);
+
+const buildCandidates = (present: Set<number>, wildCount: number): Candidate[] => {
+    const W = Math.min(wildCount, 2);
+    const out: Candidate[] = [];
+    const push = (keys: number[], wild: number, type: 'set' | 'run', points: number) => {
+        out.push({ keys, wild, type, points, score: points * 64 + keys.length + wild, rel: [] });
+    };
+    // Sets
+    for (let v = 1; v <= 13; v++) {
+        const colors = [0, 1, 2, 3].filter(c => present.has(c * 13 + v - 1));
+        for (let mask = 1; mask < 16; mask++) {
+            const chosen = colors.filter((_, i) => mask & (1 << i));
+            if (chosen.length === 0 || mask >= 1 << colors.length) continue;
+            for (let w = 0; w <= Math.min(W, 4 - chosen.length); w++) {
+                const size = chosen.length + w;
+                if (size < 3) continue;
+                push(chosen.map(c => c * 13 + v - 1), w, 'set', size * pointsForValue(v));
+            }
+        }
+    }
+    // Runs (positions 1..14, 14 = the 1 after 13)
+    for (let c = 0; c < 4; c++) {
+        for (let s = 1; s <= 12; s++) {
+            const keys: number[] = [];
+            let miss = 0;
+            let pts = 0;
+            for (let e = s; e <= Math.min(14, s + 12); e++) {
+                const v = e === 14 ? 1 : e;
+                const k = c * 13 + v - 1;
+                if (present.has(k)) keys.push(k); else miss++;
+                pts += pointsForPosition(e);
+                if (miss > W) break;
+                if (e - s + 1 < 3 || keys.length === 0) continue;
+                push([...keys], miss, 'run', pts);
+                // Okeys may also stand in for a present tile that another meld needs.
+                if (miss + 1 <= W) {
+                    for (let i = 0; i < keys.length; i++) {
+                        if (keys.length > 1) push(keys.filter((_, x) => x !== i), miss + 1, 'run', pts);
+                        if (miss + 2 <= W) {
+                            for (let j = i + 1; j < keys.length; j++) {
+                                if (keys.length > 2) push(keys.filter((_, x) => x !== i && x !== j), miss + 2, 'run', pts);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return out;
+};
+
+const SEARCH_STATE_BUDGET = 250_000;
+
+/**
+ * Best (highest point) set of disjoint melds that can be formed from `pool`.
+ * When `mustUse` is given, only plans whose melds include that tile are considered
+ * (returns null if none exists). Exact memoised search with a greedy fallback for
+ * pathological hands.
+ */
+export const findBestMelds = (
+    pool: Tile101[],
+    okey?: OkeyRef,
+    mustUse?: Tile101 | null,
+): { melds: PlannedMeld[]; points: number } | null => {
+    const wilds = pool.filter(t => isWildOkey(t, okey));
+    const byKey = new Map<number, Tile101[]>();
+    for (const t of pool) {
+        if (isWildOkey(t, okey)) continue;
+        const k = faceKey(tileFace(t, okey));
+        if (k < 0) continue;
+        const list = byKey.get(k) || [];
+        list.push(t);
+        byKey.set(k, list);
+    }
+    const cands = buildCandidates(new Set(byKey.keys()), wilds.length);
+    const empty = { melds: [] as PlannedMeld[], points: 0 };
+    if (cands.length === 0) return mustUse ? null : empty;
+
+    const relKeys = [...new Set(cands.flatMap(c => c.keys))].sort((a, b) => a - b);
+    const relIndex = new Map(relKeys.map((k, i) => [k, i]));
+    const R = relKeys.length;
+    const buckets: number[][] = Array.from({ length: R }, () => []);
+    cands.forEach((c, i) => {
+        c.rel = c.keys.map(k => relIndex.get(k)!).sort((a, b) => a - b);
+        buckets[c.rel[0]].push(i);
+    });
+    const pow3: number[] = [1];
+    for (let i = 1; i <= R; i++) pow3.push(pow3[i - 1] * 3);
+    const counts = relKeys.map(k => Math.min(2, byKey.get(k)!.length));
+    let code0 = 0;
+    counts.forEach((n, i) => { code0 += n * pow3[i]; });
+
+    const memo = new Map<number, number>();
+    const choice = new Map<number, number>();
+    let overBudget = false;
+
+    const solve = (code: number, wl: number): number => {
+        let r = 0;
+        while (r < R && counts[r] === 0) r++;
+        if (r === R) return 0;
+        const mkey = code * 3 + wl;
+        const hit = memo.get(mkey);
+        if (hit !== undefined) return hit;
+        if (memo.size > SEARCH_STATE_BUDGET) { overBudget = true; return 0; }
+        counts[r]--;
+        let best = solve(code - pow3[r], wl);
+        counts[r]++;
+        let bestC = -1;
+        for (const ci of buckets[r]) {
+            const c = cands[ci];
+            if (c.wild > wl) continue;
+            let ok = true;
+            for (const x of c.rel) if (counts[x] === 0) { ok = false; break; }
+            if (!ok) continue;
+            let delta = 0;
+            for (const x of c.rel) { counts[x]--; delta += pow3[x]; }
+            const v = c.score + solve(code - delta, wl - c.wild);
+            for (const x of c.rel) counts[x]++;
+            if (v > best) { best = v; bestC = ci; }
+        }
+        memo.set(mkey, best);
+        choice.set(mkey, bestC);
+        return best;
+    };
+
+    const applicable = (c: Candidate, wl: number) => c.wild <= wl && c.rel.every(x => counts[x] > 0);
+    const chosen: Candidate[] = [];
+    let forced: Candidate | null = null;
+    let code = code0;
+    let wl = Math.min(wilds.length, 2);
+
+    if (mustUse) {
+        const mustWild = isWildOkey(mustUse, okey);
+        const mk = mustWild ? -2 : faceKey(tileFace(mustUse, okey));
+        let bestV = -1;
+        for (const c of cands) {
+            if (mustWild ? c.wild < 1 : !c.keys.includes(mk)) continue;
+            if (!applicable(c, wl)) continue;
+            let delta = 0;
+            for (const x of c.rel) { counts[x]--; delta += pow3[x]; }
+            const v = c.score + solve(code0 - delta, wl - c.wild);
+            for (const x of c.rel) counts[x]++;
+            if (v > bestV) { bestV = v; forced = c; }
+        }
+        if (!forced) return null;
+        for (const x of forced.rel) { counts[x]--; code -= pow3[x]; }
+        wl -= forced.wild;
+        chosen.push(forced);
+    } else {
+        solve(code0, wl);
+    }
+
+    if (overBudget) {
+        // Greedy fallback: repeatedly take the highest-scoring applicable candidate.
+        for (;;) {
+            let pick: Candidate | null = null;
+            for (const c of cands) if (applicable(c, wl) && (!pick || c.score > pick.score)) pick = c;
+            if (!pick) break;
+            for (const x of pick.rel) counts[x]--;
+            wl -= pick.wild;
+            chosen.push(pick);
+        }
+    } else {
+        // Walk the memoised choices.
+        for (;;) {
+            let r = 0;
+            while (r < R && counts[r] === 0) r++;
+            if (r === R) break;
+            const mkey = code * 3 + wl;
+            if (!memo.has(mkey)) solve(code, wl);
+            const ci = choice.get(mkey) ?? -1;
+            if (ci === -1) { counts[r]--; code -= pow3[r]; continue; }
+            const c = cands[ci];
+            for (const x of c.rel) { counts[x]--; code -= pow3[x]; }
+            wl -= c.wild;
+            chosen.push(c);
+        }
+    }
+
+    // Map candidates onto concrete tiles.
+    const lists = new Map<number, Tile101[]>();
+    for (const [k, list] of byKey) lists.set(k, [...list]);
+    const wildPool = [...wilds];
+    if (mustUse && isWildOkey(mustUse, okey)) {
+        const i = wildPool.findIndex(t => t.id === mustUse.id);
+        if (i > 0) { wildPool.splice(i, 1); wildPool.unshift(mustUse); }
+    }
+    const melds: PlannedMeld[] = chosen.map((c, idx) => {
+        const tiles: Tile101[] = c.keys.map(k => {
+            const list = lists.get(k)!;
+            if (idx === 0 && forced && mustUse) {
+                const j = list.findIndex(t => t.id === mustUse.id);
+                if (j !== -1) return list.splice(j, 1)[0];
+            }
+            return list.pop()!;
+        });
+        for (let w = 0; w < c.wild; w++) tiles.push(wildPool.shift()!);
+        return { tiles: orderMeldTiles(tiles, c.type, okey), type: c.type, points: getMeldPoints(tiles, c.type, okey) };
+    });
+    return { melds, points: melds.reduce((a, m) => a + m.points, 0) };
+};
+
+// ---------------------------------------------------------------------------
+// Pairs (çift açış)
+// ---------------------------------------------------------------------------
+
+/** Pair key for a non-wild tile (identical colour+number). */
+const pairKey = (tile: Tile101, okey: OkeyRef): string | null => {
+    if (isWildOkey(tile, okey)) return null;
+    const f = tileFace(tile, okey);
+    return f.color ? `${f.color}-${f.value}` : null;
 };
 
 /**
- * Count how many complete pairs (2 identical color+value tiles) exist in a pool.
+ * Count how many pairs exist in a pool: identical colour+number duos, plus one
+ * okey completing a single tile.
  */
-export const countCompletePairs = (tiles: Tile101[]): number => {
+export const countCompletePairs = (tiles: Tile101[], okey?: OkeyRef): number => {
     const counts = new Map<string, number>();
+    let wild = 0;
     for (const t of tiles) {
-        const k = pairKey(t);
+        if (isWildOkey(t, okey)) { wild++; continue; }
+        const k = pairKey(t, okey);
         if (!k) continue;
         counts.set(k, (counts.get(k) || 0) + 1);
     }
     let pairs = 0;
-    for (const n of counts.values()) pairs += Math.floor(n / 2);
-    return pairs;
+    let singles = 0;
+    for (const n of counts.values()) { pairs += Math.floor(n / 2); singles += n % 2; }
+    return pairs + Math.min(wild, singles);
 };
 
 /**
- * True when the pool contains at least PAIR_OPEN_MINIMUM identical pairs.
+ * True when the pool contains at least PAIR_OPEN_MINIMUM pairs.
  */
-export const canMakePairOpen = (tiles: Tile101[]): boolean =>
-    countCompletePairs(tiles) >= PAIR_OPEN_MINIMUM;
+export const canMakePairOpen = (tiles: Tile101[], okey?: OkeyRef): boolean =>
+    countCompletePairs(tiles, okey) >= PAIR_OPEN_MINIMUM;
 
 /**
- * Extract up to `maxPairs` identical pairs from tiles (greedy by key).
- * Returns array of 2-tile pair groups.
+ * Extract up to `maxPairs` pairs (identical duos first, then single + okey).
+ * With `mustUse`, that tile is placed in the first pair; returns [] if it cannot be paired.
  */
-export const extractPairs = (tiles: Tile101[], maxPairs = PAIR_OPEN_MINIMUM): Tile101[][] => {
+export const extractPairs = (
+    tiles: Tile101[],
+    maxPairs = PAIR_OPEN_MINIMUM,
+    okey?: OkeyRef,
+    mustUse?: Tile101 | null,
+): Tile101[][] => {
     const byKey = new Map<string, Tile101[]>();
+    let wilds: Tile101[] = [];
     for (const t of tiles) {
-        const k = pairKey(t);
+        if (isWildOkey(t, okey)) { wilds.push(t); continue; }
+        const k = pairKey(t, okey);
         if (!k) continue;
         const list = byKey.get(k) || [];
         list.push(t);
         byKey.set(k, list);
     }
     const pairs: Tile101[][] = [];
-    for (const list of byKey.values()) {
-        for (let i = 0; i + 1 < list.length && pairs.length < maxPairs; i += 2) {
-            pairs.push([list[i], list[i + 1]]);
+    if (mustUse) {
+        if (isWildOkey(mustUse, okey)) {
+            wilds = wilds.filter(t => t.id !== mustUse.id);
+            // Prefer pairing the okey with a single so no natural pair is broken.
+            let partnerKey: string | null = null;
+            for (const [k, list] of byKey) if (list.length % 2 === 1) { partnerKey = k; break; }
+            if (!partnerKey) for (const k of byKey.keys()) { partnerKey = k; break; }
+            if (!partnerKey) return [];
+            const partner = byKey.get(partnerKey)!.pop()!;
+            pairs.push([partner, mustUse]);
+        } else {
+            const k = pairKey(mustUse, okey);
+            if (!k) return [];
+            const list = (byKey.get(k) || []).filter(t => t.id !== mustUse.id);
+            if (list.length > 0) {
+                pairs.push([mustUse, list.shift()!]);
+                byKey.set(k, list);
+            } else if (wilds.length > 0) {
+                pairs.push([mustUse, wilds.shift()!]);
+                byKey.set(k, []);
+            } else {
+                return [];
+            }
         }
-        if (pairs.length >= maxPairs) break;
     }
-    return pairs;
+    for (const list of byKey.values()) {
+        while (list.length >= 2 && pairs.length < maxPairs) pairs.push([list.shift()!, list.shift()!]);
+    }
+    for (const list of byKey.values()) {
+        if (list.length === 1 && wilds.length > 0 && pairs.length < maxPairs) pairs.push([list.shift()!, wilds.shift()!]);
+    }
+    return pairs.slice(0, Math.max(maxPairs, mustUse ? 1 : 0));
 };
 
 /**
- * Rack indices that form complete identical pairs (for UI "Çift Aç" selection).
+ * Rack indices that form pairs (for UI "Çift Seç" selection).
  * Returns groups of 2 indices; flatten for selection.
  */
-export const findPairIndices = (tiles: (Tile101 | null)[]): number[][] => {
+export const findPairIndices = (tiles: (Tile101 | null)[], okey?: OkeyRef): number[][] => {
     const byKey = new Map<string, number[]>();
+    const wild: number[] = [];
     tiles.forEach((t, idx) => {
         if (!t) return;
-        const k = pairKey(t);
+        if (isWildOkey(t, okey)) { wild.push(idx); return; }
+        const k = pairKey(t, okey);
         if (!k) return;
         const list = byKey.get(k) || [];
         list.push(idx);
@@ -311,173 +650,142 @@ export const findPairIndices = (tiles: (Tile101 | null)[]): number[][] => {
     });
     const groups: number[][] = [];
     for (const idxs of byKey.values()) {
-        for (let i = 0; i + 1 < idxs.length; i += 2) {
-            groups.push([idxs[i], idxs[i + 1]]);
-        }
+        for (let i = 0; i + 1 < idxs.length; i += 2) groups.push([idxs[i], idxs[i + 1]]);
+    }
+    for (const idxs of byKey.values()) {
+        if (idxs.length % 2 === 1 && wild.length > 0) groups.push([idxs[idxs.length - 1], wild.shift()!]);
     }
     return groups;
 };
 
+// ---------------------------------------------------------------------------
+// Side tile (yan taş)
+// ---------------------------------------------------------------------------
+
 /**
- * Whether an unopened player may take `discard` — only if adding it enables
- * a normal (≥101) or pair (≥5) open this turn.
+ * Whether an unopened player may take `discard`: only if an opening that USES that
+ * tile exists this turn — a normal open (≥101) or a pair open (≥5 pairs).
+ * Uses the same exact search as the bot, so the bot never takes a tile it can't open with.
  */
 export const canTakeDiscardToOpen = (
     hand: (Tile101 | null)[],
     discard: Tile101,
+    okey?: OkeyRef,
 ): boolean => {
-    const pool = [...hand.filter((t): t is Tile101 => t !== null), discard];
-    if (canMakePairOpen(pool)) return true;
-
-    // Greedy extract melds and sum points (same spirit as AI collectMelds).
-    let remaining = [...pool];
-    let total = 0;
-    const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
-
-    const findBest = (poolTiles: Tile101[]): { tiles: Tile101[]; type: 'set' | 'run'; points: number } | null => {
-        let best: { tiles: Tile101[]; type: 'set' | 'run'; points: number } | null = null;
-        const nonJokers = poolTiles.filter(t => !t.isFakeOkey);
-
-        for (let v = 1; v <= 13; v++) {
-            const ofVal = nonJokers.filter(t => t.value === v);
-            if (ofVal.length >= 3) {
-                const set = ofVal.slice(0, Math.min(4, ofVal.length));
-                if (isValidSet(set)) {
-                    const points = getMeldPoints(set, 'set');
-                    if (!best || points > best.points) best = { tiles: set, type: 'set', points };
-                }
-            }
-        }
-        for (const color of colorOrder) {
-            const colorTiles = nonJokers
-                .filter(t => t.color === color)
-                .sort((a, b) => a.value - b.value);
-            for (let start = 0; start < colorTiles.length; start++) {
-                const run: Tile101[] = [colorTiles[start]];
-                for (let i = start + 1; i < colorTiles.length; i++) {
-                    const next = colorTiles[i];
-                    const last = run[run.length - 1];
-                    if (next.value === last.value) continue;
-                    if (next.value === last.value + 1 || (last.value === 13 && next.value === 1 && !run.some(t => t.value === 2))) {
-                        run.push(next);
-                        if (run.length >= 3 && isValidRun(run)) {
-                            const points = getMeldPoints(run, 'run');
-                            if (!best || points > best.points) best = { tiles: [...run], type: 'run', points };
-                        }
-                    } else if (!(last.value === 13 && next.value === 1)) {
-                        break;
-                    }
-                }
-            }
-        }
-        return best;
-    };
-
-    for (let guard = 0; guard < 12; guard++) {
-        const best = findBest(remaining);
-        if (!best) break;
-        total += best.points;
-        if (total >= FIRST_MELD_MINIMUM) return true;
-        const used = new Set(best.tiles.map(t => t.id));
-        remaining = remaining.filter(t => !used.has(t.id));
-    }
-    return false;
+    const pool = [...hand.filter(nonNull), discard];
+    const plan = findBestMelds(pool, okey, discard);
+    if (plan && plan.points >= FIRST_MELD_MINIMUM) return true;
+    const pairs = extractPairs(pool, 99, okey, discard);
+    return pairs.length >= PAIR_OPEN_MINIMUM && pairs.some(p => p.some(t => t.id === discard.id));
 };
+
+// ---------------------------------------------------------------------------
+// Scoring / rounds
+// ---------------------------------------------------------------------------
 
 /**
  * Round-end penalty for one non-winning player.
  */
-export const calculateRoundPenalty = (player: Player101Hand): number => {
+export const calculateRoundPenalty = (player: Player101Hand, okey?: OkeyRef): number => {
     if (!player.hasLaidDown) return NEVER_OPENED_PENALTY;
-    const hand = calculateHandPoints(player.tiles);
+    const hand = calculateHandPoints(player.tiles, okey);
     return player.openedWithPairs ? hand * 2 : hand;
+};
+
+const finishRound = (state: Game101State, players: Player101Hand[], winnerId: number | null): Game101State => {
+    const someoneOut = players.some(p => p.score >= LOSING_SCORE);
+    let gameWinner: number | null = null;
+    if (someoneOut) {
+        let minScore = Infinity;
+        players.forEach((p, idx) => {
+            if (p.score < minScore) {
+                minScore = p.score;
+                gameWinner = idx;
+            }
+        });
+    }
+    return {
+        ...state,
+        players,
+        phase: someoneOut ? 'gameOver' : 'roundOver',
+        roundWinner: winnerId,
+        gameWinner,
+    };
+};
+
+const dealHands = (deck: Tile101[], playerCount: number, starter: number, okey: Tile101) => {
+    const players: Player101Hand[] = [];
+    for (let p = 0; p < playerCount; p++) {
+        const count = p === starter ? INITIAL_HAND_SIZE + 1 : INITIAL_HAND_SIZE;
+        const hand: Tile101[] = [];
+        for (let i = 0; i < count && deck.length > 0; i++) hand.push(deck.pop()!);
+        players.push({ tiles: smartSort101Tiles(hand, okey), score: 0, hasLaidDown: false, openedWithPairs: false });
+    }
+    return players;
 };
 
 /**
  * Initialize a new 101 game
  */
 export const initialize101Game = (playerCount: number = 4): Game101State => {
-    let deck = shuffleDeck(createOkeyDeck());
-    
-    // 101'de de Okey (joker) mantigi olsun: bir gösterge sec, ona gore okeyi belirle
+    const deck = shuffleDeck(createOkeyDeck());
+
+    // Gösterge: its +1 (same colour) is the round's okey (wildcard).
     const indicator = deck.pop() as Tile101;
     const okeyDef = determineOkey(indicator) as Tile101;
-    
-    const players: Player101Hand[] = Array(playerCount).fill(null).map(() => ({
-        tiles: Array(RACK_SIZE_101).fill(null),
-        score: 0,
-        hasLaidDown: false,
-        openedWithPairs: false,
-    }));
 
-    // Deal: starter (seat 0 / dealer's right) gets 22, others 21.
-    for (let p = 0; p < playerCount; p++) {
-        const count = p === 0 ? INITIAL_HAND_SIZE + 1 : INITIAL_HAND_SIZE;
-        const hand: Tile101[] = [];
-        for (let i = 0; i < count && deck.length > 0; i++) {
-            hand.push(deck.pop()!);
-        }
-        players[p].tiles = smartSort101Tiles(hand);
-    }
+    // Deal: dealer is the last seat, so the starter (seat 0) gets 22, others 21.
+    const dealer = playerCount - 1;
+    const starter = (dealer + 1) % playerCount;
+    const players = dealHands(deck, playerCount, starter, okeyDef);
 
     return {
         phase: 'playing',
         players,
         centerStack: deck,
-        discardPiles: [[], [], [], []], // 4 player discard piles
+        discardPiles: Array.from({ length: playerCount }, () => []),
         indicatorTile: indicator,
         okeyTile: okeyDef,
         tableMelds: {},
-        currentTurn: 0,
+        currentTurn: starter,
         roundWinner: null,
         gameWinner: null,
-        roundNumber: 1
+        roundNumber: 1,
+        dealer,
     };
 };
 
 /**
- * Start a new round (after someone wins a round)
+ * Start a new round. The previous round's winner deals; after a round without a
+ * winner the deal passes to the next seat. The seat after the dealer starts with 22.
  */
 export const startNewRound = (prevState: Game101State): Game101State => {
     const playerCount = prevState.players.length;
-    let deck = shuffleDeck(createOkeyDeck());
-    
+    const deck = shuffleDeck(createOkeyDeck());
+
     const indicator = deck.pop() as Tile101;
     const okeyDef = determineOkey(indicator) as Tile101;
-    
-    const players: Player101Hand[] = prevState.players.map(p => ({
-        tiles: Array(RACK_SIZE_101).fill(null),
-        score: p.score, // Keep scores
-        hasLaidDown: false,
-        openedWithPairs: false,
-    }));
 
-    // Previous round winner deals; the player to their right (next seat) starts
-    // with 22 tiles and discards first without drawing.
-    const dealer = prevState.roundWinner ?? 0;
+    const prevDealer = prevState.dealer ?? playerCount - 1;
+    const dealer = prevState.roundWinner ?? (prevDealer + 1) % playerCount;
     const startingPlayer = (dealer + 1) % playerCount;
 
-    for (let p = 0; p < playerCount; p++) {
-        const count = p === startingPlayer ? INITIAL_HAND_SIZE + 1 : INITIAL_HAND_SIZE;
-        const hand: Tile101[] = [];
-        for (let i = 0; i < count && deck.length > 0; i++) {
-            hand.push(deck.pop()!);
-        }
-        players[p].tiles = smartSort101Tiles(hand);
-    }
+    const dealt = dealHands(deck, playerCount, startingPlayer, okeyDef);
+    const players: Player101Hand[] = prevState.players.map((p, i) => ({ ...dealt[i], score: p.score }));
 
     return {
         phase: 'playing',
         players,
         centerStack: deck,
-        discardPiles: [[], [], [], []], // Reset 4 player discard piles
+        discardPiles: Array.from({ length: playerCount }, () => []),
         indicatorTile: indicator,
         okeyTile: okeyDef,
         tableMelds: {},
         currentTurn: startingPlayer,
         roundWinner: null,
         gameWinner: prevState.gameWinner,
-        roundNumber: prevState.roundNumber + 1
+        roundNumber: prevState.roundNumber + 1,
+        dealer,
     };
 };
 
@@ -488,487 +796,385 @@ export const startNewRound = (prevState: Game101State): Game101State => {
  */
 export const endRound = (state: Game101State, winnerId: number): Game101State => {
     const winnerOpenedWithPairs = state.players[winnerId]?.openedWithPairs === true;
-
-    const newPlayers = state.players.map((player, idx) => {
-        if (idx === winnerId) {
-            return { ...player, score: player.score };
-        }
-        let penalty = calculateRoundPenalty(player);
+    const players = state.players.map((player, idx) => {
+        if (idx === winnerId) return { ...player };
+        let penalty = calculateRoundPenalty(player, state.okeyTile);
         if (winnerOpenedWithPairs) penalty *= 2;
         return { ...player, score: player.score + penalty };
     });
-
-    // Check if anyone has reached 101
-    const gameLoser = newPlayers.findIndex(p => p.score >= LOSING_SCORE);
-    let gameWinner: number | null = null;
-
-    if (gameLoser !== -1) {
-        let minScore = Infinity;
-        newPlayers.forEach((p, idx) => {
-            if (p.score < minScore) {
-                minScore = p.score;
-                gameWinner = idx;
-            }
-        });
-    }
-
-    return {
-        ...state,
-        players: newPlayers,
-        phase: gameLoser !== -1 ? 'gameOver' : 'roundOver',
-        roundWinner: winnerId,
-        gameWinner
-    };
+    return finishRound(state, players, winnerId);
 };
 
 /**
- * End the current round in a DRAW — used when a player must draw but the center
- * stack is exhausted. Nobody wins and nobody scores: hand points are NOT added,
- * roundWinner stays null (startNewRound then falls back to dealer 0).
+ * End the round when the center stack is exhausted: nobody wins, but every player's
+ * penalty is written (never opened +202, opened = rack sum, pair-opened ×2; no
+ * winner doubling). Then the usual 101-limit / game-over check.
  */
-export const endRoundInDraw = (state: Game101State): Game101State => ({
-    ...state,
-    phase: 'roundOver',
-    roundWinner: null
-});
+export const endRoundStackEmpty = (state: Game101State): Game101State => {
+    const players = state.players.map(player => ({
+        ...player,
+        score: player.score + calculateRoundPenalty(player, state.okeyTile),
+    }));
+    return finishRound(state, players, null);
+};
+
+// ---------------------------------------------------------------------------
+// Bot
+// ---------------------------------------------------------------------------
+
+/** How promising a tile is to keep (higher = keep). */
+const keepScore = (tile: Tile101, hand: Tile101[], okey: OkeyRef, opened: boolean): number => {
+    const f = tileFace(tile, okey);
+    let s = 0;
+    for (const o of hand) {
+        if (o.id === tile.id) continue;
+        if (isWildOkey(o, okey)) continue;
+        const g = tileFace(o, okey);
+        if (g.color === f.color && g.value === f.value) { s += opened ? 0 : 1; continue; }
+        if (g.value === f.value) { s += 2; continue; }
+        if (g.color === f.color) {
+            let d = Math.abs(g.value - f.value);
+            if (f.value === 1 || g.value === 1) d = Math.min(d, 14 - Math.max(f.value, g.value));
+            if (d === 1) s += 2;
+            else if (d === 2) s += 1;
+        }
+    }
+    return s;
+};
+
+const sideTileUsefulWhenOpen = (hand: Tile101[], tile: Tile101, melds: Meld[], okey: OkeyRef): boolean => {
+    if (isWildOkey(tile, okey)) return true;
+    if (melds.some(m => canAddToMeld(m, tile, okey))) return true;
+    const without = findBestMelds(hand, okey)?.points ?? 0;
+    const withTile = findBestMelds([...hand, tile], okey, tile)?.points ?? -1;
+    return withTile > without;
+};
 
 /**
  * Compute one full AI turn for the player whose turn it currently is.
  *
  * Pure function — takes the current game state and returns the next state after the
- * AI has: drawn from the center, laid down the best melds it can (respecting the
- * 101-point first lay-down / 5-pair open rules), added tiles to existing melds, and discarded its
- * lowest-value tile (advancing the turn). If the AI empties its hand it wins the round.
+ * AI has: drawn (skipped for the 22-tile starter; the side tile only when it can be
+ * used — to open if not yet opened), opened (≥101 normal open preferred, else ≥5 pairs),
+ * laid further melds, added tiles to table melds, and discarded (never the okey unless
+ * nothing else is left). Emptying the hand — by laying down or by the final discard —
+ * wins the round; an empty center stack after the discard ends the round without a winner.
  *
- * Shared by single-player (use101Game) and the online host (use101Room) so AI behaves
- * identically in both modes.
+ * Shared by single-player (use101Game) and the online server so AI behaves identically.
  */
 export const computeAIMove = (prev: Game101State): Game101State => {
-    const currPlayer = prev.currentTurn;
+    const okey = prev.okeyTile;
+    const p = prev.currentTurn;
     const playerCount = prev.players.length;
-    const nextTurn = (currPlayer + 1) % playerCount;
-    const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
+    const nextTurn = (p + 1) % playerCount;
+    const prevSeat = (p + playerCount - 1) % playerCount;
 
-    const newPlayers = prev.players.map(p => ({ ...p, tiles: [...p.tiles] }));
-    const newTableMelds: { [key: string]: Meld } = { ...prev.tableMelds };
-    const newStack = [...prev.centerStack];
-    const newDiscardPiles = prev.discardPiles.map(pile => [...pile]);
+    const players = prev.players.map(pl => ({ ...pl, tiles: [...pl.tiles] }));
+    const melds: { [key: string]: Meld } = { ...prev.tableMelds };
+    const stack = [...prev.centerStack];
+    const piles = prev.discardPiles.map(pile => [...pile]);
+    const rack = players[p].tiles;
 
-    const rack = newPlayers[currPlayer].tiles;
-
-    // 1) Draw. If not yet opened, take the previous discard ONLY when it enables
-    // opening (≥101 melds or ≥5 pairs). Once opened, take it when it fits a table meld
-    // or completes a set/run in hand. Otherwise draw from the center.
-    const prevPlayer = (currPlayer + playerCount - 1) % playerCount;
-    const prevPile = newDiscardPiles[prevPlayer] ?? [];
-    const topDiscard = prevPile.length > 0 ? prevPile[prevPile.length - 1] : undefined;
-
-    const discardIsUseful = (tile: Tile101): boolean => {
-        if (tile.isFakeOkey) return false;
-        if (!newPlayers[currPlayer].hasLaidDown) {
-            return canTakeDiscardToOpen(rack, tile);
+    const inHand = () => rack.filter(nonNull);
+    const removeFromRack = (t: Tile101) => {
+        const i = rack.findIndex(x => x?.id === t.id);
+        if (i !== -1) rack[i] = null;
+    };
+    const addToRack = (t: Tile101) => {
+        const i = rack.findIndex(x => x === null);
+        if (i !== -1) rack[i] = t; else rack.push(t);
+    };
+    const meldId = (tag: string, tiles: Tile101[]) => `meld-ai-${p}-r${prev.roundNumber}-${tag}-${tiles[0].id}`;
+    const layPlan = (plan: PlannedMeld[]) => {
+        for (const m of plan) {
+            const id = meldId(m.type, m.tiles);
+            melds[id] = { id, tiles: m.tiles, type: m.type, ownerPlayer: p };
+            m.tiles.forEach(removeFromRack);
         }
-        for (const meld of Object.values(newTableMelds)) {
-            if (canAddToMeld(meld, tile)) return true;
+    };
+
+    let opened = players[p].hasLaidDown;
+    let withPairs = players[p].openedWithPairs;
+    let sideTaken: Tile101 | null = null;
+
+    // 1) Draw — the 22-tile starter only discards.
+    let drew = false;
+    if (inHand().length < MAX_HAND_SIZE) {
+        const top = piles[prevSeat]?.[piles[prevSeat].length - 1];
+        const take = !!top && (opened
+            ? sideTileUsefulWhenOpen(inHand(), top, Object.values(melds), okey)
+            : canTakeDiscardToOpen(rack, top, okey));
+        if (top && take) {
+            piles[prevSeat].pop();
+            addToRack(top);
+            sideTaken = top;
+            drew = true;
         }
-        const handTiles = rack.filter((t): t is Tile101 => t !== null && !t.isFakeOkey);
-        for (let i = 0; i < handTiles.length; i++) {
-            for (let j = i + 1; j < handTiles.length; j++) {
-                if (isValidMeld([handTiles[i], handTiles[j], tile]).valid) return true;
-            }
+    }
+    const drawFromStack = (): boolean => {
+        const d = stack.pop();
+        if (!d) return false;
+        addToRack(d);
+        return true;
+    };
+    if (!drew && inHand().length < MAX_HAND_SIZE) {
+        if (!drawFromStack()) return endRoundStackEmpty(prev);
+    }
+
+    // 2) Open (normal ≥101 preferred, else pairs). A side tile taken unopened must be used.
+    const tryOpen = (mustUse: Tile101 | null): boolean => {
+        const plan = findBestMelds(inHand(), okey, mustUse);
+        if (plan && plan.points >= FIRST_MELD_MINIMUM) {
+            layPlan(plan.melds);
+            return true;
+        }
+        const pairs = extractPairs(inHand(), 99, okey, mustUse);
+        if (pairs.length >= PAIR_OPEN_MINIMUM) {
+            pairs.forEach(pr => {
+                const id = meldId('pair', pr);
+                melds[id] = { id, tiles: pr, type: 'pair', ownerPlayer: p };
+                pr.forEach(removeFromRack);
+            });
+            withPairs = true;
+            return true;
         }
         return false;
     };
+    if (!opened) {
+        opened = tryOpen(sideTaken);
+        if (!opened && sideTaken) {
+            // Safety net: never keep a side tile without opening — put it back and draw.
+            removeFromRack(sideTaken);
+            piles[prevSeat].push(sideTaken);
+            sideTaken = null;
+            if (!drawFromStack()) return endRoundStackEmpty(prev);
+            opened = tryOpen(null);
+        }
+    }
 
-    let drawn: Tile101 | undefined;
-    if (topDiscard && discardIsUseful(topDiscard)) {
-        prevPile.pop();
-        drawn = topDiscard;
+    // 3) Once open: lay every further meld, then add tiles to table melds.
+    if (opened) {
+        const more = findBestMelds(inHand(), okey);
+        if (more) layPlan(more.melds);
+        let changed = true;
+        while (changed && inHand().length > 0) {
+            changed = false;
+            const order = [...inHand()].sort((a, b) => Number(isWildOkey(a, okey)) - Number(isWildOkey(b, okey)));
+            for (const tile of order) {
+                const target = Object.values(melds).find(m => canAddToMeld(m, tile, okey));
+                if (target) {
+                    melds[target.id] = { ...target, tiles: addTileToMeld(target, tile, okey) };
+                    removeFromRack(tile);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    players[p] = { ...players[p], tiles: rack, hasLaidDown: opened, openedWithPairs: withPairs };
+    const base: Game101State = { ...prev, players, tableMelds: melds, centerStack: stack, discardPiles: piles };
+    if (inHand().length === 0) return endRound(base, p);
+
+    // 4) Discard: never the okey unless nothing else is left (+101), keep the side tile.
+    const hand = inHand();
+    const discardable = hand.filter(t => !isWildOkey(t, okey));
+    let toDiscard: Tile101;
+    let penalty = 0;
+    if (discardable.length === 0) {
+        toDiscard = hand[0];
+        penalty = OKEY_DISCARD_PENALTY;
     } else {
-        drawn = newStack.pop();
-    }
-    if (!drawn) {
-        // Center stack exhausted — the round ends in a draw, nobody scores.
-        return endRoundInDraw(prev);
-    }
-
-    const emptyIdx = rack.findIndex(s => s === null);
-    if (emptyIdx !== -1) rack[emptyIdx] = drawn;
-
-    const getTiles = () => rack.filter((t): t is Tile101 => t !== null);
-
-    // Find the highest-value valid meld within a pool of tiles (joker-free, to stay safe).
-    const findBestMeldIn = (pool: Tile101[]): { tiles: Tile101[]; type: 'set' | 'run'; points: number } | null => {
-        let best: { tiles: Tile101[]; type: 'set' | 'run'; points: number } | null = null;
-
-        // Sets (same value, different colors), high values first.
-        for (let value = 13; value >= 1; value--) {
-            const sameValue = pool.filter(t => t.value === value && !t.isFakeOkey);
-            const uniqueColors = [...new Set(sameValue.map(t => t.color))];
-            if (uniqueColors.length >= 3) {
-                const set: Tile101[] = [];
-                for (const color of colorOrder) {
-                    if (uniqueColors.includes(color)) {
-                        const tile = sameValue.find(t => t.color === color && !set.includes(t));
-                        if (tile) set.push(tile);
-                    }
-                }
-                if (set.length >= 3) {
-                    const points = getMeldPoints(set, 'set');
-                    if (!best || points > best.points) best = { tiles: set, type: 'set', points };
-                }
-            }
-        }
-
-        // Runs (same color, consecutive).
-        for (const color of colorOrder) {
-            const colorTiles = pool.filter(t => t.color === color && !t.isFakeOkey).sort((a, b) => a.value - b.value);
-            for (let startIdx = colorTiles.length - 1; startIdx >= 0; startIdx--) {
-                const run: Tile101[] = [colorTiles[startIdx]];
-                let expectedValue = colorTiles[startIdx].value - 1;
-                for (let j = startIdx - 1; j >= 0 && expectedValue >= 1; j--) {
-                    if (colorTiles[j].value === expectedValue) {
-                        run.unshift(colorTiles[j]);
-                        expectedValue--;
-                    }
-                }
-                if (run.length >= 3) {
-                    const points = getMeldPoints(run, 'run');
-                    if (!best || points > best.points) best = { tiles: run, type: 'run', points };
-                }
-            }
-        }
-
-        return best;
-    };
-
-    // Greedily collect as many non-overlapping melds as possible from the current hand.
-    const collectMelds = (): { tiles: Tile101[]; type: 'set' | 'run'; points: number }[] => {
-        let pool = getTiles();
-        const melds: { tiles: Tile101[]; type: 'set' | 'run'; points: number }[] = [];
-        let best = findBestMeldIn(pool);
-        while (best) {
-            melds.push(best);
-            const usedIds = new Set(best.tiles.map(t => t.id));
-            pool = pool.filter(t => !usedIds.has(t.id));
-            best = findBestMeldIn(pool);
-        }
-        return melds;
-    };
-
-    // 2) Lay down melds. To OPEN normally, combined value must reach 101.
-    // Prefer pair-open (≥5 pairs) when available and not yet opened.
-    let hasLaidDown = newPlayers[currPlayer].hasLaidDown;
-    let openedWithPairs = newPlayers[currPlayer].openedWithPairs;
-
-    if (!hasLaidDown && canMakePairOpen(getTiles())) {
-        const pairs = extractPairs(getTiles(), PAIR_OPEN_MINIMUM);
-        pairs.forEach((pairTiles, i) => {
-            const meldId = `meld-ai-${currPlayer}-r${prev.roundNumber}-pair-${i}-${pairTiles[0].id}`;
-            newTableMelds[meldId] = { id: meldId, tiles: pairTiles, type: 'pair', ownerPlayer: currPlayer };
-            for (const tile of pairTiles) {
-                const idx = rack.findIndex(rt => rt?.id === tile.id);
-                if (idx !== -1) rack[idx] = null;
-            }
+        let pool = discardable.filter(t => t.id !== sideTaken?.id);
+        if (pool.length === 0) pool = discardable;
+        pool.sort((a, b) => {
+            const ka = keepScore(a, hand, okey, opened), kb = keepScore(b, hand, okey, opened);
+            if (ka !== kb) return ka - kb;
+            const pa = getTilePoints(a, okey), pb = getTilePoints(b, okey);
+            return opened ? pb - pa : pa - pb;
         });
-        hasLaidDown = true;
-        openedWithPairs = true;
+        toDiscard = pool[0];
     }
+    removeFromRack(toDiscard);
+    piles[p].push(toDiscard);
+    if (penalty) players[p] = { ...players[p], score: players[p].score + penalty };
+    const after: Game101State = { ...base, players: [...players] };
 
-    const planned = collectMelds();
-    const plannedTotal = planned.reduce((sum, m) => sum + m.points, 0);
-
-    if (planned.length > 0 && (hasLaidDown || plannedTotal >= FIRST_MELD_MINIMUM)) {
-        planned.forEach((m, i) => {
-            const meldId = `meld-ai-${currPlayer}-r${prev.roundNumber}-${i}-${m.tiles[0].id}`;
-            newTableMelds[meldId] = { id: meldId, tiles: m.tiles, type: m.type, ownerPlayer: currPlayer };
-            for (const tile of m.tiles) {
-                const idx = rack.findIndex(rt => rt?.id === tile.id);
-                if (idx !== -1) rack[idx] = null;
-            }
-        });
-        hasLaidDown = true;
-
-        if (rack.filter(t => t !== null).length === 0) {
-            newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack, hasLaidDown, openedWithPairs };
-            return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack, discardPiles: newDiscardPiles }, currPlayer);
-        }
-    }
-    newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack, hasLaidDown, openedWithPairs };
-
-    // 3) Add tiles to existing melds (once laid down).
-    if (hasLaidDown) {
-        for (const [meldId, meld] of Object.entries(newTableMelds)) {
-            const tiles = getTiles();
-            for (const tile of tiles) {
-                if (canAddToMeld(meld, tile)) {
-                    newTableMelds[meldId] = { ...meld, tiles: [...meld.tiles, tile] };
-                    const ti = rack.findIndex(t => t?.id === tile.id);
-                    if (ti !== -1) rack[ti] = null;
-                    newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
-                    if (rack.filter(t => t !== null).length === 0) {
-                        return endRound({ ...prev, players: newPlayers, tableMelds: newTableMelds, centerStack: newStack, discardPiles: newDiscardPiles }, currPlayer);
-                    }
-                    break; // one tile per meld per turn
-                }
-            }
-        }
-    }
-
-    // 4) Discard the lowest-value tile (never a joker if avoidable) and advance.
-    const tilesWithIdx = rack
-        .map((t, idx) => ({ tile: t, idx }))
-        .filter((x): x is { tile: Tile101; idx: number } => x.tile !== null);
-
-    if (tilesWithIdx.length > 0) {
-        tilesWithIdx.sort((a, b) => {
-            if (a.tile.isFakeOkey && !b.tile.isFakeOkey) return 1;
-            if (!a.tile.isFakeOkey && b.tile.isFakeOkey) return -1;
-            return getTilePoints(a.tile) - getTilePoints(b.tile);
-        });
-        const low = tilesWithIdx[0];
-        const discarded = rack[low.idx];
-        rack[low.idx] = null;
-        newPlayers[currPlayer] = { ...newPlayers[currPlayer], tiles: rack };
-
-        if (discarded) newDiscardPiles[currPlayer] = [...newDiscardPiles[currPlayer], discarded];
-
-        return {
-            ...prev,
-            centerStack: newStack,
-            players: newPlayers,
-            discardPiles: newDiscardPiles,
-            tableMelds: newTableMelds,
-            currentTurn: nextTurn,
-        };
-    }
-
-    return { ...prev, centerStack: newStack, players: newPlayers, discardPiles: newDiscardPiles, tableMelds: newTableMelds, currentTurn: nextTurn };
+    if (inHand().length === 0) return endRound(after, p);
+    if (stack.length === 0) return endRoundStackEmpty(after);
+    return { ...after, currentTurn: nextTurn };
 };
+
+// ---------------------------------------------------------------------------
+// Rack arrangement (never drops tiles)
+// ---------------------------------------------------------------------------
 
 export type SortMode = 'smart' | 'runs' | 'sets';
 
 /**
- * Sort tiles prioritizing RUNS (same color, consecutive numbers)
+ * Lay groups out on the 30-slot rack: groups stay contiguous, separated by a gap,
+ * and a group that would straddle the two rows moves to row 2. If that does not fit,
+ * the row break and then the gaps are dropped — every tile is always kept.
  */
-export const sortByRuns = (tiles: (Tile101 | null)[]): (Tile101 | null)[] => {
-    const nonNullTiles = tiles.filter((t): t is Tile101 => t !== null);
-    const jokers = nonNullTiles.filter(t => t.isFakeOkey);
-    let remaining = nonNullTiles.filter(t => !t.isFakeOkey);
-    
-    const foundRuns: Tile101[][] = [];
-    const foundSetsAfterRuns: Tile101[][] = [];
-    const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
-    
-    // Find runs first (same color, consecutive)
-    for (const color of colorOrder) {
-        let colorTiles = remaining.filter(t => t.color === color);
-        colorTiles.sort((a, b) => a.value - b.value);
-        
+const layoutRack = (groups: Tile101[][], original: (Tile101 | null)[]): (Tile101 | null)[] => {
+    const parts = groups.filter(g => g.length > 0);
+    for (const mode of [2, 1, 0]) {
+        const rack: (Tile101 | null)[] = new Array(RACK_SIZE_101).fill(null);
+        let idx = 0;
+        let ok = true;
+        for (const g of parts) {
+            if (mode === 2 && idx < 15 && idx + g.length > 15 && g.length <= 15) idx = 15;
+            if (idx + g.length > RACK_SIZE_101) { ok = false; break; }
+            for (const t of g) rack[idx++] = t;
+            if (mode > 0 && idx < RACK_SIZE_101 && idx !== 15) idx++;
+        }
+        if (ok) return rack;
+    }
+    return [...original];
+};
+
+/** Guard: a sort result must contain exactly the input tiles. */
+const keepAllTiles = (original: (Tile101 | null)[], sorted: (Tile101 | null)[]): (Tile101 | null)[] => {
+    const a = original.filter(nonNull).map(t => t.id).sort();
+    const b = sorted.filter(nonNull).map(t => t.id).sort();
+    if (a.length !== b.length || a.some((id, i) => id !== b[i])) return [...original];
+    return sorted;
+};
+
+const splitWild = (tiles: (Tile101 | null)[], okey: OkeyRef) => {
+    const all = tiles.filter(nonNull);
+    return { wild: all.filter(t => isWildOkey(t, okey)), normal: all.filter(t => !isWildOkey(t, okey)) };
+};
+
+const byColorThenValue = (okey: OkeyRef) => (a: Tile101, b: Tile101) => {
+    const fa = tileFace(a, okey), fb = tileFace(b, okey);
+    return colorIndex(fa.color) - colorIndex(fb.color) || fa.value - fb.value;
+};
+
+const extractRuns = (tiles: Tile101[], okey: OkeyRef): { groups: Tile101[][]; rest: Tile101[] } => {
+    let remaining = [...tiles];
+    const groups: Tile101[][] = [];
+    for (const color of COLOR_ORDER) {
+        let colorTiles = remaining.filter(t => tileFace(t, okey).color === color)
+            .sort((a, b) => tileFace(a, okey).value - tileFace(b, okey).value);
         while (colorTiles.length >= 3) {
             let bestRun: Tile101[] = [];
-            
-            for (let startIdx = 0; startIdx < colorTiles.length; startIdx++) {
-                const run: Tile101[] = [colorTiles[startIdx]];
-                let expectedValue = colorTiles[startIdx].value + 1;
-                
-                for (let j = startIdx + 1; j < colorTiles.length && expectedValue <= 13; j++) {
-                    if (colorTiles[j].value === expectedValue) {
-                        run.push(colorTiles[j]);
-                        expectedValue++;
-                    } else if (colorTiles[j].value > expectedValue) {
-                        break;
-                    }
+            for (let start = 0; start < colorTiles.length; start++) {
+                const run: Tile101[] = [colorTiles[start]];
+                let expected = tileFace(colorTiles[start], okey).value + 1;
+                for (let j = start + 1; j < colorTiles.length && expected <= 13; j++) {
+                    const v = tileFace(colorTiles[j], okey).value;
+                    if (v === expected) { run.push(colorTiles[j]); expected++; } else if (v > expected) break;
                 }
-                
-                if (run.length >= 3 && run.length > bestRun.length) {
-                    bestRun = run;
-                }
+                if (run.length >= 3 && run.length > bestRun.length) bestRun = run;
             }
-            
-            if (bestRun.length >= 3) {
-                foundRuns.push(bestRun);
-                const usedIds = new Set(bestRun.map(t => t.id));
-                remaining = remaining.filter(t => !usedIds.has(t.id));
-                colorTiles = colorTiles.filter(t => !usedIds.has(t.id));
-            } else {
-                break;
-            }
+            if (bestRun.length < 3) break;
+            groups.push(bestRun);
+            const used = new Set(bestRun.map(t => t.id));
+            remaining = remaining.filter(t => !used.has(t.id));
+            colorTiles = colorTiles.filter(t => !used.has(t.id));
         }
     }
+    return { groups, rest: remaining };
+};
 
-    // After taking out runs, look for same-value, different-color groups (sets)
+const extractSets = (tiles: Tile101[], okey: OkeyRef): { groups: Tile101[][]; rest: Tile101[] } => {
+    let remaining = [...tiles];
+    const groups: Tile101[][] = [];
     for (let value = 1; value <= 13; value++) {
-        const tilesWithValue = remaining.filter(t => t.value === value);
-        const uniqueColors = new Set(tilesWithValue.map(t => t.color));
-        
-        // Only real set candidates (3+ different colors)
-        if (uniqueColors.size >= 3) {
-            const set: Tile101[] = [];
-            for (const color of colorOrder) {
-                if (uniqueColors.has(color)) {
-                    const tile = tilesWithValue.find(t => t.color === color && !set.includes(t));
-                    if (tile) set.push(tile);
-                }
-            }
-            if (set.length >= 3) {
-                foundSetsAfterRuns.push(set);
-                const usedIds = new Set(set.map(t => t.id));
-                remaining = remaining.filter(t => !usedIds.has(t.id));
-            }
+        const withValue = remaining.filter(t => tileFace(t, okey).value === value);
+        const set: Tile101[] = [];
+        for (const color of COLOR_ORDER) {
+            const t = withValue.find(x => tileFace(x, okey).color === color);
+            if (t) set.push(t);
+        }
+        if (set.length >= 3) {
+            groups.push(set);
+            const used = new Set(set.map(t => t.id));
+            remaining = remaining.filter(t => !used.has(t.id));
         }
     }
-    
-    // Build sorted rack – always group clearly by color for readability
-    const sortedRack: (Tile101 | null)[] = new Array(RACK_SIZE_101).fill(null);
-    let currentIndex = 0;
-    
-    // 1) Place found runs first, with a gap between each run
-    for (const meld of foundRuns) {
-        const currentRow = currentIndex < 15 ? 0 : 1;
-        const rowEnd = currentRow === 0 ? 15 : 30;
-        if (currentIndex + meld.length > rowEnd && currentRow === 0) currentIndex = 15;
-        for (const tile of meld) {
-            if (currentIndex < 30) sortedRack[currentIndex++] = tile;
-        }
-        if (currentIndex < 30 && currentIndex !== 15) currentIndex++;
-    }
+    return { groups, rest: remaining };
+};
 
-    // 2) Then place value-based sets (same number, different colors), with gaps
-    for (const set of foundSetsAfterRuns) {
-        const currentRow = currentIndex < 15 ? 0 : 1;
-        const rowEnd = currentRow === 0 ? 15 : 30;
-        if (currentIndex + set.length > rowEnd && currentRow === 0) currentIndex = 15;
-        for (const tile of set) {
-            if (currentIndex < 30) sortedRack[currentIndex++] = tile;
-        }
-        if (currentIndex < 30 && currentIndex !== 15) currentIndex++;
+const colorGroups = (tiles: Tile101[], okey: OkeyRef): Tile101[][] => {
+    const sorted = [...tiles].sort(byColorThenValue(okey));
+    const groups: Tile101[][] = [];
+    for (const t of sorted) {
+        const last = groups[groups.length - 1];
+        if (last && tileFace(last[0], okey).color === tileFace(t, okey).color) last.push(t);
+        else groups.push([t]);
     }
-    
-    // 3) Group remaining tiles strictly by color, with a visible gap between color groups
-    for (const color of colorOrder) {
-        const group = remaining
-            .filter(t => t.color === color)
-            .sort((a, b) => a.value - b.value);
-        
-        if (group.length === 0) continue;
+    return groups;
+};
 
-        const currentRow = currentIndex < 15 ? 0 : 1;
-        const rowEnd = currentRow === 0 ? 15 : 30;
-        // If this color group would overflow the current row, move to next row start
-        if (currentIndex + group.length > rowEnd && currentRow === 0) {
-            currentIndex = 15;
-        }
-
-        for (const tile of group) {
-            if (currentIndex < 30) {
-                sortedRack[currentIndex++] = tile;
-            }
-        }
-
-        // Add one empty slot as a visual separator between color groups
-        if (currentIndex < 30 && currentIndex !== 15) {
-            currentIndex++;
-        }
-    }
-    
-    if (remaining.length > 0 && jokers.length > 0 && currentIndex < 30) currentIndex++;
-    for (const tile of jokers) {
-        if (currentIndex < 30) sortedRack[currentIndex++] = tile;
-    }
-    
-    return sortedRack;
+/**
+ * Sort tiles prioritizing RUNS (same color, consecutive numbers)
+ */
+export const sortByRuns = (tiles: (Tile101 | null)[], okey?: OkeyRef): (Tile101 | null)[] => {
+    const { wild, normal } = splitWild(tiles, okey);
+    const runs = extractRuns(normal, okey);
+    const sets = extractSets(runs.rest, okey);
+    return keepAllTiles(tiles, layoutRack([...runs.groups, ...sets.groups, ...colorGroups(sets.rest, okey), wild], tiles));
 };
 
 /**
  * Sort tiles prioritizing SETS (same value, different colors)
  */
-export const sortBySets = (tiles: (Tile101 | null)[]): (Tile101 | null)[] => {
-    const nonNullTiles = tiles.filter((t): t is Tile101 => t !== null);
-    const jokers = nonNullTiles.filter(t => t.isFakeOkey);
-    let remaining = nonNullTiles.filter(t => !t.isFakeOkey);
-    
-    const foundMelds: Tile101[][] = [];
-    const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
-    
-    // Find sets first (same value, different colors)
-    for (let value = 1; value <= 13; value++) {
-        const tilesWithValue = remaining.filter(t => t.value === value);
-        const uniqueColors = new Set(tilesWithValue.map(t => t.color));
-        
-        if (uniqueColors.size >= 3) {
-            const set: Tile101[] = [];
-            for (const color of colorOrder) {
-                if (uniqueColors.has(color)) {
-                    const tile = tilesWithValue.find(t => t.color === color && !set.includes(t));
-                    if (tile) set.push(tile);
-                }
-            }
-            if (set.length >= 3) {
-                foundMelds.push(set);
-                const usedIds = new Set(set.map(t => t.id));
-                remaining = remaining.filter(t => !usedIds.has(t.id));
-            }
-        }
-    }
-    
-    // Then sort remaining by value then color
-    remaining.sort((a, b) => {
-        if (a.value !== b.value) return a.value - b.value;
-        const colorIdx = (c: OkeyColor | null) => c ? colorOrder.indexOf(c) : 99;
-        return colorIdx(a.color) - colorIdx(b.color);
+export const sortBySets = (tiles: (Tile101 | null)[], okey?: OkeyRef): (Tile101 | null)[] => {
+    const { wild, normal } = splitWild(tiles, okey);
+    const sets = extractSets(normal, okey);
+    const rest = [...sets.rest].sort((a, b) => {
+        const fa = tileFace(a, okey), fb = tileFace(b, okey);
+        return fa.value - fb.value || colorIndex(fa.color) - colorIndex(fb.color);
     });
-    
-    // Build sorted rack
-    const sortedRack: (Tile101 | null)[] = new Array(RACK_SIZE_101).fill(null);
-    let currentIndex = 0;
-    
-    for (const meld of foundMelds) {
-        const currentRow = currentIndex < 15 ? 0 : 1;
-        const rowEnd = currentRow === 0 ? 15 : 30;
-        if (currentIndex + meld.length > rowEnd && currentRow === 0) currentIndex = 15;
-        for (const tile of meld) {
-            if (currentIndex < 30) sortedRack[currentIndex++] = tile;
-        }
-        if (currentIndex < 30 && currentIndex !== 15) currentIndex++;
+    return keepAllTiles(tiles, layoutRack([...sets.groups, rest, wild], tiles));
+};
+
+/**
+ * Sort tiles by REAL PAIRS (same color, same value) first, then by color/value.
+ * Used for "Çift diz" davranışı.
+ */
+export const sortByPairs = (tiles: (Tile101 | null)[], okey?: OkeyRef): (Tile101 | null)[] => {
+    const { wild, normal } = splitWild(tiles, okey);
+    const groupsByKey = new Map<string, Tile101[]>();
+    const loose: Tile101[] = [];
+    for (const t of normal) {
+        const k = pairKey(t, okey);
+        if (!k) { loose.push(t); continue; }
+        const list = groupsByKey.get(k) || [];
+        list.push(t);
+        groupsByKey.set(k, list);
     }
-    
-    for (const tile of remaining) {
-        if (currentIndex < 30) sortedRack[currentIndex++] = tile;
+    const pairBlocks: Tile101[][] = [];
+    for (const list of groupsByKey.values()) {
+        let i = 0;
+        while (i + 1 < list.length) { pairBlocks.push([list[i], list[i + 1]]); i += 2; }
+        if (i < list.length) loose.push(list[i]);
     }
-    
-    if (remaining.length > 0 && jokers.length > 0 && currentIndex < 30) currentIndex++;
-    for (const tile of jokers) {
-        if (currentIndex < 30) sortedRack[currentIndex++] = tile;
-    }
-    
-    return sortedRack;
+    return keepAllTiles(tiles, layoutRack([...pairBlocks, ...colorGroups(loose, okey), wild], tiles));
 };
 
 /**
  * Find all valid runs from tiles and return their indices
  */
-export const findRunIndices = (tiles: (Tile101 | null)[]): number[][] => {
-    const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
+export const findRunIndices = (tiles: (Tile101 | null)[], okey?: OkeyRef): number[][] => {
     const result: number[][] = [];
     const used = new Set<number>();
-    
-    for (const color of colorOrder) {
-        // Get indices of tiles with this color
+    for (const color of COLOR_ORDER) {
         const colorIndices: { idx: number; value: number }[] = [];
         tiles.forEach((t, idx) => {
-            if (t && !t.isFakeOkey && t.color === color && !used.has(idx)) {
-                colorIndices.push({ idx, value: t.value });
-            }
+            if (!t || isWildOkey(t, okey) || used.has(idx)) return;
+            const f = tileFace(t, okey);
+            if (f.color === color) colorIndices.push({ idx, value: f.value });
         });
         colorIndices.sort((a, b) => a.value - b.value);
-        
+
         let i = 0;
         while (i < colorIndices.length) {
             const run: number[] = [colorIndices[i].idx];
             let expectedValue = colorIndices[i].value + 1;
             let j = i + 1;
-            
             while (j < colorIndices.length && expectedValue <= 13) {
                 if (colorIndices[j].value === expectedValue) {
                     run.push(colorIndices[j].idx);
@@ -980,7 +1186,6 @@ export const findRunIndices = (tiles: (Tile101 | null)[]): number[][] => {
                     j++;
                 }
             }
-            
             if (run.length >= 3) {
                 result.push(run);
                 run.forEach(idx => used.add(idx));
@@ -990,258 +1195,42 @@ export const findRunIndices = (tiles: (Tile101 | null)[]): number[][] => {
             }
         }
     }
-    
     return result;
 };
 
 /**
  * Find all valid sets from tiles and return their indices
  */
-export const findSetIndices = (tiles: (Tile101 | null)[]): number[][] => {
-    const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
+export const findSetIndices = (tiles: (Tile101 | null)[], okey?: OkeyRef): number[][] => {
     const result: number[][] = [];
     const used = new Set<number>();
-    
     for (let value = 1; value <= 13; value++) {
-        // Get indices of tiles with this value
         const valueIndices: { idx: number; color: OkeyColor }[] = [];
         tiles.forEach((t, idx) => {
-            if (t && !t.isFakeOkey && t.value === value && !used.has(idx)) {
-                valueIndices.push({ idx, color: t.color as OkeyColor });
-            }
+            if (!t || isWildOkey(t, okey) || used.has(idx)) return;
+            const f = tileFace(t, okey);
+            if (f.color && f.value === value) valueIndices.push({ idx, color: f.color });
         });
-        
-        // Check if we have 3+ different colors
-        const uniqueColors = new Set(valueIndices.map(v => v.color));
-        if (uniqueColors.size >= 3) {
-            const set: number[] = [];
-            for (const color of colorOrder) {
-                const match = valueIndices.find(v => v.color === color && !set.includes(v.idx));
-                if (match) set.push(match.idx);
-            }
-            if (set.length >= 3) {
-                result.push(set);
-                set.forEach(idx => used.add(idx));
-            }
+        const set: number[] = [];
+        for (const color of COLOR_ORDER) {
+            const match = valueIndices.find(v => v.color === color);
+            if (match) set.push(match.idx);
+        }
+        if (set.length >= 3) {
+            result.push(set);
+            set.forEach(idx => used.add(idx));
         }
     }
-    
     return result;
-};
-
-/**
- * Sort tiles by REAL PAIRS (same color, same value) first, then by color/value.
- * Used for \"Çift diz\" davranışı.
- */
-export const sortByPairs = (tiles: (Tile101 | null)[]): (Tile101 | null)[] => {
-    const nonNullTiles = tiles.filter((t): t is Tile101 => t !== null);
-    const jokers = nonNullTiles.filter(t => t.isFakeOkey);
-    const normals = nonNullTiles.filter(t => !t.isFakeOkey);
-
-    const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
-
-    // Group by exact color+value
-    const groups = new Map<string, Tile101[]>();
-    for (const tile of normals) {
-        const key = `${tile.color}-${tile.value}`;
-        const arr = groups.get(key) ?? [];
-        arr.push(tile);
-        groups.set(key, arr);
-    }
-
-    const pairBlocks: Tile101[][] = [];
-    const remaining: Tile101[] = [];
-
-    for (const [, list] of groups) {
-        // create 2-by-2 pairs
-        let i = 0;
-        while (i + 1 < list.length) {
-            pairBlocks.push([list[i], list[i + 1]]);
-            i += 2;
-        }
-        // if odd one left, keep as remaining
-        if (i < list.length) {
-            remaining.push(list[i]);
-        }
-    }
-
-    // Build rack: pairs first (with gaps), then remaining grouped by color/value
-    const sortedRack: (Tile101 | null)[] = new Array(RACK_SIZE_101).fill(null);
-    let currentIndex = 0;
-
-    // 1) Place all pairs
-    for (const pair of pairBlocks) {
-        const currentRow = currentIndex < 15 ? 0 : 1;
-        const rowEnd = currentRow === 0 ? 15 : 30;
-        if (currentIndex + pair.length > rowEnd && currentRow === 0) currentIndex = 15;
-
-        for (const tile of pair) {
-            if (currentIndex < 30) sortedRack[currentIndex++] = tile;
-        }
-
-        // gap after each pair block
-        if (currentIndex < 30 && currentIndex !== 15) currentIndex++;
-    }
-
-    // 2) Sort remaining by color then value, adding gap on color change
-    remaining.sort((a, b) => {
-        const colorIdx = (c: OkeyColor | null) => (c ? colorOrder.indexOf(c) : 99);
-        if (colorIdx(a.color) !== colorIdx(b.color)) {
-            return colorIdx(a.color) - colorIdx(b.color);
-        }
-        return a.value - b.value;
-    });
-
-    let lastColor: OkeyColor | null = null;
-    for (const tile of remaining) {
-        if (
-            lastColor !== null &&
-            tile.color !== lastColor &&
-            currentIndex < 30 &&
-            currentIndex !== 15
-        ) {
-            currentIndex++;
-        }
-        if (currentIndex < 30) {
-            sortedRack[currentIndex++] = tile;
-        }
-        lastColor = tile.color as OkeyColor;
-    }
-
-    // 3) Place jokers at the very end with a small gap if possible
-    if (remaining.length > 0 && jokers.length > 0 && currentIndex < 30) {
-        currentIndex++;
-    }
-    for (const tile of jokers) {
-        if (currentIndex < 30) {
-            sortedRack[currentIndex++] = tile;
-        }
-    }
-
-    return sortedRack;
 };
 
 /**
  * Smart sort tiles for 101 - groups valid melds together
  */
-export const smartSort101Tiles = (tiles: (Tile101 | null)[]): (Tile101 | null)[] => {
-    const nonNullTiles = tiles.filter((t): t is Tile101 => t !== null);
-    const jokers = nonNullTiles.filter(t => t.isFakeOkey);
-    let remaining = nonNullTiles.filter(t => !t.isFakeOkey);
-    
-    const foundMelds: Tile101[][] = [];
-    const colorOrder: OkeyColor[] = ['red', 'blue', 'black', 'yellow'];
-    
-    // Step 1: Find sets (same value, different colors)
-    for (let value = 1; value <= 13; value++) {
-        const tilesWithValue = remaining.filter(t => t.value === value);
-        const uniqueColors = new Set(tilesWithValue.map(t => t.color));
-        
-        if (uniqueColors.size >= 3) {
-            const set: Tile101[] = [];
-            for (const color of colorOrder) {
-                if (uniqueColors.has(color)) {
-                    const tile = tilesWithValue.find(t => t.color === color && !set.includes(t));
-                    if (tile) set.push(tile);
-                }
-            }
-            if (set.length >= 3) {
-                foundMelds.push(set);
-                const usedIds = new Set(set.map(t => t.id));
-                remaining = remaining.filter(t => !usedIds.has(t.id));
-            }
-        }
-    }
-    
-    // Step 2: Find runs (same color, consecutive)
-    for (const color of colorOrder) {
-        let colorTiles = remaining.filter(t => t.color === color);
-        colorTiles.sort((a, b) => a.value - b.value);
-        
-        while (colorTiles.length >= 3) {
-            let bestRun: Tile101[] = [];
-            
-            for (let startIdx = 0; startIdx < colorTiles.length; startIdx++) {
-                const run: Tile101[] = [colorTiles[startIdx]];
-                let expectedValue = colorTiles[startIdx].value + 1;
-                
-                for (let j = startIdx + 1; j < colorTiles.length && expectedValue <= 13; j++) {
-                    if (colorTiles[j].value === expectedValue) {
-                        run.push(colorTiles[j]);
-                        expectedValue++;
-                    } else if (colorTiles[j].value > expectedValue) {
-                        break;
-                    }
-                }
-                
-                if (run.length >= 3 && run.length > bestRun.length) {
-                    bestRun = run;
-                }
-            }
-            
-            if (bestRun.length >= 3) {
-                foundMelds.push(bestRun);
-                const usedIds = new Set(bestRun.map(t => t.id));
-                remaining = remaining.filter(t => !usedIds.has(t.id));
-                colorTiles = colorTiles.filter(t => !usedIds.has(t.id));
-            } else {
-                break;
-            }
-        }
-    }
-    
-    // Step 3: Build sorted rack
-    const sortedRack: (Tile101 | null)[] = new Array(RACK_SIZE_101).fill(null);
-    let currentIndex = 0;
-    
-    // Place melds with gaps
-    for (const meld of foundMelds) {
-        const currentRow = currentIndex < 15 ? 0 : 1;
-        const rowEnd = currentRow === 0 ? 15 : 30;
-        
-        if (currentIndex + meld.length > rowEnd && currentRow === 0) {
-            currentIndex = 15;
-        }
-        
-        for (const tile of meld) {
-            if (currentIndex < 30) {
-                sortedRack[currentIndex++] = tile;
-            }
-        }
-        
-        if (currentIndex < 30 && currentIndex !== 15) {
-            currentIndex++;
-        }
-    }
-    
-    // Sort remaining by color then value
-    remaining.sort((a, b) => {
-        const colorIdx = (c: OkeyColor | null) => c ? colorOrder.indexOf(c) : 99;
-        if (colorIdx(a.color) !== colorIdx(b.color)) {
-            return colorIdx(a.color) - colorIdx(b.color);
-        }
-        return a.value - b.value;
-    });
-    
-    // Place remaining tiles
-    for (const tile of remaining) {
-        if (currentIndex < 30) {
-            sortedRack[currentIndex++] = tile;
-        }
-    }
-    
-    // Add gap before jokers
-    if (remaining.length > 0 && jokers.length > 0 && currentIndex < 30) {
-        currentIndex++;
-    }
-    
-    // Place jokers at the end
-    for (const tile of jokers) {
-        if (currentIndex < 30) {
-            sortedRack[currentIndex++] = tile;
-        }
-    }
-    
-    return sortedRack;
+export const smartSort101Tiles = (tiles: (Tile101 | null)[], okey?: OkeyRef): (Tile101 | null)[] => {
+    const { wild, normal } = splitWild(tiles, okey);
+    const sets = extractSets(normal, okey);
+    const runs = extractRuns(sets.rest, okey);
+    const rest = [...runs.rest].sort(byColorThenValue(okey));
+    return keepAllTiles(tiles, layoutRack([...sets.groups, ...runs.groups, rest, wild], tiles));
 };
-

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSocket, getUserId, emitAck, EV, type RoomView } from '../lib/socket';
-import { findRunIndices, findPairIndices, PAIR_OPEN_MINIMUM } from '../logic/101Logic';
+import { findRunIndices, findPairIndices } from '../logic/101Logic';
 import type { Tile101, Meld } from '../logic/101Logic';
 
 /**
@@ -54,6 +54,10 @@ export interface Room101 {
     roundNumber: number;
     hostUserId: string;
     createdAt: number;
+    /** Whether this seat already drew this turn (meaningful on your own turn). */
+    drawnThisTurn: boolean;
+    /** "Geri Al" is available (unopened melds laid / side tile taken this turn). */
+    canUndo: boolean;
 }
 
 interface Projection101 {
@@ -66,6 +70,8 @@ interface Projection101 {
     roundWinner: number | null;
     gameWinner: number | null;
     roundNumber: number;
+    drawnThisTurn?: boolean;
+    canUndo?: boolean;
 }
 
 const HIDDEN: Tile101 = { id: 'hidden', value: 0, color: null };
@@ -101,6 +107,8 @@ function viewToRoom(view: RoomView): Room101 {
         roundNumber: s.roundNumber,
         hostUserId: view.hostUserId ?? '',
         createdAt: view.createdAt,
+        drawnThisTurn: !!s.drawnThisTurn,
+        canUndo: !!s.canUndo,
     };
 }
 
@@ -167,9 +175,12 @@ export const use101Room = (roomId: string | null) => {
         return slot >= 0 ? roomRef.current?.players[slot]?.tiles ?? [] : [];
     };
 
-    const move = (payload: Record<string, unknown>) => {
-        if (!roomId) return Promise.resolve({ ok: false, error: 'No room' } as const);
-        return emitAck(EV.move, { roomId, move: payload });
+    const move = async (payload: Record<string, unknown>) => {
+        if (!roomId) return { ok: false, error: 'No room' } as const;
+        const ack = await emitAck(EV.move, { roomId, move: payload });
+        // Surface rule rejections (e.g. unfinished opening, unused side tile) to the player.
+        if (!ack.ok && ack.code !== 'stale' && typeof window !== 'undefined') alert(ack.error);
+        return ack;
     };
 
     const createRoom = async (playerName: string): Promise<string> => {
@@ -218,6 +229,7 @@ export const use101Room = (roomId: string | null) => {
         setSelectedTileIndices([]);
     };
 
+    const undoTurn = () => void move({ action: 'undo' });
     const startNewRound = () => void move({ action: 'startNewRound' });
     const resetGame = async (): Promise<void> => {
         if (!roomId) return;
@@ -232,13 +244,13 @@ export const use101Room = (roomId: string | null) => {
     };
     const clearSelection = () => setSelectedTileIndices([]);
     const selectRuns = () => {
-        const runs = findRunIndices(myTiles());
+        const runs = findRunIndices(myTiles(), roomRef.current?.okeyTile);
         if (runs.length > 0) setSelectedTileIndices(runs[0]);
     };
     const selectSets = () => {
-        const pairs = findPairIndices(myTiles());
+        const pairs = findPairIndices(myTiles(), roomRef.current?.okeyTile);
         if (pairs.length > 0) {
-            setSelectedTileIndices(pairs.slice(0, PAIR_OPEN_MINIMUM).flat());
+            setSelectedTileIndices(pairs.flat());
         }
     };
 
@@ -272,5 +284,6 @@ export const use101Room = (roomId: string | null) => {
         selectSets,
         startNewRound,
         resetGame,
+        undoTurn,
     };
 };

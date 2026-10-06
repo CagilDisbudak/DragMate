@@ -23,7 +23,7 @@ export const useOkeyGame = (roomId: string | null, aiDifficulty: BotDifficulty =
     const drawFromCenter = useCallback((targetSlot?: number) => {
         setGameState(prev => {
             if (!prev) return null;
-            if (prev.currentTurn !== 0) return prev;
+            if (prev.currentTurn !== 0 || prev.phase !== 'playing') return prev;
             const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
             if (currentTilesCount >= 15) return prev;
 
@@ -76,7 +76,7 @@ export const useOkeyGame = (roomId: string | null, aiDifficulty: BotDifficulty =
 
     const drawFromDiscard = useCallback((targetSlot?: number) => {
         setGameState(prev => {
-            if (!prev || prev.currentTurn !== 0) return prev;
+            if (!prev || prev.currentTurn !== 0 || prev.phase !== 'playing') return prev;
             const currentTilesCount = prev.players[0].tiles.filter(t => t !== null).length;
             if (currentTilesCount >= 15) return prev;
 
@@ -126,32 +126,44 @@ export const useOkeyGame = (roomId: string | null, aiDifficulty: BotDifficulty =
         });
     }, []);
 
+    // Validation (and the alert) happen OUTSIDE the state updater: React StrictMode
+    // double-invokes updaters in development, which used to show the alert twice.
     const finishGame = useCallback((discardIndex: number) => {
+        const s = gameState;
+        if (!s || s.currentTurn !== 0 || s.phase !== 'playing') return;
+        const playerTiles = s.players[0].tiles;
+        const winningTile = playerTiles[discardIndex];
+        if (!winningTile) return;
+        if (playerTiles.filter(t => t !== null).length !== 15) return;
+
+        // Hand for validation is all tiles except the one being discarded to finish.
+        const validationTiles = [...playerTiles];
+        validationTiles[discardIndex] = null;
+        if (!isWinningHand(validationTiles, s.okeyTile)) {
+            alert("Eliniz okey değil! Lütfen taşları per yapın.");
+            return;
+        }
+
         setGameState(prev => {
-            if (!prev || prev.currentTurn !== 0) return prev;
-
-            const playerTiles = [...prev.players[0].tiles];
-            const winningTile = playerTiles[discardIndex];
-            if (!winningTile) return prev;
-
-            // Hand for validation is all tiles except the one being discarded to the indicator
-            const validationTiles = [...playerTiles];
-            validationTiles[discardIndex] = null;
-
-            const isWinner = isWinningHand(validationTiles, prev.okeyTile);
-
-            if (isWinner) {
-                return {
-                    ...prev,
-                    phase: 'roundOver',
-                    winner: 0
-                };
-            } else {
-                alert("Eliniz okey değil! Lütfen taşları per yapın.");
-                return prev;
-            }
+            // Re-check against the latest state (pure: no side effects in here).
+            if (!prev || prev.currentTurn !== 0 || prev.phase !== 'playing') return prev;
+            const rack = [...prev.players[0].tiles];
+            if (rack[discardIndex]?.id !== winningTile.id) return prev;
+            rack[discardIndex] = null;
+            if (!isWinningHand(rack, prev.okeyTile)) return prev;
+            const newPlayers = [...prev.players];
+            newPlayers[0] = { ...newPlayers[0], tiles: rack };
+            const newDiscardPiles = [...prev.discardPiles];
+            newDiscardPiles[0] = [...newDiscardPiles[0], winningTile];
+            return {
+                ...prev,
+                players: newPlayers,
+                discardPiles: newDiscardPiles,
+                phase: 'roundOver',
+                winner: 0
+            };
         });
-    }, []);
+    }, [gameState]);
 
     const resetGame = useCallback(() => {
         setGameState(initializeOkeyGame());
@@ -217,7 +229,7 @@ export const useOkeyGame = (roomId: string | null, aiDifficulty: BotDifficulty =
 
     const discardTile = useCallback((index: number) => {
         setGameState(prev => {
-            if (!prev || prev.currentTurn !== 0) return prev;
+            if (!prev || prev.currentTurn !== 0 || prev.phase !== 'playing') return prev;
 
             const playerTiles = prev.players[0].tiles.filter(t => t !== null);
             if (playerTiles.length !== 15) {
@@ -264,14 +276,16 @@ export const useOkeyGame = (roomId: string | null, aiDifficulty: BotDifficulty =
                     const newStack = [...prev.centerStack];
                     const newDiscardPiles = prev.discardPiles.map(pile => [...pile]);
 
-                    // Draw: take the previous player's discard when it is an
-                    // immediate meld-maker, otherwise draw from the center.
+                    // Draw: take the previous player's discard only when it lets the
+                    // bot finish or strictly improves its hand, otherwise draw from the center.
                     const prevPlayer = (currPlayer + 3) % 4;
                     const prevPile = newDiscardPiles[prevPlayer];
                     const prevTop = prevPile.length > 0 ? prevPile[prevPile.length - 1] : null;
                     let drawn: OkeyTile | null = null;
+                    let takenFromDiscardId: string | undefined;
                     if (prevTop && chooseBotDraw(rack, prevTop, prev.okeyTile) === 'discard') {
                         drawn = prevPile.pop() ?? null;
+                        takenFromDiscardId = drawn?.id;
                     }
                     if (!drawn) drawn = newStack.pop() ?? null;
 
@@ -286,7 +300,7 @@ export const useOkeyGame = (roomId: string | null, aiDifficulty: BotDifficulty =
 
                     // Win check BEFORE discarding: if one discard leaves a valid
                     // 14-tile hand, the bot finishes and wins the round.
-                    const finishIdx = chooseBotFinish(rack, prev.okeyTile);
+                    const finishIdx = chooseBotFinish(rack, prev.okeyTile, takenFromDiscardId);
                     if (finishIdx !== -1) {
                         const winningTile = rack[finishIdx]!;
                         rack[finishIdx] = null;
@@ -301,8 +315,9 @@ export const useOkeyGame = (roomId: string | null, aiDifficulty: BotDifficulty =
                         };
                     }
 
-                    // Discard the least useful tile (difficulty-aware, never the okey unless forced).
-                    const discardIdx = chooseBotDiscard(rack, prev.okeyTile, aiDifficulty);
+                    // Discard the least useful tile (difficulty-aware, never the okey unless
+                    // forced, never the tile it just took from the discard pile).
+                    const discardIdx = chooseBotDiscard(rack, prev.okeyTile, aiDifficulty, Math.random, takenFromDiscardId);
                     if (discardIdx !== -1) {
                         const discarded = rack[discardIdx]!;
                         rack[discardIdx] = null;
